@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#312C51" />
+    <meta name="description" content="PWA para controle financeiro Brasil e Japao." />
+    <title>Ponte Financeira</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./assets/icon.svg" />
+    <link rel="stylesheet" href="./styles.css?v=19" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar" aria-label="Topo do app">
+        <div class="identity">
+          <div class="avatar" aria-hidden="true">PF</div>
+          <div>
+            <p class="eyebrow" id="app-greeting">Hey, familia</p>
+            <h1>Ponte Financeira</h1>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="icon-button logout-button" type="button" data-action="remote-signout" aria-label="Sair da conta" title="Sair">
+            Sair
+          </button>
+          <button class="icon-button" type="button" data-action="open-modal" data-modal="transaction" aria-label="Adicionar lancamento" title="Adicionar lancamento">
+            <span aria-hidden="true">+</span>
+          </button>
+          <button class="icon-button soft" type="button" data-action="open-modal" data-modal="transfer" aria-label="Adicionar Wise" title="Adicionar Wise">
+            <span aria-hidden="true">W</span>
+          </button>
+        </div>
+      </header>
+
+      <main id="app" class="main-view" aria-live="polite"></main>
+
+      <nav class="bottom-nav" aria-label="Navegacao principal">
+        <button class="nav-item is-active" type="button" data-action="set-tab" data-tab="dashboard">
+          <span aria-hidden="true">H</span>
+          Inicio
+        </button>
+        <button class="nav-item" type="button" data-action="set-tab" data-tab="accounts">
+          <span aria-hidden="true">C</span>
+          Contas
+        </button>
+        <button class="nav-item" type="button" data-action="set-tab" data-tab="wise">
+          <span aria-hidden="true">W</span>
+          Wise
+        </button>
+        <button class="nav-item" type="button" data-action="set-tab" data-tab="reports">
+          <span aria-hidden="true">R</span>
+          Relatorios
+        </button>
+        <button class="nav-item" type="button" data-action="set-tab" data-tab="settings">
+          <span aria-hidden="true">S</span>
+          Ajustes
+        </button>
+      </nav>
+    </div>
+
+    <div id="modal-root"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./supabase-config.js?v=19"></script>
+    <script src="./app.js?v=19"></script>
+  </body>
+</html>

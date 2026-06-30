@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Ponte Financeira</title>
+  <rect width="512" height="512" rx="96" fill="#11110f"/>
+  <path d="M96 318c42-82 107-123 160-123s118 41 160 123" fill="none" stroke="#f5c84c" stroke-width="40" stroke-linecap="round"/>
+  <path d="M124 332h264" stroke="#f6efe2" stroke-width="24" stroke-linecap="round"/>
+  <circle cx="178" cy="178" r="46" fill="#f5c84c"/>
+  <circle cx="334" cy="178" r="46" fill="#f6efe2"/>
+  <path d="M182 178h148" stroke="#42a67a" stroke-width="20" stroke-linecap="round"/>
+  <path d="M154 392h204" stroke="#f5c84c" stroke-width="30" stroke-linecap="round"/>
+</svg>

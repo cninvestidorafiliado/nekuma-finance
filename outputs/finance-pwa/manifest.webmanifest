@@ -1,0 +1,21 @@
+{
+  "name": "Ponte Financeira",
+  "short_name": "Ponte",
+  "description": "Controle financeiro familiar para Brasil, Japao e transferencias Wise.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6efe7",
+  "theme_color": "#312C51",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "./assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "productivity"],
+  "lang": "pt-BR"
+}

@@ -1,0 +1,14 @@
+{
+  "name": "ponte-financeira",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PWA financeiro familiar com deploy estatico no Netlify.",
+  "scripts": {
+    "build": "node scripts/build-deploy.cjs",
+    "check": "node scripts/check.cjs",
+    "prepare:deploy": "node scripts/build-deploy.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

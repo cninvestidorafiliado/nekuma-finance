@@ -1,0 +1,8 @@
+.netlify/
+node_modules/
+outputs/finance-pwa-online/
+outputs/finance-pwa-online-*/
+outputs/*.zip
+outputs/finance-pwa/server.*.log
+.DS_Store
+Thumbs.db
