@@ -105,12 +105,14 @@
     if (action === "open-modal") openModal(button.dataset.modal);
     if (action === "close-modal") closeModal();
     if (action === "pay-commitment") payCommitment(button.dataset.id);
+    if (action === "pay-card-bill") payCardBill(button.dataset.id);
     if (action === "delete-transaction") deleteItem("transactions", button.dataset.id, "Lancamento removido.");
     if (action === "delete-transfer") deleteItem("transfers", button.dataset.id, "Transferencia removida.");
     if (action === "delete-commitment") deleteItem("commitments", button.dataset.id, "Conta removida.");
     if (action === "delete-debt") deleteItem("debts", button.dataset.id, "Contrato removido.");
     if (action === "delete-investment") deleteItem("investments", button.dataset.id, "Investimento removido.");
     if (action === "delete-credit-card") deleteItem("creditCards", button.dataset.id, "Cartao removido.");
+    if (action === "delete-card-purchase") deleteItem("cardPurchases", button.dataset.id, "Compra removida.");
     if (action === "delete-crypto") deleteItem("cryptoAssets", button.dataset.id, "Cripto removida.");
     if (action === "delete-vehicle-maintenance") deleteItem("vehicleMaintenance", button.dataset.id, "Manutencao removida.");
     if (action === "delete-income-source") deleteItem("incomeSources", button.dataset.id, "Empresa removida.");
@@ -135,6 +137,7 @@
     if (formType === "debt") saveDebt(form);
     if (formType === "investment") saveInvestment(form);
     if (formType === "credit-card") saveCreditCard(form);
+    if (formType === "card-purchase") saveCardPurchase(form);
     if (formType === "crypto") saveCryptoAsset(form);
     if (formType === "vehicle") saveVehicle(form);
     if (formType === "vehicle-maintenance") saveVehicleMaintenance(form);
@@ -381,6 +384,7 @@
       debts: Array.isArray(raw.debts) ? raw.debts : base.debts,
       investments: Array.isArray(raw.investments) ? raw.investments : base.investments,
       creditCards: Array.isArray(raw.creditCards) ? raw.creditCards : base.creditCards,
+      cardPurchases: Array.isArray(raw.cardPurchases) ? raw.cardPurchases : base.cardPurchases,
       cryptoAssets: Array.isArray(raw.cryptoAssets) ? raw.cryptoAssets : base.cryptoAssets,
       cryptoQuotes: raw.cryptoQuotes || base.cryptoQuotes,
       fxQuotes: raw.fxQuotes || base.fxQuotes,
@@ -419,6 +423,7 @@
       debts: [],
       investments: [],
       creditCards: [],
+      cardPurchases: [],
       cryptoAssets: [],
       cryptoQuotes: {
         prices: {},
@@ -729,6 +734,14 @@
         </div>
       </section>
 
+      <section class="content-panel">
+        <div class="panel-head">
+          <h2>Calendario financeiro</h2>
+          <span class="chip gold">${formatMonthLabel(state.ui.selectedMonth)}</span>
+        </div>
+        ${renderFinancialCalendar(8)}
+      </section>
+
       <section class="split-grid">
         <article class="content-panel">
           <div class="panel-head">
@@ -833,7 +846,10 @@
         <article class="content-panel">
           <div class="panel-head">
             <h2>Meus Cartoes</h2>
-            <button class="small-action" type="button" data-action="open-modal" data-modal="creditCard">Novo cartao</button>
+            <div class="chips">
+              <button class="small-action ghost" type="button" data-action="open-modal" data-modal="cardPurchase">Compra</button>
+              <button class="small-action" type="button" data-action="open-modal" data-modal="creditCard">Novo cartao</button>
+            </div>
           </div>
           ${renderCreditCardsPanel(null)}
         </article>
@@ -856,6 +872,14 @@
           <button class="small-action" type="button" data-action="open-modal" data-modal="commitment">Nova conta</button>
         </div>
         ${renderCommitmentList(null)}
+      </section>
+
+      <section class="content-panel">
+        <div class="panel-head">
+          <h2>Compras no cartao</h2>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="cardPurchase">Nova compra</button>
+        </div>
+        ${renderCardPurchasesList(null)}
       </section>
 
       <section class="split-grid">
@@ -984,6 +1008,14 @@
             <strong>${formatMoney(summary.remaining, summary.currency)}</strong>
           </div>
         </div>
+      </section>
+
+      <section class="content-panel">
+        <div class="panel-head">
+          <h2>Agenda do mes</h2>
+          <span class="chip gold">${formatMonthLabel(state.ui.selectedMonth)}</span>
+        </div>
+        ${renderFinancialCalendar(null)}
       </section>
 
       <section class="reports-grid">
@@ -1155,16 +1187,21 @@
     const commitments = state.commitments
       .filter((item) => item.active !== false)
       .filter((item) => inCountryScope(item.country))
+      .filter((item) => isCommitmentDueInMonth(item, month))
       .sort((a, b) => a.dueDay - b.dueDay);
     const rows = (limit ? commitments.slice(0, limit) : commitments).map((item) => {
       const paid = isCommitmentPaid(item.id, month);
       const meta = typeMeta[item.type] || typeMeta.expense;
+      const dueDate = dateInMonth(month, item.dueDay);
+      const dueState = dueStateForDate(dueDate, paid);
+      const frequency = commitmentFrequencyLabel(item);
       return `
         <div class="list-row">
-          <span class="row-icon ${paid ? "green" : meta.tone}">${paid ? "OK" : meta.icon}</span>
+          <span class="row-icon ${paid ? "green" : dueState.tone || meta.tone}">${paid ? "OK" : meta.icon}</span>
           <div class="row-main">
             <p class="row-title">${escapeHtml(item.title)}</p>
-            <p class="row-meta">${countryMeta[item.country].label} · dia ${item.dueDay} · ${escapeHtml(item.provider || item.category)}</p>
+            <p class="row-meta">${countryMeta[item.country].label} - dia ${item.dueDay} - ${frequency} - ${escapeHtml(item.provider || item.category)}</p>
+            <p class="row-meta">${dueState.label}${item.alertDays ? ` - alerta ${item.alertDays} dias antes` : ""}</p>
           </div>
           <div class="row-amount">
             ${formatMoney(item.amount, item.currency)}
@@ -1235,7 +1272,9 @@
       <div class="cards-wallet">
         ${visible.map((item) => {
           const country = countryMeta[item.country] || countryMeta.japao;
-          const usage = item.limitAmount ? clamp(Math.round((Number(item.billAmount || 0) / item.limitAmount) * 100), 0, 999) : 0;
+          const bill = creditCardMonthBill(item, state.ui.selectedMonth);
+          const paid = isCardBillPaid(item.id, state.ui.selectedMonth);
+          const usage = item.limitAmount ? clamp(Math.round((bill.total / item.limitAmount) * 100), 0, 999) : 0;
           return `
             <div class="credit-card-tile ${item.country === "brasil" ? "br-card" : "jp-card"}">
               <div class="flag-badge ${item.country === "brasil" ? "br" : "jp"}">${country.short}</div>
@@ -1243,7 +1282,7 @@
               <p class="card-name">${escapeHtml(item.nickname || item.issuer)}</p>
               <p class="card-number">**** ${escapeHtml(item.last4 || "0000")}</p>
               <div class="card-foot">
-                <span>Fatura ${formatMoney(item.billAmount || 0, item.currency)}</span>
+                <span>Fatura ${formatMoney(bill.total, item.currency)}</span>
                 <span>${usage}%</span>
               </div>
               <div class="progress-track card-progress" aria-hidden="true"><div class="progress-fill" style="width:${clamp(usage, 0, 100)}%"></div></div>
@@ -1251,10 +1290,68 @@
                 <span>Fecha ${item.closingDay || "--"}</span>
                 <span>Vence ${item.dueDay || "--"}</span>
               </div>
-              ${limit ? "" : `<button class="small-action ghost card-delete" type="button" data-action="delete-credit-card" data-id="${item.id}">Excluir</button>`}
+              <div class="card-meta-row">
+                <span>${bill.purchaseCount} compra${bill.purchaseCount === 1 ? "" : "s"}</span>
+                <span>${paid ? "Pago" : "Aberto"}</span>
+              </div>
+              ${limit ? "" : `
+                <div class="card-actions">
+                  <button class="small-action" type="button" data-action="pay-card-bill" data-id="${item.id}">${paid ? "Pago" : "Pagar fatura"}</button>
+                  <button class="small-action ghost" type="button" data-action="delete-credit-card" data-id="${item.id}">Excluir</button>
+                </div>
+              `}
             </div>
           `;
         }).join("")}
+      </div>
+    `;
+  }
+
+  function renderCardPurchasesList(limit) {
+    const rows = cardPurchaseRows(state.ui.selectedMonth, state.ui.activeCountry);
+    if (!rows.length) return `<p class="empty-state">Nenhuma compra de cartao neste mes.</p>`;
+    const visible = limit ? rows.slice(0, limit) : rows;
+    return `
+      <div class="list">
+        ${visible.map((row) => `
+          <div class="list-row">
+            <span class="row-icon blue">${row.installment}/${row.installments}</span>
+            <div class="row-main">
+              <p class="row-title">${escapeHtml(row.title)}</p>
+              <p class="row-meta">${escapeHtml(row.cardName)} - ${escapeHtml(row.category || "Cartao")} - compra ${formatShortDate(row.purchaseDate)}</p>
+            </div>
+            <div class="row-amount expense">
+              ${formatMoney(row.amount, row.currency)}
+              ${limit ? "" : `<button class="small-action ghost" type="button" data-action="delete-card-purchase" data-id="${row.id}">Excluir</button>`}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function renderFinancialCalendar(limit) {
+    const items = financialCalendarItems(state.ui.selectedMonth, state.ui.activeCountry);
+    if (!items.length) return `<p class="empty-state">Nenhum evento financeiro neste mes.</p>`;
+    const visible = limit ? items.slice(0, limit) : items;
+    return `
+      <div class="calendar-list">
+        ${visible.map((item) => `
+          <div class="calendar-item ${item.tone}">
+            <div class="calendar-date">
+              <span>${formatCalendarDay(item.date)}</span>
+              <small>${formatCalendarWeekday(item.date)}</small>
+            </div>
+            <div class="calendar-main">
+              <p class="row-title">${escapeHtml(item.title)}</p>
+              <p class="row-meta">${escapeHtml(item.meta)}</p>
+            </div>
+            <div class="calendar-amount ${item.kind === "income" ? "income" : "expense"}">
+              ${item.kind === "income" ? "+" : "-"} ${formatMoney(item.amount, item.currency)}
+              <span class="chip ${item.tone}">${escapeHtml(item.status)}</span>
+            </div>
+          </div>
+        `).join("")}
       </div>
     `;
   }
@@ -1567,6 +1664,7 @@
       debt: renderDebtModal,
       investment: renderInvestmentModal,
       creditCard: renderCreditCardModal,
+      cardPurchase: renderCardPurchaseModal,
       crypto: renderCryptoModal,
       vehicle: renderVehicleModal,
       vehicleMaintenance: renderVehicleMaintenanceModal,
@@ -1741,6 +1839,28 @@
             <option value="${countryMeta[activeCountry].currency}" selected>${countryMeta[activeCountry].currency}</option>
             <option value="${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}">${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}</option>
           </select>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="frequency">Frequencia</label>
+            <select id="frequency" name="frequency">
+              <option value="monthly">Mensal</option>
+              <option value="yearly">Anual</option>
+              <option value="once">Uma vez</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="startMonth">A partir de</label>
+            <input id="startMonth" name="startMonth" type="month" value="${state.ui.selectedMonth}" />
+          </div>
+          <div class="field">
+            <label for="endMonth">Ate</label>
+            <input id="endMonth" name="endMonth" type="month" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="alertDays">Avisar quantos dias antes</label>
+          <input id="alertDays" name="alertDays" type="number" min="0" max="60" value="3" />
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -1933,9 +2053,97 @@
             <input id="cardDueDay" name="dueDay" type="number" min="1" max="31" />
           </div>
         </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="cardBillMonth">Mes da fatura manual</label>
+            <input id="cardBillMonth" name="billMonth" type="month" value="${state.ui.selectedMonth}" />
+          </div>
+          <div class="field">
+            <label for="cardPaymentMethod">Como paga</label>
+            <input id="cardPaymentMethod" name="paymentMethod" placeholder="Debito, Wise, conta..." />
+          </div>
+        </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
           <button class="primary-button" type="submit">Salvar cartao</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderCardPurchaseModal() {
+    const cards = state.creditCards || [];
+    const fallbackCurrency = state.ui.activeCountry === "brasil" ? "BRL" : "JPY";
+    if (!cards.length) {
+      return `
+        <div class="modal-head">
+          <h2>Nova compra</h2>
+          <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+        </div>
+        <div class="empty-action">
+          <p class="empty-state">Cadastre um cartao antes de adicionar compras.</p>
+          <button class="primary-button" type="button" data-action="open-modal" data-modal="creditCard">Cadastrar cartao</button>
+        </div>
+      `;
+    }
+    return `
+      <div class="modal-head">
+        <h2>Nova compra no cartao</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="card-purchase">
+        <div class="two-cols">
+          <div class="field">
+            <label for="purchaseCardId">Cartao</label>
+            <select id="purchaseCardId" name="cardId">
+              ${cards.map((card) => `<option value="${card.id}">${escapeHtml(card.nickname || card.issuer)} - ${countryMeta[card.country]?.short || "JP"}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="purchaseCategory">Categoria</label>
+            <input id="purchaseCategory" name="category" required placeholder="Ex: Mercado, iPhone" />
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="purchaseTitle">Compra</label>
+            <input id="purchaseTitle" name="title" required placeholder="Ex: Apple, Amazon, Mercado" />
+          </div>
+          <div class="field">
+            <label for="purchaseDate">Data da compra</label>
+            <input id="purchaseDate" name="purchaseDate" type="date" required value="${dateInMonth(state.ui.selectedMonth, new Date().getDate())}" />
+          </div>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="purchaseAmount">Valor total</label>
+            <input id="purchaseAmount" name="totalAmount" required type="number" min="0" step="0.01" />
+          </div>
+          <div class="field">
+            <label for="purchaseCurrency">Moeda</label>
+            <select id="purchaseCurrency" name="currency">
+              <option value="${fallbackCurrency}" selected>${fallbackCurrency}</option>
+              <option value="${fallbackCurrency === "JPY" ? "BRL" : "JPY"}">${fallbackCurrency === "JPY" ? "BRL" : "JPY"}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="installments">Parcelas</label>
+            <input id="installments" name="installments" type="number" min="1" max="60" value="1" />
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="firstBillMonth">Primeira fatura</label>
+            <input id="firstBillMonth" name="firstBillMonth" type="month" required value="${state.ui.selectedMonth}" />
+          </div>
+          <div class="field">
+            <label for="purchaseNote">Observacao</label>
+            <input id="purchaseNote" name="note" placeholder="Opcional" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar compra</button>
         </div>
       </form>
     `;
@@ -2305,6 +2513,10 @@
       amount: number(data.amount),
       currency: data.currency,
       dueDay: clamp(Math.round(number(data.dueDay)), 1, 31),
+      frequency: data.frequency || "monthly",
+      startMonth: data.startMonth || "",
+      endMonth: data.endMonth || "",
+      alertDays: clamp(Math.round(number(data.alertDays)), 0, 60),
       active: true
     });
     saveState();
@@ -2362,14 +2574,43 @@
       last4: String(data.last4 || "").replace(/\D/g, "").slice(-4),
       limitAmount: number(data.limitAmount),
       billAmount: number(data.billAmount),
+      billMonth: data.billMonth || state.ui.selectedMonth,
       currency: data.currency,
       closingDay: data.closingDay ? clamp(Math.round(number(data.closingDay)), 1, 31) : "",
-      dueDay: data.dueDay ? clamp(Math.round(number(data.dueDay)), 1, 31) : ""
+      dueDay: data.dueDay ? clamp(Math.round(number(data.dueDay)), 1, 31) : "",
+      paymentMethod: data.paymentMethod.trim()
     });
     saveState();
     closeModal();
     render();
     showToast("Cartao salvo.");
+  }
+
+  function saveCardPurchase(form) {
+    const data = formData(form);
+    const card = creditCardById(data.cardId);
+    if (!card) {
+      showToast("Cartao nao encontrado.");
+      return;
+    }
+    state.cardPurchases.unshift({
+      id: uid("cp"),
+      cardId: data.cardId,
+      country: card.country,
+      title: data.title.trim(),
+      category: data.category.trim(),
+      totalAmount: number(data.totalAmount),
+      currency: data.currency || card.currency,
+      installments: clamp(Math.round(number(data.installments)), 1, 60),
+      firstBillMonth: data.firstBillMonth || state.ui.selectedMonth,
+      purchaseDate: data.purchaseDate,
+      note: data.note.trim()
+    });
+    state.ui.selectedMonth = data.firstBillMonth || state.ui.selectedMonth;
+    saveState();
+    closeModal();
+    render();
+    showToast("Compra salva no cartao.");
   }
 
   function saveCryptoAsset(form) {
@@ -2512,6 +2753,39 @@
     saveState();
     render();
     showToast("Conta lancada no mes.");
+  }
+
+  function payCardBill(id) {
+    const card = creditCardById(id);
+    if (!card) return;
+    const month = state.ui.selectedMonth;
+    const key = cardBillKey(id, month);
+    if (state.paidCommitments[key]) {
+      showToast("Fatura ja marcada como paga.");
+      return;
+    }
+
+    const bill = creditCardMonthBill(card, month);
+    if (!bill.total) {
+      showToast("Esta fatura esta zerada.");
+      return;
+    }
+
+    state.paidCommitments[key] = true;
+    state.transactions.unshift({
+      id: uid("tx"),
+      date: dateInMonth(month, card.dueDay || 1),
+      country: card.country,
+      type: "card",
+      title: `Fatura ${card.nickname || card.issuer}`,
+      category: "Cartao",
+      amount: bill.total,
+      currency: card.currency,
+      note: card.paymentMethod ? `Pago via ${card.paymentMethod}` : "Fatura do cartao"
+    });
+    saveState();
+    render();
+    showToast("Fatura lancada no mes.");
   }
 
   function deleteItem(collection, id, message) {
@@ -3025,6 +3299,16 @@
       if (item.type === "investment") investments += converted;
     });
 
+    plannedCommitmentEntries(month, country).forEach((item) => {
+      const converted = convert(item.amount, item.currency, targetCurrency, rate);
+      if (item.type === "investment") investments += converted;
+      else expenses += converted;
+    });
+
+    plannedCardBillEntries(month, country).forEach((item) => {
+      expenses += convert(item.amount, item.currency, targetCurrency, rate);
+    });
+
     if (country === "global" || country === "japao") {
       vehicleMonthlyCosts(month).forEach((item) => {
         expenses += convert(item.amount, item.currency, targetCurrency, rate);
@@ -3078,6 +3362,264 @@
     return (state.workIncomes || [])
       .filter((item) => item.date && item.date.slice(0, 7) === month)
       .sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  function plannedCommitmentEntries(month, country) {
+    return commitmentCalendarEntries(month, country)
+      .filter((item) => !item.paid)
+      .map((item) => ({
+        ...item,
+        generated: true,
+        icon: typeMeta[item.type]?.icon || "-"
+      }));
+  }
+
+  function commitmentCalendarEntries(month, country) {
+    return (state.commitments || [])
+      .filter((item) => item.active !== false)
+      .filter((item) => country === "global" || item.country === country)
+      .filter((item) => isCommitmentDueInMonth(item, month))
+      .map((item) => {
+        const paid = isCommitmentPaid(item.id, month);
+        const dueDate = dateInMonth(month, item.dueDay || 1);
+        const dueState = dueStateForDate(dueDate, paid);
+        return {
+          id: item.id,
+          country: item.country,
+          type: item.type,
+          title: item.title,
+          category: item.category,
+          amount: number(item.amount),
+          currency: item.currency,
+          date: dueDate,
+          paid,
+          status: dueState.label,
+          tone: paid ? "green" : dueState.tone,
+          meta: `${countryMeta[item.country]?.label || ""} - ${commitmentFrequencyLabel(item)} - ${item.provider || item.category || "conta fixa"}`,
+          kind: item.type === "income" ? "income" : "expense"
+        };
+      });
+  }
+
+  function isCommitmentDueInMonth(item, month) {
+    const frequency = item.frequency || "monthly";
+    const startMonth = item.startMonth || "";
+    const endMonth = item.endMonth || "";
+    if (startMonth && month < startMonth) return false;
+    if (endMonth && month > endMonth) return false;
+    if (frequency === "once") return startMonth ? month === startMonth : true;
+    if (frequency === "yearly") {
+      const dueMonth = (startMonth || month).slice(5, 7);
+      return month.slice(5, 7) === dueMonth;
+    }
+    return true;
+  }
+
+  function commitmentFrequencyLabel(item) {
+    const frequency = item.frequency || "monthly";
+    if (frequency === "once") return "uma vez";
+    if (frequency === "yearly") return "anual";
+    return "mensal";
+  }
+
+  function plannedCardBillEntries(month, country) {
+    return cardBillCalendarEntries(month, country).filter((item) => !item.paid && item.amount > 0);
+  }
+
+  function cardBillCalendarEntries(month, country) {
+    return (state.creditCards || [])
+      .filter((card) => country === "global" || card.country === country)
+      .map((card) => {
+        const bill = creditCardMonthBill(card, month);
+        const paid = isCardBillPaid(card.id, month);
+        const dueDate = dateInMonth(month, card.dueDay || 1);
+        const dueState = dueStateForDate(dueDate, paid);
+        return {
+          id: card.id,
+          cardId: card.id,
+          country: card.country,
+          type: "card",
+          title: `Fatura ${card.nickname || card.issuer}`,
+          category: "Cartao",
+          amount: bill.total,
+          currency: card.currency,
+          date: dueDate,
+          paid,
+          status: paid ? "Pago" : bill.total ? dueState.label : "Zerada",
+          tone: paid ? "green" : bill.total ? dueState.tone : "blue",
+          meta: `${countryMeta[card.country]?.label || ""} - fecha ${card.closingDay || "--"} - ${bill.purchaseCount} compra${bill.purchaseCount === 1 ? "" : "s"}`,
+          kind: "expense"
+        };
+      })
+      .filter((item) => item.amount > 0);
+  }
+
+  function financialCalendarItems(month, country) {
+    const items = [
+      ...commitmentCalendarEntries(month, country),
+      ...cardBillCalendarEntries(month, country),
+      ...vehicleCalendarEntries(month, country),
+      ...incomeCalendarEntries(month, country),
+      ...wiseCalendarEntries(month, country)
+    ];
+    return items.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
+  }
+
+  function vehicleCalendarEntries(month, country) {
+    if (country !== "global" && country !== "japao") return [];
+    return vehicleMonthlyCosts(month).map((item) => ({
+      id: item.id,
+      country: "japao",
+      type: "vehicle",
+      title: item.title,
+      category: "Veiculo",
+      amount: number(item.amount),
+      currency: item.currency || "JPY",
+      date: item.date,
+      status: "Veiculo",
+      tone: "blue",
+      meta: item.note || "custo do veiculo",
+      kind: "expense"
+    }));
+  }
+
+  function incomeCalendarEntries(month, country) {
+    if (country !== "global" && country !== "japao") return [];
+    return monthWorkIncomes(month).map((item) => {
+      const source = incomeSourceById(item.sourceId);
+      return {
+        id: item.id,
+        country: "japao",
+        type: "income",
+        title: source.name,
+        category: incomeSourceTypeMeta[source.type] || "Renda",
+        amount: number(item.amount),
+        currency: item.currency || source.currency || "JPY",
+        date: item.date,
+        status: "Entrada",
+        tone: "green",
+        meta: workIncomeMeta(item),
+        kind: "income"
+      };
+    });
+  }
+
+  function wiseCalendarEntries(month, country) {
+    return monthTransfers(month).map((item) => {
+      if (country === "brasil") {
+        return {
+          id: item.id,
+          country: "brasil",
+          type: "income",
+          title: "Wise recebido",
+          category: "Wise",
+          amount: number(item.receivedAmount),
+          currency: "BRL",
+          date: item.date,
+          status: "Ponte",
+          tone: "green",
+          meta: `cotacao ${formatRate(item.rate)}`,
+          kind: "income"
+        };
+      }
+      return {
+        id: item.id,
+        country: "japao",
+        type: "expense",
+        title: "Wise para Brasil",
+        category: "Wise",
+        amount: number(item.sentAmount),
+        currency: "JPY",
+        date: item.date,
+        status: "Ponte",
+        tone: "blue",
+        meta: `recebido ${formatMoney(item.receivedAmount, "BRL")}`,
+        kind: "expense"
+      };
+    });
+  }
+
+  function creditCardById(id) {
+    return (state.creditCards || []).find((card) => card.id === id);
+  }
+
+  function creditCardMonthBill(card, month) {
+    const rows = cardPurchaseRowsForCard(card.id, month);
+    const rate = latestRate(month);
+    const purchaseTotal = rows.reduce((total, row) => total + convert(row.rawAmount, row.rawCurrency, card.currency, rate), 0);
+    const manual = manualCardBill(card, month);
+    return {
+      total: round(purchaseTotal + manual, card.currency === "JPY" ? 0 : 2),
+      manual,
+      purchasesTotal: round(purchaseTotal, card.currency === "JPY" ? 0 : 2),
+      purchaseCount: rows.length,
+      rows
+    };
+  }
+
+  function manualCardBill(card, month) {
+    const amount = number(card.billAmount);
+    if (!amount) return 0;
+    if (card.billMonth) return card.billMonth === month ? amount : 0;
+    return month === state.ui.selectedMonth ? amount : 0;
+  }
+
+  function cardPurchaseRows(month, country) {
+    return (state.cardPurchases || [])
+      .flatMap((purchase) => {
+        const card = creditCardById(purchase.cardId);
+        if (!card) return [];
+        if (country !== "global" && card.country !== country) return [];
+        return cardPurchaseInstallmentRow(purchase, card, month);
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
+  }
+
+  function cardPurchaseRowsForCard(cardId, month) {
+    return (state.cardPurchases || [])
+      .filter((purchase) => purchase.cardId === cardId)
+      .map((purchase) => {
+        const card = creditCardById(cardId);
+        return card ? cardPurchaseInstallmentRow(purchase, card, month) : null;
+      })
+      .filter(Boolean);
+  }
+
+  function cardPurchaseInstallmentRow(purchase, card, month) {
+    const installments = clamp(Math.round(number(purchase.installments)), 1, 60);
+    const firstMonth = purchase.firstBillMonth || (purchase.purchaseDate ? purchase.purchaseDate.slice(0, 7) : month);
+    const index = monthDiff(firstMonth, month);
+    if (index < 0 || index >= installments) return null;
+    const rawAmount = installmentAmount(purchase.totalAmount, installments, index);
+    return {
+      id: purchase.id,
+      cardId: card.id,
+      cardName: card.nickname || card.issuer,
+      country: card.country,
+      title: purchase.title,
+      category: purchase.category,
+      purchaseDate: purchase.purchaseDate || dateInMonth(firstMonth, 1),
+      installment: index + 1,
+      installments,
+      rawAmount,
+      rawCurrency: purchase.currency || card.currency,
+      amount: convert(rawAmount, purchase.currency || card.currency, card.currency, latestRate(month)),
+      currency: card.currency
+    };
+  }
+
+  function installmentAmount(totalAmount, installments, index) {
+    const total = number(totalAmount);
+    const base = round(total / installments, 2);
+    if (index === installments - 1) return round(total - base * (installments - 1), 2);
+    return base;
+  }
+
+  function monthDiff(startMonth, endMonth) {
+    const [startYear, startIndex] = startMonth.split("-").map(Number);
+    const [endYear, endIndex] = endMonth.split("-").map(Number);
+    return (endYear - startYear) * 12 + (endIndex - startIndex);
   }
 
   function incomeSourceById(id) {
@@ -3197,6 +3739,16 @@
       const current = totals.get(key) || 0;
       totals.set(key, current + convert(item.amount, item.currency, currency, rate));
     });
+    plannedCommitmentEntries(month, country).forEach((item) => {
+      if (!allOutflowTypes.includes(item.type)) return;
+      const key = item.category || typeMeta[item.type]?.label || "Outros";
+      const current = totals.get(key) || 0;
+      totals.set(key, current + convert(item.amount, item.currency, currency, rate));
+    });
+    plannedCardBillEntries(month, country).forEach((item) => {
+      const current = totals.get("Cartao") || 0;
+      totals.set("Cartao", current + convert(item.amount, item.currency, currency, rate));
+    });
     if (country === "global" || country === "japao") {
       vehicleMonthlyCosts(month).forEach((item) => {
         const current = totals.get("Veiculo") || 0;
@@ -3237,6 +3789,25 @@
 
   function commitmentKey(id, month) {
     return `${month}:${id}`;
+  }
+
+  function isCardBillPaid(id, month) {
+    return Boolean(state.paidCommitments[cardBillKey(id, month)]);
+  }
+
+  function cardBillKey(id, month) {
+    return `${month}:card:${id}`;
+  }
+
+  function dueStateForDate(dateValue, paid) {
+    if (paid) return { label: "Pago", tone: "green" };
+    const today = startOfDay(new Date());
+    const due = parseLocalDate(dateValue);
+    const diff = Math.round((due - today) / 86400000);
+    if (diff < 0) return { label: "Vencido", tone: "red" };
+    if (diff === 0) return { label: "Vence hoje", tone: "gold" };
+    if (diff <= 3) return { label: `Vence em ${diff} dias`, tone: "gold" };
+    return { label: "Aberto", tone: "blue" };
   }
 
   function convert(amount, from, to, rate) {
@@ -3306,6 +3877,17 @@
     return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(new Date(year, month - 1, day));
   }
 
+  function formatCalendarDay(date) {
+    const day = parseLocalDate(date).getDate();
+    return String(day).padStart(2, "0");
+  }
+
+  function formatCalendarWeekday(date) {
+    return new Intl.DateTimeFormat("pt-BR", { weekday: "short" })
+      .format(parseLocalDate(date))
+      .replace(".", "");
+  }
+
   function formatTime(value) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "--:--";
@@ -3347,6 +3929,15 @@
     const last = new Date(year, monthIndex, 0).getDate();
     const safeDay = clamp(Number(day) || 1, 1, last);
     return `${month}-${String(safeDay).padStart(2, "0")}`;
+  }
+
+  function parseLocalDate(date) {
+    const [year, month, day] = String(date || currentMonth()).split("-").map(Number);
+    return new Date(year, (month || 1) - 1, day || 1);
+  }
+
+  function startOfDay(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
   }
 
   function formData(form) {

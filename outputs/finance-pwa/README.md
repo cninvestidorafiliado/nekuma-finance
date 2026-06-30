@@ -22,8 +22,10 @@ Esse servidor local e a senha basica sao apenas para teste no computador. Para f
 - Modo Global, Brasil e Japao.
 - Lancamentos por pais, moeda, categoria e mes.
 - Transferencias Wise com cotacao, taxa e valor recebido.
-- Contas fixas, financiamentos, consorcio, cartao e investimentos.
-- Meus Cartoes com identificacao Brasil/Japao no card.
+- Contas recorrentes com frequencia mensal, anual ou unica, alerta e previsao no mes.
+- Financiamentos, consorcio, cartao e investimentos.
+- Meus Cartoes com identificacao Brasil/Japao, fechamento, vencimento, fatura e compras parceladas.
+- Calendario financeiro mensal com vencimentos, Wise, rendas, veiculo e cartoes.
 - Carteira cripto com distribuicao circular, preco medio, lucro/prejuizo e cotacoes CoinGecko.
 - Empresas e Rendas para salario, Amazon Flex, Uber Eats e renda extra com cores por fonte.
 - Veiculo Japao com Shaken, seguro e historico de manutencoes.

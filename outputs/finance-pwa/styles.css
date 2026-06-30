@@ -889,6 +889,87 @@ canvas {
   margin-top: 10px;
 }
 
+.card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.calendar-list {
+  display: grid;
+  gap: 8px;
+}
+
+.calendar-item {
+  display: grid;
+  grid-template-columns: 54px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.44);
+}
+
+.calendar-item.red {
+  border-color: rgba(217, 93, 78, 0.3);
+  background: #fff4ec;
+}
+
+.calendar-item.gold {
+  border-color: rgba(240, 195, 142, 0.56);
+  background: #fff8e9;
+}
+
+.calendar-item.green {
+  border-color: rgba(66, 166, 122, 0.28);
+  background: #eff9f1;
+}
+
+.calendar-date {
+  display: grid;
+  min-height: 50px;
+  place-items: center;
+  border-radius: var(--radius);
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.calendar-date span {
+  font-size: 1.15rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.calendar-date small {
+  color: rgba(255, 250, 244, 0.72);
+  font-size: 0.68rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.calendar-main {
+  min-width: 0;
+}
+
+.calendar-amount {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  text-align: right;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.calendar-amount.income {
+  color: #247653;
+}
+
+.calendar-amount.expense {
+  color: #aa3d31;
+}
+
 .crypto-panel {
   overflow: hidden;
 }
@@ -1340,6 +1421,23 @@ canvas {
   }
 
   .quick-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-item {
+    grid-template-columns: 48px 1fr;
+  }
+
+  .calendar-amount {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr auto;
+    justify-items: start;
+    align-items: center;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .card-actions {
     grid-template-columns: 1fr;
   }
 }
