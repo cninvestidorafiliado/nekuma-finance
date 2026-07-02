@@ -36,7 +36,7 @@ Esse servidor local e a senha basica sao apenas para teste no computador. Para f
 - Backup e importacao em JSON.
 - Dados salvos no navegador via `localStorage` quando o Supabase estiver desligado.
 - Modo Supabase ativo com login real e sincronizacao por familia.
-- Cards de cotacao USD/BRL e JPY/BRL com atualizacao automatica.
+- Cards de cotacao USD/BRL, USD/JPY e BTC/USD com atualizacao automatica.
 
 ## Publicar 24h online
 

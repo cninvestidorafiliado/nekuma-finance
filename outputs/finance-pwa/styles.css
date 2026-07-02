@@ -436,12 +436,19 @@ h3 {
   backdrop-filter: blur(14px);
 }
 
+.fx-card > div {
+  min-width: 0;
+}
+
 .fx-card strong {
   display: block;
   margin-top: 2px;
   color: var(--ink);
   font-size: clamp(1rem, 4vw, 1.25rem);
   line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fx-status-card {
@@ -1454,7 +1461,7 @@ canvas {
   }
 
   .fx-strip {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .fx-status-card {

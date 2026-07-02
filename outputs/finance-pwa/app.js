@@ -446,6 +446,8 @@
       fxQuotes: {
         usdBrl: 0,
         jpyBrl: 0,
+        usdJpy: 0,
+        btcUsd: 0,
         source: "",
         ratesDate: "",
         updatedAt: null,
@@ -656,6 +658,8 @@
 
   function renderFxCards() {
     const quotes = state.fxQuotes || {};
+    const usdJpy = Number(quotes.usdJpy || (quotes.usdBrl && quotes.jpyBrl ? quotes.usdBrl / quotes.jpyBrl : 0));
+    const btcUsd = Number(quotes.btcUsd || cryptoPrice("BTC", "USD") || 0);
     const status = fxStatusText();
     return `
       <section class="fx-strip" aria-label="Cotacoes">
@@ -668,10 +672,17 @@
         </article>
         <article class="fx-card">
           <div>
-            <p class="mini-label">Iene / Real</p>
-            <strong>${quotes.jpyBrl ? formatFxRate(quotes.jpyBrl, 5) : "--"}</strong>
+            <p class="mini-label">Dolar / Iene</p>
+            <strong>${usdJpy ? formatYenRate(usdJpy) : "--"}</strong>
           </div>
           <span class="chip gold">JPY</span>
+        </article>
+        <article class="fx-card crypto-rate-card">
+          <div>
+            <p class="mini-label">BTC / Dolar</p>
+            <strong>${btcUsd ? formatUsdRate(btcUsd) : "--"}</strong>
+          </div>
+          <span class="chip blue">BTC</span>
         </article>
         <article class="fx-card fx-status-card">
           <div>
@@ -3140,7 +3151,7 @@
     render();
 
     try {
-      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=jpy,brl&include_24hr_change=true`;
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=jpy,brl,usd&include_24hr_change=true`;
       const response = await fetch(url, { cache: "no-store" });
       if (!response.ok) throw new Error("Falha ao buscar cotacoes");
       const data = await response.json();
@@ -3152,7 +3163,8 @@
         prices[symbol] = {
           JPY: Number(quote.jpy || 0),
           BRL: Number(quote.brl || 0),
-          change24h: Number(quote.jpy_24h_change || quote.brl_24h_change || 0)
+          USD: Number(quote.usd || 0),
+          change24h: Number(quote.jpy_24h_change || quote.brl_24h_change || quote.usd_24h_change || 0)
         };
       });
 
@@ -3205,6 +3217,8 @@
       state.fxQuotes = {
         usdBrl: quotes.usdBrl,
         jpyBrl: quotes.jpyBrl,
+        usdJpy: quotes.usdJpy,
+        btcUsd: quotes.btcUsd || state.fxQuotes?.btcUsd || 0,
         source: quotes.source,
         ratesDate: quotes.date || "",
         updatedAt: new Date().toISOString(),
@@ -3226,6 +3240,15 @@
   }
 
   async function fetchFxQuotes() {
+    const fiat = await fetchFiatFxQuotes();
+    const btcUsd = await fetchBtcUsdQuote().catch(() => Number(state.fxQuotes?.btcUsd || 0));
+    return {
+      ...fiat,
+      btcUsd
+    };
+  }
+
+  async function fetchFiatFxQuotes() {
     try {
       return await fetchAwesomeFxQuotes();
     } catch (error) {
@@ -3234,17 +3257,19 @@
   }
 
   async function fetchAwesomeFxQuotes() {
-    const response = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL,JPY-BRL", { cache: "no-store" });
+    const response = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL,JPY-BRL,USD-JPY", { cache: "no-store" });
     if (!response.ok) throw new Error("Falha na cotacao BR");
     const data = await response.json();
     const usdBrl = Number(data.USDBRL?.bid || data.USDBRL?.ask || 0);
     const jpyBrl = Number(data.JPYBRL?.bid || data.JPYBRL?.ask || 0);
-    if (!usdBrl || !jpyBrl) throw new Error("Cotacao BR vazia");
+    const usdJpy = Number(data.USDJPY?.bid || data.USDJPY?.ask || 0) || (jpyBrl ? usdBrl / jpyBrl : 0);
+    if (!usdBrl || !jpyBrl || !Number.isFinite(usdJpy) || !usdJpy) throw new Error("Cotacao BR vazia");
     return {
       usdBrl,
       jpyBrl,
+      usdJpy,
       source: "AwesomeAPI",
-      date: data.USDBRL?.create_date || data.JPYBRL?.create_date || ""
+      date: data.USDBRL?.create_date || data.USDJPY?.create_date || data.JPYBRL?.create_date || ""
     };
   }
 
@@ -3258,9 +3283,19 @@
     return {
       usdBrl: brl,
       jpyBrl: brl / jpy,
+      usdJpy: jpy,
       source: "Open ER",
       date: data.time_last_update_utc || data.time_last_update_unix || ""
     };
+  }
+
+  async function fetchBtcUsdQuote() {
+    const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", { cache: "no-store" });
+    if (!response.ok) throw new Error("Falha na cotacao BTC");
+    const data = await response.json();
+    const btcUsd = Number(data.bitcoin?.usd || 0);
+    if (!btcUsd) throw new Error("Cotacao BTC vazia");
+    return btcUsd;
   }
 
   function fxStatusText() {
@@ -4014,6 +4049,24 @@
 
   function formatFxRate(value, decimals) {
     return `R$ ${Number(value || 0).toFixed(decimals)}`;
+  }
+
+  function formatYenRate(value) {
+    return new Intl.NumberFormat("ja-JP", {
+      style: "currency",
+      currency: "JPY",
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 2
+    }).format(Number(value || 0));
+  }
+
+  function formatUsdRate(value) {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 2
+    }).format(Number(value || 0));
   }
 
   function formatMonthLabel(month) {
