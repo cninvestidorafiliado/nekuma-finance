@@ -26,9 +26,11 @@ Esse servidor local e a senha basica sao apenas para teste no computador. Para f
 - Financiamentos, consorcio, cartao e investimentos.
 - Meus Cartoes com identificacao Brasil/Japao, fechamento, vencimento, fatura e compras parceladas.
 - Calendario financeiro mensal com vencimentos, Wise, rendas, veiculo e cartoes.
+- Resumo Planejado x Realizado com saldo projetado, saidas ja realizadas, contas/faturas abertas e valor medio por dia.
 - Carteira cripto com distribuicao circular, preco medio, lucro/prejuizo e cotacoes CoinGecko.
 - Empresas e Rendas para salario, Amazon Flex, Uber Eats e renda extra com cores por fonte.
 - Veiculo Japao com Shaken, seguro e historico de manutencoes.
+- Edicao direta de lancamentos, Wise, contas fixas, contratos, investimentos, cartoes, compras parceladas, criptos, empresas, recebimentos e manutencoes.
 - Graficos de comparativo mensal, categorias e Brasil x Japao.
 - Relatorio mensal incluindo recebimentos extras e custos do veiculo.
 - Backup e importacao em JSON.

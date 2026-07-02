@@ -20,6 +20,19 @@
     vehicle: { label: "Veiculo", icon: "V", tone: "blue" }
   };
   const sourceColors = ["#42a67a", "#f5c84c", "#567c9b", "#d95d4e", "#8b6fd6", "#2db7a3", "#f08b4f"];
+  const collectionPrefixes = {
+    transactions: "tx",
+    transfers: "tr",
+    commitments: "co",
+    debts: "de",
+    investments: "iv",
+    creditCards: "cc",
+    cardPurchases: "cp",
+    cryptoAssets: "cr",
+    vehicleMaintenance: "vm",
+    incomeSources: "is",
+    workIncomes: "wi"
+  };
   const incomeSourceTypeMeta = {
     salary: "Salario Empresa",
     amazon: "Amazon Flex",
@@ -102,7 +115,7 @@
       render();
     }
 
-    if (action === "open-modal") openModal(button.dataset.modal);
+    if (action === "open-modal") openModal(button.dataset.modal, button.dataset.id);
     if (action === "close-modal") closeModal();
     if (action === "pay-commitment") payCommitment(button.dataset.id);
     if (action === "pay-card-bill") payCardBill(button.dataset.id);
@@ -734,6 +747,8 @@
         </div>
       </section>
 
+      ${renderPlanVsActual(summary)}
+
       <section class="content-panel">
         <div class="panel-head">
           <h2>Calendario financeiro</h2>
@@ -812,6 +827,48 @@
           </div>
           ${renderBridgePanel()}
         </article>
+      </section>
+    `;
+  }
+
+  function renderPlanVsActual(summary) {
+    const totalOutflow = summary.actualOutflow + summary.plannedOutflow;
+    const realizedPct = totalOutflow ? clamp(Math.round((summary.actualOutflow / totalOutflow) * 100), 0, 100) : 0;
+    const plannedPct = totalOutflow ? clamp(100 - realizedPct, 0, 100) : 0;
+    const days = remainingDaysInMonth(state.ui.selectedMonth);
+    const daily = days ? summary.remaining / days : summary.remaining;
+
+    return `
+      <section class="content-panel plan-panel">
+        <div class="panel-head">
+          <h2>Planejado x realizado</h2>
+          <span class="chip ${summary.remaining >= 0 ? "green" : "red"}">${summary.remaining >= 0 ? "Dentro do plano" : "Ajustar mes"}</span>
+        </div>
+        <div class="plan-grid">
+          <div class="plan-card realized">
+            <p class="mini-label">Realizado</p>
+            <strong>${formatMoney(summary.actualOutflow, summary.currency)}</strong>
+            <span>Entrou ${formatMoney(summary.actualInflow, summary.currency)}</span>
+          </div>
+          <div class="plan-card planned">
+            <p class="mini-label">Ainda previsto</p>
+            <strong>${formatMoney(summary.plannedOutflow, summary.currency)}</strong>
+            <span>Contas e faturas abertas</span>
+          </div>
+          <div class="plan-card balance ${summary.remaining >= 0 ? "good" : "warn"}">
+            <p class="mini-label">Saldo projetado</p>
+            <strong>${formatMoney(summary.remaining, summary.currency)}</strong>
+            <span>${days ? `${formatMoney(daily, summary.currency)} por dia` : "Mes fechado"}</span>
+          </div>
+        </div>
+        <div class="plan-track" aria-label="Proporcao entre realizado e previsto">
+          <span class="realized" style="width:${realizedPct}%"></span>
+          <span class="planned" style="width:${plannedPct}%"></span>
+        </div>
+        <div class="plan-legend">
+          <span><i class="legend-dot realized"></i>${realizedPct}% realizado</span>
+          <span><i class="legend-dot planned"></i>${plannedPct}% previsto</span>
+        </div>
       </section>
     `;
   }
@@ -1010,6 +1067,8 @@
         </div>
       </section>
 
+      ${renderPlanVsActual(summary)}
+
       <section class="content-panel">
         <div class="panel-head">
           <h2>Agenda do mes</h2>
@@ -1203,13 +1262,14 @@
             <p class="row-meta">${countryMeta[item.country].label} - dia ${item.dueDay} - ${frequency} - ${escapeHtml(item.provider || item.category)}</p>
             <p class="row-meta">${dueState.label}${item.alertDays ? ` - alerta ${item.alertDays} dias antes` : ""}</p>
           </div>
-          <div class="row-amount">
-            ${formatMoney(item.amount, item.currency)}
-            <div class="chips" style="justify-content:flex-end;margin-top:6px">
-              <button class="small-action ${paid ? "ghost" : ""}" type="button" data-action="pay-commitment" data-id="${item.id}">${paid ? "Pago" : "Pagar"}</button>
-              ${limit ? "" : `<button class="small-action ghost" type="button" data-action="delete-commitment" data-id="${item.id}">Excluir</button>`}
+            <div class="row-amount">
+              ${formatMoney(item.amount, item.currency)}
+              <div class="chips" style="justify-content:flex-end;margin-top:6px">
+                <button class="small-action ${paid ? "ghost" : ""}" type="button" data-action="pay-commitment" data-id="${item.id}">${paid ? "Pago" : "Pagar"}</button>
+                ${limit ? "" : `<button class="small-action ghost" type="button" data-action="open-modal" data-modal="commitment" data-id="${item.id}">Editar</button>`}
+                ${limit ? "" : `<button class="small-action ghost" type="button" data-action="delete-commitment" data-id="${item.id}">Excluir</button>`}
+              </div>
             </div>
-          </div>
         </div>
       `;
     }).join("");
@@ -1233,7 +1293,10 @@
                 <div class="progress-track" aria-hidden="true"><div class="progress-fill" style="width:${progress}%"></div></div>
                 <p class="row-meta">${progress}% quitado · saldo ${formatMoney(item.outstandingAmount, item.currency)}</p>
               </div>
-              <button class="small-action ghost" type="button" data-action="delete-debt" data-id="${item.id}">Excluir</button>
+              <div class="row-actions">
+                <button class="small-action ghost" type="button" data-action="open-modal" data-modal="debt" data-id="${item.id}">Editar</button>
+                <button class="small-action ghost" type="button" data-action="delete-debt" data-id="${item.id}">Excluir</button>
+              </div>
             </div>
           `;
         }).join("")}
@@ -1256,7 +1319,10 @@
             <div class="row-amount">
               ${formatMoney(item.currentAmount, item.currency)}
               <p class="row-meta">+ ${formatMoney(item.monthlyContribution, item.currency)}/mes</p>
-              <button class="small-action ghost" type="button" data-action="delete-investment" data-id="${item.id}">Excluir</button>
+              <div class="row-actions">
+                <button class="small-action ghost" type="button" data-action="open-modal" data-modal="investment" data-id="${item.id}">Editar</button>
+                <button class="small-action ghost" type="button" data-action="delete-investment" data-id="${item.id}">Excluir</button>
+              </div>
             </div>
           </div>
         `).join("")}
@@ -1296,6 +1362,7 @@
               </div>
               ${limit ? "" : `
                 <div class="card-actions">
+                  <button class="small-action ghost" type="button" data-action="open-modal" data-modal="creditCard" data-id="${item.id}">Editar</button>
                   <button class="small-action" type="button" data-action="pay-card-bill" data-id="${item.id}">${paid ? "Pago" : "Pagar fatura"}</button>
                   <button class="small-action ghost" type="button" data-action="delete-credit-card" data-id="${item.id}">Excluir</button>
                 </div>
@@ -1322,7 +1389,12 @@
             </div>
             <div class="row-amount expense">
               ${formatMoney(row.amount, row.currency)}
-              ${limit ? "" : `<button class="small-action ghost" type="button" data-action="delete-card-purchase" data-id="${row.id}">Excluir</button>`}
+              ${limit ? "" : `
+                <div class="row-actions">
+                  <button class="small-action ghost" type="button" data-action="open-modal" data-modal="cardPurchase" data-id="${row.id}">Editar</button>
+                  <button class="small-action ghost" type="button" data-action="delete-card-purchase" data-id="${row.id}">Excluir</button>
+                </div>
+              `}
             </div>
           </div>
         `).join("")}
@@ -1415,7 +1487,10 @@
             <div class="row-amount ${item.pnl >= 0 ? "income" : "expense"}">
               ${formatMoney(item.value, item.currency)}
               <p class="row-meta">${formatSignedMoney(item.pnl, item.currency)}</p>
-              <button class="small-action ghost" type="button" data-action="delete-crypto" data-id="${item.id}">Excluir</button>
+              <div class="row-actions">
+                <button class="small-action ghost" type="button" data-action="open-modal" data-modal="crypto" data-id="${item.id}">Editar</button>
+                <button class="small-action ghost" type="button" data-action="delete-crypto" data-id="${item.id}">Excluir</button>
+              </div>
             </div>
           </div>
         `).join("")}
@@ -1462,7 +1537,12 @@
               </div>
               <div class="row-amount income">
                 ${formatMoney(amount, source.currency || "JPY")}
-                ${limit ? "" : `<button class="small-action ghost" type="button" data-action="delete-income-source" data-id="${source.id}">Excluir</button>`}
+                ${limit ? "" : `
+                  <div class="row-actions">
+                    <button class="small-action ghost" type="button" data-action="open-modal" data-modal="incomeSource" data-id="${source.id}">Editar</button>
+                    <button class="small-action ghost" type="button" data-action="delete-income-source" data-id="${source.id}">Excluir</button>
+                  </div>
+                `}
               </div>
             </div>
           `;
@@ -1487,7 +1567,10 @@
               </div>
               <div class="row-amount income">
                 + ${formatMoney(item.amount, item.currency)}
-                <button class="small-action ghost" type="button" data-action="delete-work-income" data-id="${item.id}">Excluir</button>
+                <div class="row-actions">
+                  <button class="small-action ghost" type="button" data-action="open-modal" data-modal="workIncome" data-id="${item.id}">Editar</button>
+                  <button class="small-action ghost" type="button" data-action="delete-work-income" data-id="${item.id}">Excluir</button>
+                </div>
               </div>
             </div>
           `;
@@ -1542,7 +1625,12 @@
               </div>
               <div class="row-amount expense">
                 ${formatMoney(item.amount, item.currency || "JPY")}
-                ${limit ? "" : `<button class="small-action ghost" type="button" data-action="delete-vehicle-maintenance" data-id="${item.id}">Excluir</button>`}
+                ${limit ? "" : `
+                  <div class="row-actions">
+                    <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicleMaintenance" data-id="${item.id}">Editar</button>
+                    <button class="small-action ghost" type="button" data-action="delete-vehicle-maintenance" data-id="${item.id}">Excluir</button>
+                  </div>
+                `}
               </div>
             </div>
           `).join("")}
@@ -1578,6 +1666,7 @@
           const meta = typeMeta[item.type] || typeMeta.expense;
           const isIncome = item.type === "income";
           const deleteAction = item.deleteAction || (item.generated ? "" : "delete-transaction");
+          const editModal = item.editModal || (item.generated ? "" : "transaction");
           const iconStyle = item.color ? `style="background:${escapeAttr(item.color)}"` : "";
           return `
             <div class="list-row">
@@ -1588,7 +1677,12 @@
               </div>
               <div class="row-amount ${isIncome ? "income" : "expense"}">
                 ${isIncome ? "+" : "-"} ${formatMoney(item.amount, item.currency)}
-                ${deleteAction ? `<button class="small-action ghost" type="button" data-action="${deleteAction}" data-id="${item.id}">Excluir</button>` : ""}
+                ${editModal || deleteAction ? `
+                  <div class="row-actions">
+                    ${editModal ? `<button class="small-action ghost" type="button" data-action="open-modal" data-modal="${editModal}" data-id="${item.id}">Editar</button>` : ""}
+                    ${deleteAction ? `<button class="small-action ghost" type="button" data-action="${deleteAction}" data-id="${item.id}">Excluir</button>` : ""}
+                  </div>
+                ` : ""}
               </div>
             </div>
           `;
@@ -1611,7 +1705,10 @@
             <div class="row-amount">
               ${formatMoney(item.sentAmount, item.sentCurrency)}
               <p class="row-meta">${formatMoney(item.receivedAmount, item.receivedCurrency)}</p>
-              <button class="small-action ghost" type="button" data-action="delete-transfer" data-id="${item.id}">Excluir</button>
+              <div class="row-actions">
+                <button class="small-action ghost" type="button" data-action="open-modal" data-modal="transfer" data-id="${item.id}">Editar</button>
+                <button class="small-action ghost" type="button" data-action="delete-transfer" data-id="${item.id}">Excluir</button>
+              </div>
             </div>
           </div>
         `).join("")}
@@ -1656,7 +1753,7 @@
     `;
   }
 
-  function openModal(type) {
+  function openModal(type, id = "") {
     const map = {
       transaction: renderTransactionModal,
       transfer: renderTransferModal,
@@ -1671,7 +1768,7 @@
       incomeSource: renderIncomeSourceModal,
       workIncome: renderWorkIncomeModal
     };
-    const content = map[type] ? map[type]() : "";
+    const content = map[type] ? map[type](editableItem(type, id)) : "";
     modalRoot.innerHTML = `
       <div class="modal-backdrop">
         <div class="modal" role="dialog" aria-modal="true" aria-label="Formulario">
@@ -1688,54 +1785,57 @@
     modalRoot.innerHTML = "";
   }
 
-  function renderTransactionModal() {
-    const activeCountry = state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry;
+  function renderTransactionModal(item = null) {
+    const activeCountry = item?.country || (state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry);
     const currency = countryMeta[activeCountry].currency;
+    const selectedCurrency = item?.currency || currency;
+    const date = item?.date || dateInMonth(state.ui.selectedMonth, new Date().getDate());
     return `
       <div class="modal-head">
-        <h2>Novo lancamento</h2>
+        <h2>${item ? "Editar lancamento" : "Novo lancamento"}</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="transaction">
+        ${editHidden(item)}
         <div class="two-cols">
           ${countrySelect(activeCountry)}
           <div class="field">
             <label for="type">Tipo</label>
             <select id="type" name="type">
-              ${Object.entries(typeMeta).map(([key, meta]) => `<option value="${key}">${meta.label}</option>`).join("")}
+              ${Object.entries(typeMeta).map(([key, meta]) => `<option value="${key}" ${selectedAttr(key, item?.type || "expense")}>${meta.label}</option>`).join("")}
             </select>
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
             <label for="title">Nome</label>
-            <input id="title" name="title" required placeholder="Ex: Mercado" />
+            <input id="title" name="title" required placeholder="Ex: Mercado" value="${escapeAttr(item?.title || "")}" />
           </div>
           <div class="field">
             <label for="category">Categoria</label>
-            <input id="category" name="category" required placeholder="Ex: Mercado" />
+            <input id="category" name="category" required placeholder="Ex: Mercado" value="${escapeAttr(item?.category || "")}" />
           </div>
         </div>
         <div class="three-cols">
           <div class="field">
             <label for="amount">Valor</label>
-            <input id="amount" name="amount" required type="number" min="0" step="0.01" />
+            <input id="amount" name="amount" required type="number" min="0" step="0.01" value="${item ? number(item.amount) : ""}" />
           </div>
           <div class="field">
             <label for="currency">Moeda</label>
             <select id="currency" name="currency">
-              <option value="${currency}" selected>${currency}</option>
-              <option value="${currency === "JPY" ? "BRL" : "JPY"}">${currency === "JPY" ? "BRL" : "JPY"}</option>
+              <option value="${currency}" ${selectedAttr(currency, selectedCurrency)}>${currency}</option>
+              <option value="${currency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(currency === "JPY" ? "BRL" : "JPY", selectedCurrency)}>${currency === "JPY" ? "BRL" : "JPY"}</option>
             </select>
           </div>
           <div class="field">
             <label for="date">Data</label>
-            <input id="date" name="date" type="date" required value="${dateInMonth(state.ui.selectedMonth, new Date().getDate())}" />
+            <input id="date" name="date" type="date" required value="${escapeAttr(date)}" />
           </div>
         </div>
         <div class="field">
           <label for="note">Observacao</label>
-          <textarea id="note" name="note"></textarea>
+          <textarea id="note" name="note">${escapeHtml(item?.note || "")}</textarea>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -1745,40 +1845,46 @@
     `;
   }
 
-  function renderTransferModal() {
+  function renderTransferModal(item = null) {
+    const sentAmount = item ? number(item.sentAmount) : 230000;
+    const feeAmount = item ? number(item.feeAmount) : 890;
+    const rate = item ? number(item.rate) : latestRate(state.ui.selectedMonth);
+    const date = item?.date || dateInMonth(state.ui.selectedMonth, 26);
+    const receivedAmount = item ? number(item.receivedAmount) : "";
     return `
       <div class="modal-head">
-        <h2>Nova transferencia Wise</h2>
+        <h2>${item ? "Editar transferencia Wise" : "Nova transferencia Wise"}</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="transfer">
+        ${editHidden(item)}
         <div class="three-cols">
           <div class="field">
             <label for="sentAmount">Valor enviado JPY</label>
-            <input id="sentAmount" name="sentAmount" type="number" min="0" step="1" required value="230000" />
+            <input id="sentAmount" name="sentAmount" type="number" min="0" step="1" required value="${sentAmount}" />
           </div>
           <div class="field">
             <label for="feeAmount">Taxa JPY</label>
-            <input id="feeAmount" name="feeAmount" type="number" min="0" step="1" required value="890" />
+            <input id="feeAmount" name="feeAmount" type="number" min="0" step="1" required value="${feeAmount}" />
           </div>
           <div class="field">
             <label for="rate">Cotacao BRL por JPY</label>
-            <input id="rate" name="rate" type="number" min="0" step="0.0001" required value="${latestRate(state.ui.selectedMonth)}" />
+            <input id="rate" name="rate" type="number" min="0" step="0.0001" required value="${rate}" />
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
             <label for="transferDate">Data</label>
-            <input id="transferDate" name="date" type="date" required value="${dateInMonth(state.ui.selectedMonth, 26)}" />
+            <input id="transferDate" name="date" type="date" required value="${escapeAttr(date)}" />
           </div>
           <div class="field">
             <label for="receivedAmount">Recebido BRL</label>
-            <input id="receivedAmount" name="receivedAmount" type="number" min="0" step="0.01" required />
+            <input id="receivedAmount" name="receivedAmount" type="number" min="0" step="0.01" required value="${receivedAmount}" />
           </div>
         </div>
         <div class="field">
           <label for="transferNote">Observacao</label>
-          <textarea id="transferNote" name="note">Ponte para contas do Brasil</textarea>
+          <textarea id="transferNote" name="note">${escapeHtml(item?.note || "Ponte para contas do Brasil")}</textarea>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -1788,79 +1894,81 @@
     `;
   }
 
-  function renderCommitmentModal() {
-    const activeCountry = state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry;
+  function renderCommitmentModal(item = null) {
+    const activeCountry = item?.country || (state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry);
+    const selectedCurrency = item?.currency || countryMeta[activeCountry].currency;
     return `
       <div class="modal-head">
-        <h2>Nova conta fixa</h2>
+        <h2>${item ? "Editar conta fixa" : "Nova conta fixa"}</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="commitment">
+        ${editHidden(item)}
         <div class="two-cols">
           ${countrySelect(activeCountry)}
           <div class="field">
             <label for="commitmentType">Tipo</label>
             <select id="commitmentType" name="type">
-              <option value="expense">Despesa</option>
-              <option value="debt">Financiamento</option>
-              <option value="card">Cartao</option>
-              <option value="consortium">Consorcio</option>
-              <option value="investment">Investimento</option>
+              <option value="expense" ${selectedAttr("expense", item?.type || "expense")}>Despesa</option>
+              <option value="debt" ${selectedAttr("debt", item?.type)}>Financiamento</option>
+              <option value="card" ${selectedAttr("card", item?.type)}>Cartao</option>
+              <option value="consortium" ${selectedAttr("consortium", item?.type)}>Consorcio</option>
+              <option value="investment" ${selectedAttr("investment", item?.type)}>Investimento</option>
             </select>
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
             <label for="provider">Fornecedor</label>
-            <input id="provider" name="provider" required placeholder="Ex: Santander" />
+            <input id="provider" name="provider" required placeholder="Ex: Santander" value="${escapeAttr(item?.provider || "")}" />
           </div>
           <div class="field">
             <label for="commitmentTitle">Nome</label>
-            <input id="commitmentTitle" name="title" required placeholder="Ex: Financiamento" />
+            <input id="commitmentTitle" name="title" required placeholder="Ex: Financiamento" value="${escapeAttr(item?.title || "")}" />
           </div>
         </div>
         <div class="three-cols">
           <div class="field">
             <label for="commitmentCategory">Categoria</label>
-            <input id="commitmentCategory" name="category" required placeholder="Ex: Imovel" />
+            <input id="commitmentCategory" name="category" required placeholder="Ex: Imovel" value="${escapeAttr(item?.category || "")}" />
           </div>
           <div class="field">
             <label for="commitmentAmount">Valor</label>
-            <input id="commitmentAmount" name="amount" required type="number" min="0" step="0.01" />
+            <input id="commitmentAmount" name="amount" required type="number" min="0" step="0.01" value="${item ? number(item.amount) : ""}" />
           </div>
           <div class="field">
             <label for="dueDay">Vencimento</label>
-            <input id="dueDay" name="dueDay" required type="number" min="1" max="31" />
+            <input id="dueDay" name="dueDay" required type="number" min="1" max="31" value="${item?.dueDay || ""}" />
           </div>
         </div>
         <div class="field">
           <label for="commitmentCurrency">Moeda</label>
           <select id="commitmentCurrency" name="currency">
-            <option value="${countryMeta[activeCountry].currency}" selected>${countryMeta[activeCountry].currency}</option>
-            <option value="${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}">${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}</option>
+            <option value="${countryMeta[activeCountry].currency}" ${selectedAttr(countryMeta[activeCountry].currency, selectedCurrency)}>${countryMeta[activeCountry].currency}</option>
+            <option value="${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY", selectedCurrency)}>${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}</option>
           </select>
         </div>
         <div class="three-cols">
           <div class="field">
             <label for="frequency">Frequencia</label>
             <select id="frequency" name="frequency">
-              <option value="monthly">Mensal</option>
-              <option value="yearly">Anual</option>
-              <option value="once">Uma vez</option>
+              <option value="monthly" ${selectedAttr("monthly", item?.frequency || "monthly")}>Mensal</option>
+              <option value="yearly" ${selectedAttr("yearly", item?.frequency)}>Anual</option>
+              <option value="once" ${selectedAttr("once", item?.frequency)}>Uma vez</option>
             </select>
           </div>
           <div class="field">
             <label for="startMonth">A partir de</label>
-            <input id="startMonth" name="startMonth" type="month" value="${state.ui.selectedMonth}" />
+            <input id="startMonth" name="startMonth" type="month" value="${escapeAttr(item?.startMonth || state.ui.selectedMonth)}" />
           </div>
           <div class="field">
             <label for="endMonth">Ate</label>
-            <input id="endMonth" name="endMonth" type="month" />
+            <input id="endMonth" name="endMonth" type="month" value="${escapeAttr(item?.endMonth || "")}" />
           </div>
         </div>
         <div class="field">
           <label for="alertDays">Avisar quantos dias antes</label>
-          <input id="alertDays" name="alertDays" type="number" min="0" max="60" value="3" />
+          <input id="alertDays" name="alertDays" type="number" min="0" max="60" value="${item?.alertDays ?? 3}" />
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -1870,61 +1978,63 @@
     `;
   }
 
-  function renderDebtModal() {
-    const activeCountry = state.ui.activeCountry === "global" ? "brasil" : state.ui.activeCountry;
+  function renderDebtModal(item = null) {
+    const activeCountry = item?.country || (state.ui.activeCountry === "global" ? "brasil" : state.ui.activeCountry);
+    const selectedCurrency = item?.currency || countryMeta[activeCountry].currency;
     return `
       <div class="modal-head">
-        <h2>Novo contrato</h2>
+        <h2>${item ? "Editar contrato" : "Novo contrato"}</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="debt">
+        ${editHidden(item)}
         <div class="two-cols">
           ${countrySelect(activeCountry)}
           <div class="field">
             <label for="debtType">Tipo</label>
             <select id="debtType" name="type">
-              <option value="financing">Financiamento</option>
-              <option value="consortium">Consorcio</option>
-              <option value="card">Cartao</option>
-              <option value="device">Aparelho</option>
+              <option value="financing" ${selectedAttr("financing", item?.type || "financing")}>Financiamento</option>
+              <option value="consortium" ${selectedAttr("consortium", item?.type)}>Consorcio</option>
+              <option value="card" ${selectedAttr("card", item?.type)}>Cartao</option>
+              <option value="device" ${selectedAttr("device", item?.type)}>Aparelho</option>
             </select>
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
             <label for="debtProvider">Banco/empresa</label>
-            <input id="debtProvider" name="provider" required />
+            <input id="debtProvider" name="provider" required value="${escapeAttr(item?.provider || "")}" />
           </div>
           <div class="field">
             <label for="debtTitle">Nome</label>
-            <input id="debtTitle" name="title" required />
+            <input id="debtTitle" name="title" required value="${escapeAttr(item?.title || "")}" />
           </div>
         </div>
         <div class="three-cols">
           <div class="field">
             <label for="originalAmount">Valor original</label>
-            <input id="originalAmount" name="originalAmount" required type="number" min="0" step="0.01" />
+            <input id="originalAmount" name="originalAmount" required type="number" min="0" step="0.01" value="${item ? number(item.originalAmount) : ""}" />
           </div>
           <div class="field">
             <label for="outstandingAmount">Saldo devedor</label>
-            <input id="outstandingAmount" name="outstandingAmount" required type="number" min="0" step="0.01" />
+            <input id="outstandingAmount" name="outstandingAmount" required type="number" min="0" step="0.01" value="${item ? number(item.outstandingAmount) : ""}" />
           </div>
           <div class="field">
             <label for="installmentAmount">Parcela</label>
-            <input id="installmentAmount" name="installmentAmount" required type="number" min="0" step="0.01" />
+            <input id="installmentAmount" name="installmentAmount" required type="number" min="0" step="0.01" value="${item ? number(item.installmentAmount) : ""}" />
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
             <label for="debtCurrency">Moeda</label>
             <select id="debtCurrency" name="currency">
-              <option value="${countryMeta[activeCountry].currency}" selected>${countryMeta[activeCountry].currency}</option>
-              <option value="${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}">${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}</option>
+              <option value="${countryMeta[activeCountry].currency}" ${selectedAttr(countryMeta[activeCountry].currency, selectedCurrency)}>${countryMeta[activeCountry].currency}</option>
+              <option value="${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY", selectedCurrency)}>${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}</option>
             </select>
           </div>
           <div class="field">
             <label for="debtDueDay">Vencimento</label>
-            <input id="debtDueDay" name="dueDay" required type="number" min="1" max="31" />
+            <input id="debtDueDay" name="dueDay" required type="number" min="1" max="31" value="${item?.dueDay || ""}" />
           </div>
         </div>
         <div class="form-actions">
@@ -1935,49 +2045,51 @@
     `;
   }
 
-  function renderInvestmentModal() {
-    const activeCountry = state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry;
+  function renderInvestmentModal(item = null) {
+    const activeCountry = item?.country || (state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry);
+    const selectedCurrency = item?.currency || countryMeta[activeCountry].currency;
     return `
       <div class="modal-head">
-        <h2>Novo investimento</h2>
+        <h2>${item ? "Editar investimento" : "Novo investimento"}</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="investment">
+        ${editHidden(item)}
         <div class="two-cols">
           ${countrySelect(activeCountry)}
           <div class="field">
             <label for="investmentRisk">Risco</label>
             <select id="investmentRisk" name="risk">
-              <option value="Baixa">Baixa</option>
-              <option value="Media">Media</option>
-              <option value="Alta">Alta</option>
+              <option value="Baixa" ${selectedAttr("Baixa", item?.risk || "Baixa")}>Baixa</option>
+              <option value="Media" ${selectedAttr("Media", item?.risk)}>Media</option>
+              <option value="Alta" ${selectedAttr("Alta", item?.risk)}>Alta</option>
             </select>
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
             <label for="investmentProvider">Instituicao</label>
-            <input id="investmentProvider" name="provider" required />
+            <input id="investmentProvider" name="provider" required value="${escapeAttr(item?.provider || "")}" />
           </div>
           <div class="field">
             <label for="investmentTitle">Nome</label>
-            <input id="investmentTitle" name="title" required />
+            <input id="investmentTitle" name="title" required value="${escapeAttr(item?.title || "")}" />
           </div>
         </div>
         <div class="three-cols">
           <div class="field">
             <label for="currentAmount">Valor atual</label>
-            <input id="currentAmount" name="currentAmount" required type="number" min="0" step="0.01" />
+            <input id="currentAmount" name="currentAmount" required type="number" min="0" step="0.01" value="${item ? number(item.currentAmount) : ""}" />
           </div>
           <div class="field">
             <label for="monthlyContribution">Aporte mensal</label>
-            <input id="monthlyContribution" name="monthlyContribution" required type="number" min="0" step="0.01" />
+            <input id="monthlyContribution" name="monthlyContribution" required type="number" min="0" step="0.01" value="${item ? number(item.monthlyContribution) : ""}" />
           </div>
           <div class="field">
             <label for="investmentCurrency">Moeda</label>
             <select id="investmentCurrency" name="currency">
-              <option value="${countryMeta[activeCountry].currency}" selected>${countryMeta[activeCountry].currency}</option>
-              <option value="${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}">${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}</option>
+              <option value="${countryMeta[activeCountry].currency}" ${selectedAttr(countryMeta[activeCountry].currency, selectedCurrency)}>${countryMeta[activeCountry].currency}</option>
+              <option value="${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY", selectedCurrency)}>${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}</option>
             </select>
           </div>
         </div>
@@ -1989,78 +2101,75 @@
     `;
   }
 
-  function renderCreditCardModal() {
-    const activeCountry = state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry;
+  function renderCreditCardModal(item = null) {
+    const activeCountry = item?.country || (state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry);
     const currency = countryMeta[activeCountry].currency;
+    const selectedCurrency = item?.currency || currency;
     return `
       <div class="modal-head">
-        <h2>Novo cartao</h2>
+        <h2>${item ? "Editar cartao" : "Novo cartao"}</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="credit-card">
+        ${editHidden(item)}
         <div class="two-cols">
           ${countrySelect(activeCountry)}
           <div class="field">
             <label for="cardBrand">Bandeira</label>
             <select id="cardBrand" name="brand">
-              <option value="Visa">Visa</option>
-              <option value="Mastercard">Mastercard</option>
-              <option value="JCB">JCB</option>
-              <option value="Amex">Amex</option>
-              <option value="Elo">Elo</option>
-              <option value="Outro">Outro</option>
+              ${["Visa", "Mastercard", "JCB", "Amex", "Elo", "Outro"].map((brand) => `<option value="${brand}" ${selectedAttr(brand, item?.brand || "Visa")}>${brand}</option>`).join("")}
             </select>
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
             <label for="cardIssuer">Banco/emissor</label>
-            <input id="cardIssuer" name="issuer" required placeholder="Ex: Nubank" />
+            <input id="cardIssuer" name="issuer" required placeholder="Ex: Nubank" value="${escapeAttr(item?.issuer || "")}" />
           </div>
           <div class="field">
             <label for="cardNickname">Nome do cartao</label>
-            <input id="cardNickname" name="nickname" required placeholder="Ex: Roxinho" />
+            <input id="cardNickname" name="nickname" required placeholder="Ex: Roxinho" value="${escapeAttr(item?.nickname || "")}" />
           </div>
         </div>
         <div class="three-cols">
           <div class="field">
             <label for="cardLast4">Final</label>
-            <input id="cardLast4" name="last4" inputmode="numeric" maxlength="4" placeholder="1234" />
+            <input id="cardLast4" name="last4" inputmode="numeric" maxlength="4" placeholder="1234" value="${escapeAttr(item?.last4 || "")}" />
           </div>
           <div class="field">
             <label for="cardLimit">Limite</label>
-            <input id="cardLimit" name="limitAmount" type="number" min="0" step="0.01" value="0" />
+            <input id="cardLimit" name="limitAmount" type="number" min="0" step="0.01" value="${item ? number(item.limitAmount) : 0}" />
           </div>
           <div class="field">
             <label for="cardBill">Fatura atual</label>
-            <input id="cardBill" name="billAmount" type="number" min="0" step="0.01" value="0" />
+            <input id="cardBill" name="billAmount" type="number" min="0" step="0.01" value="${item ? number(item.billAmount) : 0}" />
           </div>
         </div>
         <div class="three-cols">
           <div class="field">
             <label for="cardCurrency">Moeda</label>
             <select id="cardCurrency" name="currency">
-              <option value="${currency}" selected>${currency}</option>
-              <option value="${currency === "JPY" ? "BRL" : "JPY"}">${currency === "JPY" ? "BRL" : "JPY"}</option>
+              <option value="${currency}" ${selectedAttr(currency, selectedCurrency)}>${currency}</option>
+              <option value="${currency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(currency === "JPY" ? "BRL" : "JPY", selectedCurrency)}>${currency === "JPY" ? "BRL" : "JPY"}</option>
             </select>
           </div>
           <div class="field">
             <label for="closingDay">Fechamento</label>
-            <input id="closingDay" name="closingDay" type="number" min="1" max="31" />
+            <input id="closingDay" name="closingDay" type="number" min="1" max="31" value="${item?.closingDay || ""}" />
           </div>
           <div class="field">
             <label for="cardDueDay">Vencimento</label>
-            <input id="cardDueDay" name="dueDay" type="number" min="1" max="31" />
+            <input id="cardDueDay" name="dueDay" type="number" min="1" max="31" value="${item?.dueDay || ""}" />
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
             <label for="cardBillMonth">Mes da fatura manual</label>
-            <input id="cardBillMonth" name="billMonth" type="month" value="${state.ui.selectedMonth}" />
+            <input id="cardBillMonth" name="billMonth" type="month" value="${escapeAttr(item?.billMonth || state.ui.selectedMonth)}" />
           </div>
           <div class="field">
             <label for="cardPaymentMethod">Como paga</label>
-            <input id="cardPaymentMethod" name="paymentMethod" placeholder="Debito, Wise, conta..." />
+            <input id="cardPaymentMethod" name="paymentMethod" placeholder="Debito, Wise, conta..." value="${escapeAttr(item?.paymentMethod || "")}" />
           </div>
         </div>
         <div class="form-actions">
@@ -2071,9 +2180,10 @@
     `;
   }
 
-  function renderCardPurchaseModal() {
+  function renderCardPurchaseModal(item = null) {
     const cards = state.creditCards || [];
-    const fallbackCurrency = state.ui.activeCountry === "brasil" ? "BRL" : "JPY";
+    const selectedCard = item ? creditCardById(item.cardId) : null;
+    const fallbackCurrency = item?.currency || selectedCard?.currency || (state.ui.activeCountry === "brasil" ? "BRL" : "JPY");
     if (!cards.length) {
       return `
         <div class="modal-head">
@@ -2088,57 +2198,58 @@
     }
     return `
       <div class="modal-head">
-        <h2>Nova compra no cartao</h2>
+        <h2>${item ? "Editar compra no cartao" : "Nova compra no cartao"}</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="card-purchase">
+        ${editHidden(item)}
         <div class="two-cols">
           <div class="field">
             <label for="purchaseCardId">Cartao</label>
             <select id="purchaseCardId" name="cardId">
-              ${cards.map((card) => `<option value="${card.id}">${escapeHtml(card.nickname || card.issuer)} - ${countryMeta[card.country]?.short || "JP"}</option>`).join("")}
+              ${cards.map((card) => `<option value="${card.id}" ${selectedAttr(card.id, item?.cardId || cards[0]?.id)}>${escapeHtml(card.nickname || card.issuer)} - ${countryMeta[card.country]?.short || "JP"}</option>`).join("")}
             </select>
           </div>
           <div class="field">
             <label for="purchaseCategory">Categoria</label>
-            <input id="purchaseCategory" name="category" required placeholder="Ex: Mercado, iPhone" />
+            <input id="purchaseCategory" name="category" required placeholder="Ex: Mercado, iPhone" value="${escapeAttr(item?.category || "")}" />
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
             <label for="purchaseTitle">Compra</label>
-            <input id="purchaseTitle" name="title" required placeholder="Ex: Apple, Amazon, Mercado" />
+            <input id="purchaseTitle" name="title" required placeholder="Ex: Apple, Amazon, Mercado" value="${escapeAttr(item?.title || "")}" />
           </div>
           <div class="field">
             <label for="purchaseDate">Data da compra</label>
-            <input id="purchaseDate" name="purchaseDate" type="date" required value="${dateInMonth(state.ui.selectedMonth, new Date().getDate())}" />
+            <input id="purchaseDate" name="purchaseDate" type="date" required value="${escapeAttr(item?.purchaseDate || dateInMonth(state.ui.selectedMonth, new Date().getDate()))}" />
           </div>
         </div>
         <div class="three-cols">
           <div class="field">
             <label for="purchaseAmount">Valor total</label>
-            <input id="purchaseAmount" name="totalAmount" required type="number" min="0" step="0.01" />
+            <input id="purchaseAmount" name="totalAmount" required type="number" min="0" step="0.01" value="${item ? number(item.totalAmount) : ""}" />
           </div>
           <div class="field">
             <label for="purchaseCurrency">Moeda</label>
             <select id="purchaseCurrency" name="currency">
-              <option value="${fallbackCurrency}" selected>${fallbackCurrency}</option>
-              <option value="${fallbackCurrency === "JPY" ? "BRL" : "JPY"}">${fallbackCurrency === "JPY" ? "BRL" : "JPY"}</option>
+              <option value="${fallbackCurrency}" ${selectedAttr(fallbackCurrency, item?.currency || fallbackCurrency)}>${fallbackCurrency}</option>
+              <option value="${fallbackCurrency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(fallbackCurrency === "JPY" ? "BRL" : "JPY", item?.currency)}>${fallbackCurrency === "JPY" ? "BRL" : "JPY"}</option>
             </select>
           </div>
           <div class="field">
             <label for="installments">Parcelas</label>
-            <input id="installments" name="installments" type="number" min="1" max="60" value="1" />
+            <input id="installments" name="installments" type="number" min="1" max="60" value="${item?.installments || 1}" />
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
             <label for="firstBillMonth">Primeira fatura</label>
-            <input id="firstBillMonth" name="firstBillMonth" type="month" required value="${state.ui.selectedMonth}" />
+            <input id="firstBillMonth" name="firstBillMonth" type="month" required value="${escapeAttr(item?.firstBillMonth || state.ui.selectedMonth)}" />
           </div>
           <div class="field">
             <label for="purchaseNote">Observacao</label>
-            <input id="purchaseNote" name="note" placeholder="Opcional" />
+            <input id="purchaseNote" name="note" placeholder="Opcional" value="${escapeAttr(item?.note || "")}" />
           </div>
         </div>
         <div class="form-actions">
@@ -2149,45 +2260,47 @@
     `;
   }
 
-  function renderCryptoModal() {
+  function renderCryptoModal(item = null) {
+    const symbol = String(item?.symbol || "BTC").toUpperCase();
     return `
       <div class="modal-head">
-        <h2>Nova cripto</h2>
+        <h2>${item ? "Editar cripto" : "Nova cripto"}</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="crypto">
+        ${editHidden(item)}
         <div class="two-cols">
           <div class="field">
             <label for="cryptoSymbol">Cripto</label>
             <select id="cryptoSymbol" name="symbol">
-              ${Object.entries(cryptoCatalog).map(([symbol, meta]) => `<option value="${symbol}">${symbol} - ${meta.name}</option>`).join("")}
+              ${Object.entries(cryptoCatalog).map(([key, meta]) => `<option value="${key}" ${selectedAttr(key, symbol)}>${key} - ${meta.name}</option>`).join("")}
             </select>
           </div>
           <div class="field">
             <label for="cryptoQuantity">Quantidade</label>
-            <input id="cryptoQuantity" name="quantity" required type="number" min="0" step="0.00000001" placeholder="0.01" />
+            <input id="cryptoQuantity" name="quantity" required type="number" min="0" step="0.00000001" placeholder="0.01" value="${item ? number(item.quantity) : ""}" />
           </div>
         </div>
         <div class="three-cols">
           <div class="field">
             <label for="cryptoCost">Valor comprado</label>
-            <input id="cryptoCost" name="costAmount" required type="number" min="0" step="0.01" />
+            <input id="cryptoCost" name="costAmount" required type="number" min="0" step="0.01" value="${item ? number(item.costAmount) : ""}" />
           </div>
           <div class="field">
             <label for="cryptoCurrency">Moeda da compra</label>
             <select id="cryptoCurrency" name="costCurrency">
-              <option value="JPY" selected>JPY</option>
-              <option value="BRL">BRL</option>
+              <option value="JPY" ${selectedAttr("JPY", item?.costCurrency || "JPY")}>JPY</option>
+              <option value="BRL" ${selectedAttr("BRL", item?.costCurrency)}>BRL</option>
             </select>
           </div>
           <div class="field">
             <label for="cryptoDate">Data</label>
-            <input id="cryptoDate" name="purchaseDate" type="date" value="${dateInMonth(state.ui.selectedMonth, new Date().getDate())}" />
+            <input id="cryptoDate" name="purchaseDate" type="date" value="${escapeAttr(item?.purchaseDate || dateInMonth(state.ui.selectedMonth, new Date().getDate()))}" />
           </div>
         </div>
         <div class="field">
           <label for="cryptoNote">Observacao</label>
-          <textarea id="cryptoNote" name="note" placeholder="Ex: compra na Binance"></textarea>
+          <textarea id="cryptoNote" name="note" placeholder="Ex: compra na Binance">${escapeHtml(item?.note || "")}</textarea>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -2251,48 +2364,43 @@
     `;
   }
 
-  function renderVehicleMaintenanceModal() {
+  function renderVehicleMaintenanceModal(item = null) {
     return `
       <div class="modal-head">
-        <h2>Nova manutencao</h2>
+        <h2>${item ? "Editar manutencao" : "Nova manutencao"}</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="vehicle-maintenance">
+        ${editHidden(item)}
         <div class="three-cols">
           <div class="field">
             <label for="maintenanceKind">Tipo</label>
             <select id="maintenanceKind" name="kind">
-              <option value="Troca de oleo">Troca de oleo</option>
-              <option value="Filtro">Filtro</option>
-              <option value="Pneus">Pneus</option>
-              <option value="Freio">Freio</option>
-              <option value="Bateria">Bateria</option>
-              <option value="Manutencao geral">Manutencao geral</option>
-              <option value="Outro">Outro</option>
+              ${["Troca de oleo", "Filtro", "Pneus", "Freio", "Bateria", "Manutencao geral", "Outro"].map((kind) => `<option value="${kind}" ${selectedAttr(kind, item?.kind || "Troca de oleo")}>${kind}</option>`).join("")}
             </select>
           </div>
           <div class="field">
             <label for="maintenanceAmount">Valor pago</label>
-            <input id="maintenanceAmount" name="amount" type="number" min="0" step="1" required />
+            <input id="maintenanceAmount" name="amount" type="number" min="0" step="1" required value="${item ? number(item.amount) : ""}" />
           </div>
           <div class="field">
             <label for="maintenanceDate">Data</label>
-            <input id="maintenanceDate" name="date" type="date" required value="${dateInMonth(state.ui.selectedMonth, new Date().getDate())}" />
+            <input id="maintenanceDate" name="date" type="date" required value="${escapeAttr(item?.date || dateInMonth(state.ui.selectedMonth, new Date().getDate()))}" />
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
             <label for="maintenancePayment">Como pagou</label>
-            <input id="maintenancePayment" name="paymentMethod" placeholder="Dinheiro, cartao, PayPay..." />
+            <input id="maintenancePayment" name="paymentMethod" placeholder="Dinheiro, cartao, PayPay..." value="${escapeAttr(item?.paymentMethod || "")}" />
           </div>
           <div class="field">
             <label for="maintenanceLocation">Local</label>
-            <input id="maintenanceLocation" name="location" placeholder="Ex: Autobacs" />
+            <input id="maintenanceLocation" name="location" placeholder="Ex: Autobacs" value="${escapeAttr(item?.location || "")}" />
           </div>
         </div>
         <div class="field">
           <label for="maintenanceNote">Observacao</label>
-          <textarea id="maintenanceNote" name="note"></textarea>
+          <textarea id="maintenanceNote" name="note">${escapeHtml(item?.note || "")}</textarea>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -2302,33 +2410,34 @@
     `;
   }
 
-  function renderIncomeSourceModal() {
-    const nextColor = sourceColors[(state.incomeSources || []).length % sourceColors.length];
+  function renderIncomeSourceModal(item = null) {
+    const nextColor = item?.color || sourceColors[(state.incomeSources || []).length % sourceColors.length];
     return `
       <div class="modal-head">
-        <h2>Nova empresa</h2>
+        <h2>${item ? "Editar empresa" : "Nova empresa"}</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="income-source">
+        ${editHidden(item)}
         <div class="two-cols">
           <div class="field">
             <label for="sourceName">Nome</label>
-            <input id="sourceName" name="name" required placeholder="Ex: Empresa, Amazon Flex" />
+            <input id="sourceName" name="name" required placeholder="Ex: Empresa, Amazon Flex" value="${escapeAttr(item?.name || "")}" />
           </div>
           <div class="field">
             <label for="sourceType">Tipo</label>
             <select id="sourceType" name="type">
-              <option value="salary">Salario Empresa</option>
-              <option value="amazon">Amazon Flex</option>
-              <option value="uber">Uber Eats</option>
-              <option value="extra">Renda extra</option>
+              <option value="salary" ${selectedAttr("salary", item?.type || "salary")}>Salario Empresa</option>
+              <option value="amazon" ${selectedAttr("amazon", item?.type)}>Amazon Flex</option>
+              <option value="uber" ${selectedAttr("uber", item?.type)}>Uber Eats</option>
+              <option value="extra" ${selectedAttr("extra", item?.type)}>Renda extra</option>
             </select>
           </div>
         </div>
         <div class="three-cols">
           <div class="field">
             <label for="sourceHourlyRate">Valor hora</label>
-            <input id="sourceHourlyRate" name="hourlyRate" type="number" min="0" step="1" value="0" />
+            <input id="sourceHourlyRate" name="hourlyRate" type="number" min="0" step="1" value="${item ? number(item.hourlyRate) : 0}" />
           </div>
           <div class="field">
             <label for="sourceColor">Cor</label>
@@ -2337,14 +2446,14 @@
           <div class="field">
             <label for="sourceCurrency">Moeda</label>
             <select id="sourceCurrency" name="currency">
-              <option value="JPY" selected>JPY</option>
-              <option value="BRL">BRL</option>
+              <option value="JPY" ${selectedAttr("JPY", item?.currency || "JPY")}>JPY</option>
+              <option value="BRL" ${selectedAttr("BRL", item?.currency)}>BRL</option>
             </select>
           </div>
         </div>
         <div class="field">
           <label for="sourcePayRule">Regra de pagamento</label>
-          <textarea id="sourcePayRule" name="payRule" placeholder="Ex: Amazon Flex quarta a terca, paga na quarta"></textarea>
+          <textarea id="sourcePayRule" name="payRule" placeholder="Ex: Amazon Flex quarta a terca, paga na quarta">${escapeHtml(item?.payRule || "")}</textarea>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -2354,7 +2463,7 @@
     `;
   }
 
-  function renderWorkIncomeModal() {
+  function renderWorkIncomeModal(item = null) {
     const sources = state.incomeSources || [];
     if (!sources.length) {
       return `
@@ -2373,63 +2482,64 @@
     }
     return `
       <div class="modal-head">
-        <h2>Novo recebimento</h2>
+        <h2>${item ? "Editar recebimento" : "Novo recebimento"}</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="work-income">
+        ${editHidden(item)}
         <div class="three-cols">
           <div class="field">
             <label for="incomeSourceId">Fonte</label>
             <select id="incomeSourceId" name="sourceId">
-              ${sources.map((source) => `<option value="${source.id}">${escapeHtml(source.name)}</option>`).join("")}
+              ${sources.map((source) => `<option value="${source.id}" ${selectedAttr(source.id, item?.sourceId || sources[0]?.id)}>${escapeHtml(source.name)}</option>`).join("")}
             </select>
           </div>
           <div class="field">
             <label for="incomeAmount">Valor recebido</label>
-            <input id="incomeAmount" name="amount" type="number" min="0" step="1" required />
+            <input id="incomeAmount" name="amount" type="number" min="0" step="1" required value="${item ? number(item.amount) : ""}" />
           </div>
           <div class="field">
             <label for="incomeDate">Data de pagamento</label>
-            <input id="incomeDate" name="date" type="date" required value="${dateInMonth(state.ui.selectedMonth, new Date().getDate())}" />
+            <input id="incomeDate" name="date" type="date" required value="${escapeAttr(item?.date || dateInMonth(state.ui.selectedMonth, new Date().getDate()))}" />
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
             <label for="incomePeriodStart">Inicio do periodo</label>
-            <input id="incomePeriodStart" name="periodStart" type="date" />
+            <input id="incomePeriodStart" name="periodStart" type="date" value="${escapeAttr(item?.periodStart || "")}" />
           </div>
           <div class="field">
             <label for="incomePeriodEnd">Fim do periodo</label>
-            <input id="incomePeriodEnd" name="periodEnd" type="date" />
+            <input id="incomePeriodEnd" name="periodEnd" type="date" value="${escapeAttr(item?.periodEnd || "")}" />
           </div>
         </div>
         <div class="three-cols">
           <div class="field">
             <label for="workDays">Dias trabalhados</label>
-            <input id="workDays" name="workDays" type="number" min="0" step="1" value="0" />
+            <input id="workDays" name="workDays" type="number" min="0" step="1" value="${item ? number(item.workDays) : 0}" />
           </div>
           <div class="field">
             <label for="hirukinDays">Hirukin</label>
-            <input id="hirukinDays" name="hirukinDays" type="number" min="0" step="1" value="0" />
+            <input id="hirukinDays" name="hirukinDays" type="number" min="0" step="1" value="${item ? number(item.hirukinDays) : 0}" />
           </div>
           <div class="field">
             <label for="yakinDays">Yakin</label>
-            <input id="yakinDays" name="yakinDays" type="number" min="0" step="1" value="0" />
+            <input id="yakinDays" name="yakinDays" type="number" min="0" step="1" value="${item ? number(item.yakinDays) : 0}" />
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
             <label for="weekendDays">Finais de semana</label>
-            <input id="weekendDays" name="weekendDays" type="number" min="0" step="1" value="0" />
+            <input id="weekendDays" name="weekendDays" type="number" min="0" step="1" value="${item ? number(item.weekendDays) : 0}" />
           </div>
           <div class="field">
             <label for="incomeHourlyRate">Valor hora usado</label>
-            <input id="incomeHourlyRate" name="hourlyRate" type="number" min="0" step="1" value="0" />
+            <input id="incomeHourlyRate" name="hourlyRate" type="number" min="0" step="1" value="${item ? number(item.hourlyRate) : 0}" />
           </div>
         </div>
         <div class="field">
           <label for="incomeNote">Observacao</label>
-          <textarea id="incomeNote" name="note" placeholder="Ex: semana Amazon Flex quarta a terca"></textarea>
+          <textarea id="incomeNote" name="note" placeholder="Ex: semana Amazon Flex quarta a terca">${escapeHtml(item?.note || "")}</textarea>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -2453,8 +2563,7 @@
 
   function saveTransaction(form) {
     const data = formData(form);
-    state.transactions.unshift({
-      id: uid("tx"),
+    const updated = upsertItem("transactions", data.id, {
       date: data.date,
       country: data.country,
       type: data.type,
@@ -2463,12 +2572,12 @@
       amount: number(data.amount),
       currency: data.currency,
       note: data.note.trim()
-    });
+    }, true);
     state.ui.selectedMonth = data.date.slice(0, 7);
     saveState();
     closeModal();
     render();
-    showToast("Lancamento salvo.");
+    showToast(updated ? "Lancamento atualizado." : "Lancamento salvo.");
   }
 
   function saveTransfer(form) {
@@ -2478,8 +2587,7 @@
     const rate = number(data.rate);
     const receivedAmount = number(data.receivedAmount || ((sentAmount - feeAmount) * rate));
 
-    state.transfers.unshift({
-      id: uid("tr"),
+    const updated = upsertItem("transfers", data.id, {
       date: data.date,
       method: "Wise",
       fromCountry: "japao",
@@ -2492,19 +2600,19 @@
       receivedAmount,
       receivedCurrency: "BRL",
       note: data.note.trim()
-    });
+    }, true);
     state.settings.defaultRate = rate || state.settings.defaultRate;
     state.ui.selectedMonth = data.date.slice(0, 7);
     saveState();
     closeModal();
     render();
-    showToast("Transferencia Wise salva.");
+    showToast(updated ? "Transferencia Wise atualizada." : "Transferencia Wise salva.");
   }
 
   function saveCommitment(form) {
     const data = formData(form);
-    state.commitments.push({
-      id: uid("co"),
+    const current = findItem("commitments", data.id);
+    const updated = upsertItem("commitments", data.id, {
       country: data.country,
       provider: data.provider.trim(),
       title: data.title.trim(),
@@ -2517,18 +2625,17 @@
       startMonth: data.startMonth || "",
       endMonth: data.endMonth || "",
       alertDays: clamp(Math.round(number(data.alertDays)), 0, 60),
-      active: true
+      active: current?.active !== false
     });
     saveState();
     closeModal();
     render();
-    showToast("Conta fixa salva.");
+    showToast(updated ? "Conta fixa atualizada." : "Conta fixa salva.");
   }
 
   function saveDebt(form) {
     const data = formData(form);
-    state.debts.push({
-      id: uid("de"),
+    const updated = upsertItem("debts", data.id, {
       country: data.country,
       provider: data.provider.trim(),
       title: data.title.trim(),
@@ -2542,13 +2649,12 @@
     saveState();
     closeModal();
     render();
-    showToast("Contrato salvo.");
+    showToast(updated ? "Contrato atualizado." : "Contrato salvo.");
   }
 
   function saveInvestment(form) {
     const data = formData(form);
-    state.investments.push({
-      id: uid("iv"),
+    const updated = upsertItem("investments", data.id, {
       country: data.country,
       provider: data.provider.trim(),
       title: data.title.trim(),
@@ -2560,13 +2666,12 @@
     saveState();
     closeModal();
     render();
-    showToast("Investimento salvo.");
+    showToast(updated ? "Investimento atualizado." : "Investimento salvo.");
   }
 
   function saveCreditCard(form) {
     const data = formData(form);
-    state.creditCards.push({
-      id: uid("cc"),
+    const updated = upsertItem("creditCards", data.id, {
       country: data.country,
       issuer: data.issuer.trim(),
       nickname: data.nickname.trim(),
@@ -2583,7 +2688,7 @@
     saveState();
     closeModal();
     render();
-    showToast("Cartao salvo.");
+    showToast(updated ? "Cartao atualizado." : "Cartao salvo.");
   }
 
   function saveCardPurchase(form) {
@@ -2593,8 +2698,7 @@
       showToast("Cartao nao encontrado.");
       return;
     }
-    state.cardPurchases.unshift({
-      id: uid("cp"),
+    const updated = upsertItem("cardPurchases", data.id, {
       cardId: data.cardId,
       country: card.country,
       title: data.title.trim(),
@@ -2605,19 +2709,18 @@
       firstBillMonth: data.firstBillMonth || state.ui.selectedMonth,
       purchaseDate: data.purchaseDate,
       note: data.note.trim()
-    });
+    }, true);
     state.ui.selectedMonth = data.firstBillMonth || state.ui.selectedMonth;
     saveState();
     closeModal();
     render();
-    showToast("Compra salva no cartao.");
+    showToast(updated ? "Compra atualizada." : "Compra salva no cartao.");
   }
 
   function saveCryptoAsset(form) {
     const data = formData(form);
     const symbol = String(data.symbol || "BTC").toUpperCase();
-    state.cryptoAssets.push({
-      id: uid("cr"),
+    const updated = upsertItem("cryptoAssets", data.id, {
       symbol,
       quantity: number(data.quantity),
       costAmount: number(data.costAmount),
@@ -2629,7 +2732,7 @@
     closeModal();
     render();
     refreshCryptoQuotes(true);
-    showToast("Cripto salva.");
+    showToast(updated ? "Cripto atualizada." : "Cripto salva.");
   }
 
   function saveVehicle(form) {
@@ -2653,8 +2756,7 @@
 
   function saveVehicleMaintenance(form) {
     const data = formData(form);
-    state.vehicleMaintenance.unshift({
-      id: uid("vm"),
+    const updated = upsertItem("vehicleMaintenance", data.id, {
       country: "japao",
       kind: data.kind,
       amount: number(data.amount),
@@ -2663,18 +2765,17 @@
       paymentMethod: data.paymentMethod.trim(),
       location: data.location.trim(),
       note: data.note.trim()
-    });
+    }, true);
     state.ui.selectedMonth = data.date.slice(0, 7);
     saveState();
     closeModal();
     render();
-    showToast("Manutencao salva.");
+    showToast(updated ? "Manutencao atualizada." : "Manutencao salva.");
   }
 
   function saveIncomeSource(form) {
     const data = formData(form);
-    state.incomeSources.push({
-      id: uid("is"),
+    const updated = upsertItem("incomeSources", data.id, {
       name: data.name.trim(),
       type: data.type,
       hourlyRate: number(data.hourlyRate),
@@ -2685,14 +2786,13 @@
     saveState();
     closeModal();
     render();
-    showToast("Empresa salva.");
+    showToast(updated ? "Empresa atualizada." : "Empresa salva.");
   }
 
   function saveWorkIncome(form) {
     const data = formData(form);
     const source = incomeSourceById(data.sourceId);
-    state.workIncomes.unshift({
-      id: uid("wi"),
+    const updated = upsertItem("workIncomes", data.id, {
       sourceId: data.sourceId,
       sourceName: source.name,
       sourceType: source.type,
@@ -2707,12 +2807,12 @@
       weekendDays: number(data.weekendDays),
       hourlyRate: number(data.hourlyRate) || number(source.hourlyRate),
       note: data.note.trim()
-    });
+    }, true);
     state.ui.selectedMonth = data.date.slice(0, 7);
     saveState();
     closeModal();
     render();
-    showToast("Recebimento salvo.");
+    showToast(updated ? "Recebimento atualizado." : "Recebimento salvo.");
   }
 
   function saveSettings(form) {
@@ -3291,44 +3391,83 @@
     let bridgeIn = 0;
     let wiseOut = 0;
     let fees = 0;
+    let actualIncome = 0;
+    let actualExpenses = 0;
+    let actualInvestments = 0;
+    let actualBridgeIn = 0;
+    let actualWiseOut = 0;
+    let actualFees = 0;
+    let plannedExpenses = 0;
+    let plannedInvestments = 0;
 
     txs.forEach((item) => {
       const converted = convert(item.amount, item.currency, targetCurrency, rate);
-      if (item.type === "income") income += converted;
-      if (outflowTypes.includes(item.type)) expenses += converted;
-      if (item.type === "investment") investments += converted;
+      if (item.type === "income") {
+        income += converted;
+        actualIncome += converted;
+      }
+      if (outflowTypes.includes(item.type)) {
+        expenses += converted;
+        actualExpenses += converted;
+      }
+      if (item.type === "investment") {
+        investments += converted;
+        actualInvestments += converted;
+      }
     });
 
     plannedCommitmentEntries(month, country).forEach((item) => {
       const converted = convert(item.amount, item.currency, targetCurrency, rate);
-      if (item.type === "investment") investments += converted;
-      else expenses += converted;
+      if (item.type === "investment") {
+        investments += converted;
+        plannedInvestments += converted;
+      } else {
+        expenses += converted;
+        plannedExpenses += converted;
+      }
     });
 
     plannedCardBillEntries(month, country).forEach((item) => {
-      expenses += convert(item.amount, item.currency, targetCurrency, rate);
+      const converted = convert(item.amount, item.currency, targetCurrency, rate);
+      expenses += converted;
+      plannedExpenses += converted;
     });
 
     if (country === "global" || country === "japao") {
       vehicleMonthlyCosts(month).forEach((item) => {
-        expenses += convert(item.amount, item.currency, targetCurrency, rate);
+        const converted = convert(item.amount, item.currency, targetCurrency, rate);
+        expenses += converted;
+        if (item.id === "vehicle-insurance" || item.id === "vehicle-shaken") plannedExpenses += converted;
+        else actualExpenses += converted;
       });
       monthWorkIncomes(month).forEach((item) => {
-        income += convert(item.amount, item.currency || "JPY", targetCurrency, rate);
+        const converted = convert(item.amount, item.currency || "JPY", targetCurrency, rate);
+        income += converted;
+        actualIncome += converted;
       });
     }
 
     if (country === "brasil") {
       bridgeIn = convert(sum(transfers, "receivedAmount"), "BRL", targetCurrency, rate);
+      actualBridgeIn = bridgeIn;
     } else if (country === "japao") {
       wiseOut = convert(sum(transfers, "sentAmount"), "JPY", targetCurrency, rate);
+      actualWiseOut = wiseOut;
     } else {
       fees = convert(sum(transfers, "feeAmount"), "JPY", targetCurrency, rate);
+      actualFees = fees;
     }
 
     const planned = expenses + investments + wiseOut + fees;
     const remaining = income + bridgeIn - planned;
     const coverage = planned ? clamp(Math.round(((income + bridgeIn) / planned) * 100), 0, 999) : 100;
+    const actualOutflow = actualExpenses + actualInvestments + actualWiseOut + actualFees;
+    const plannedOutflow = plannedExpenses + plannedInvestments;
+    const actualInflow = actualIncome + actualBridgeIn;
+    const projectedInflow = income + bridgeIn;
+    const projectedOutflow = planned;
+    const actualBalance = actualInflow - actualOutflow;
+    const plannedBalance = 0 - plannedOutflow;
 
     return {
       currency: targetCurrency,
@@ -3340,6 +3479,21 @@
       fees,
       remaining,
       coverage,
+      actualIncome,
+      actualExpenses,
+      actualInvestments,
+      actualBridgeIn,
+      actualWiseOut,
+      actualFees,
+      actualInflow,
+      actualOutflow,
+      actualBalance,
+      plannedExpenses,
+      plannedInvestments,
+      plannedOutflow,
+      plannedBalance,
+      projectedInflow,
+      projectedOutflow,
       wiseDisplay: country === "brasil" ? bridgeIn : wiseOut || fees,
       wiseLabel: country === "brasil" ? "Recebido no Brasil" : country === "japao" ? "Enviado ao Brasil" : "Taxas no global"
     };
@@ -3688,6 +3842,7 @@
           id: item.id,
           generated: true,
           deleteAction: "delete-vehicle-maintenance",
+          editModal: "vehicleMaintenance",
           country: "japao",
           type: "vehicle",
           title: item.kind,
@@ -3713,6 +3868,7 @@
           id: item.id,
           generated: true,
           deleteAction: "delete-work-income",
+          editModal: "workIncome",
           country: "japao",
           type: "income",
           title: source.name,
@@ -3931,6 +4087,16 @@
     return `${month}-${String(safeDay).padStart(2, "0")}`;
   }
 
+  function remainingDaysInMonth(month) {
+    const [year, monthIndex] = month.split("-").map(Number);
+    const last = new Date(year, monthIndex, 0).getDate();
+    const today = new Date();
+    const current = currentMonth();
+    if (month < current) return 0;
+    if (month > current) return last;
+    return Math.max(1, last - today.getDate() + 1);
+  }
+
   function parseLocalDate(date) {
     const [year, month, day] = String(date || currentMonth()).split("-").map(Number);
     return new Date(year, (month || 1) - 1, day || 1);
@@ -3942,6 +4108,55 @@
 
   function formData(form) {
     return Object.fromEntries(new FormData(form).entries());
+  }
+
+  function editableItem(type, id) {
+    if (!id) return null;
+    const map = {
+      transaction: "transactions",
+      transfer: "transfers",
+      commitment: "commitments",
+      debt: "debts",
+      investment: "investments",
+      creditCard: "creditCards",
+      cardPurchase: "cardPurchases",
+      crypto: "cryptoAssets",
+      vehicleMaintenance: "vehicleMaintenance",
+      incomeSource: "incomeSources",
+      workIncome: "workIncomes"
+    };
+    return findItem(map[type], id);
+  }
+
+  function editHidden(item) {
+    return item?.id ? `<input type="hidden" name="id" value="${escapeAttr(item.id)}" />` : "";
+  }
+
+  function selectedAttr(value, selected) {
+    return String(value || "") === String(selected || "") ? "selected" : "";
+  }
+
+  function findItem(collection, id) {
+    if (!collection || !id || !Array.isArray(state[collection])) return null;
+    return state[collection].find((item) => item.id === id) || null;
+  }
+
+  function upsertItem(collection, id, item, prepend = false) {
+    const current = Array.isArray(state[collection]) ? state[collection] : [];
+    const index = id ? current.findIndex((entry) => entry.id === id) : -1;
+    if (index >= 0) {
+      state[collection] = current.map((entry, entryIndex) => (
+        entryIndex === index ? { ...entry, ...item, id: entry.id } : entry
+      ));
+      return true;
+    }
+
+    const next = {
+      id: id || uid(collectionPrefixes[collection] || "it"),
+      ...item
+    };
+    state[collection] = prepend ? [next, ...current] : [...current, next];
+    return false;
   }
 
   function uid(prefix) {
