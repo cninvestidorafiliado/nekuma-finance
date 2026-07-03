@@ -856,8 +856,6 @@
         </div>
       </section>
 
-      ${renderPlanVsActual(summary)}
-
       <section class="content-panel">
         <div class="panel-head">
           <h2>Calendario financeiro</h2>
@@ -936,48 +934,6 @@
           </div>
           ${renderBridgePanel()}
         </article>
-      </section>
-    `;
-  }
-
-  function renderPlanVsActual(summary) {
-    const totalOutflow = summary.actualOutflow + summary.plannedOutflow;
-    const realizedPct = totalOutflow ? clamp(Math.round((summary.actualOutflow / totalOutflow) * 100), 0, 100) : 0;
-    const plannedPct = totalOutflow ? clamp(100 - realizedPct, 0, 100) : 0;
-    const days = remainingDaysInMonth(state.ui.selectedMonth);
-    const daily = days ? summary.remaining / days : summary.remaining;
-
-    return `
-      <section class="content-panel plan-panel">
-        <div class="panel-head">
-          <h2>Planejado x realizado</h2>
-          <span class="chip ${summary.remaining >= 0 ? "green" : "red"}">${summary.remaining >= 0 ? "Dentro do plano" : "Ajustar mes"}</span>
-        </div>
-        <div class="plan-grid">
-          <div class="plan-card realized">
-            <p class="mini-label">Realizado</p>
-            <strong>${formatMoney(summary.actualOutflow, summary.currency)}</strong>
-            <span>Entrou ${formatMoney(summary.actualInflow, summary.currency)}</span>
-          </div>
-          <div class="plan-card planned">
-            <p class="mini-label">Ainda previsto</p>
-            <strong>${formatMoney(summary.plannedOutflow, summary.currency)}</strong>
-            <span>Contas e faturas abertas</span>
-          </div>
-          <div class="plan-card balance ${summary.remaining >= 0 ? "good" : "warn"}">
-            <p class="mini-label">Saldo projetado</p>
-            <strong>${formatMoney(summary.remaining, summary.currency)}</strong>
-            <span>${days ? `${formatMoney(daily, summary.currency)} por dia` : "Mes fechado"}</span>
-          </div>
-        </div>
-        <div class="plan-track" aria-label="Proporcao entre realizado e previsto">
-          <span class="realized" style="width:${realizedPct}%"></span>
-          <span class="planned" style="width:${plannedPct}%"></span>
-        </div>
-        <div class="plan-legend">
-          <span><i class="legend-dot realized"></i>${realizedPct}% realizado</span>
-          <span><i class="legend-dot planned"></i>${plannedPct}% previsto</span>
-        </div>
       </section>
     `;
   }
@@ -1175,8 +1131,6 @@
           </div>
         </div>
       </section>
-
-      ${renderPlanVsActual(summary)}
 
       <section class="content-panel">
         <div class="panel-head">
