@@ -29,6 +29,7 @@
     investments: "iv",
     creditCards: "cc",
     cardPurchases: "cp",
+    subscriptions: "su",
     cryptoAssets: "cr",
     vehicleMaintenance: "vm",
     incomeSources: "is",
@@ -51,6 +52,30 @@
     investimento: "Investimento",
     other: "Outros"
   };
+  const subscriptionCatalog = {
+    spotify: { name: "Spotify", icon: "SP", color: "#1DB954" },
+    youtube: { name: "YouTube", icon: "YT", color: "#FF0033" },
+    netflix: { name: "Netflix", icon: "N", color: "#E50914" },
+    prime: { name: "Amazon Prime", icon: "A", color: "#00A8E1" },
+    disney: { name: "Disney+", icon: "D+", color: "#2B58C8" },
+    apple: { name: "Apple", icon: "AP", color: "#111111" },
+    icloud: { name: "iCloud", icon: "IC", color: "#5AC8FA" },
+    google: { name: "Google One", icon: "G", color: "#4285F4" },
+    chatgpt: { name: "ChatGPT", icon: "AI", color: "#10A37F" },
+    canva: { name: "Canva", icon: "CV", color: "#7D2AE8" },
+    microsoft: { name: "Microsoft 365", icon: "MS", color: "#F25022" },
+    adobe: { name: "Adobe", icon: "AD", color: "#FA0F00" },
+    discord: { name: "Discord", icon: "DC", color: "#5865F2" },
+    telegram: { name: "Telegram", icon: "TG", color: "#2AABEE" },
+    crunchyroll: { name: "Crunchyroll", icon: "CR", color: "#F47521" },
+    dazn: { name: "DAZN", icon: "DZ", color: "#101820" },
+    nintendo: { name: "Nintendo", icon: "NS", color: "#E60012" },
+    playstation: { name: "PlayStation", icon: "PS", color: "#003791" },
+    xbox: { name: "Xbox Game Pass", icon: "XB", color: "#107C10" },
+    hulu: { name: "Hulu", icon: "HU", color: "#1CE783" },
+    unext: { name: "U-NEXT", icon: "UN", color: "#171717" },
+    other: { name: "Outro", icon: "+", color: "#48426D" }
+  };
   const cryptoCatalog = {
     BTC: { id: "bitcoin", name: "Bitcoin", color: "#f7931a" },
     ETH: { id: "ethereum", name: "Ethereum", color: "#627eea" },
@@ -68,6 +93,7 @@
 
   const app = document.getElementById("app");
   const appGreeting = document.getElementById("app-greeting");
+  const countryContext = document.getElementById("country-context");
   const modalRoot = document.getElementById("modal-root");
   const toast = document.getElementById("toast");
   let toastTimer = null;
@@ -91,7 +117,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=19")
+      navigator.serviceWorker.register("./service-worker.js?v=23")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -127,6 +153,14 @@
       render();
     }
 
+    if (action === "card-carousel-prev" || action === "card-carousel-next") {
+      moveCardCarousel(action === "card-carousel-next" ? 1 : -1, Number(button.dataset.total || 0));
+    }
+
+    if (action === "card-carousel-select") {
+      selectCardCarousel(Number(button.dataset.index || 0), Number(button.dataset.total || 0));
+    }
+
     if (action === "open-modal") openModal(button.dataset.modal, button.dataset.id);
     if (action === "close-modal") closeModal();
     if (action === "pay-commitment") payCommitment(button.dataset.id);
@@ -138,6 +172,7 @@
     if (action === "delete-investment") deleteItem("investments", button.dataset.id, "Investimento removido.");
     if (action === "delete-credit-card") deleteItem("creditCards", button.dataset.id, "Cartao removido.");
     if (action === "delete-card-purchase") deleteItem("cardPurchases", button.dataset.id, "Compra removida.");
+    if (action === "delete-subscription") deleteItem("subscriptions", button.dataset.id, "Subscricao removida.");
     if (action === "delete-crypto") deleteItem("cryptoAssets", button.dataset.id, "Cripto removida.");
     if (action === "delete-vehicle-maintenance") deleteItem("vehicleMaintenance", button.dataset.id, "Manutencao removida.");
     if (action === "delete-income-source") deleteItem("incomeSources", button.dataset.id, "Empresa removida.");
@@ -163,6 +198,7 @@
     if (formType === "investment") saveInvestment(form);
     if (formType === "credit-card") saveCreditCard(form);
     if (formType === "card-purchase") saveCardPurchase(form);
+    if (formType === "subscription") saveSubscription(form);
     if (formType === "crypto") saveCryptoAsset(form);
     if (formType === "vehicle") saveVehicle(form);
     if (formType === "vehicle-maintenance") saveVehicleMaintenance(form);
@@ -184,6 +220,8 @@
     if (event.target.id === "incomeSourceId") updateWorkIncomeCurrencyField();
     if (event.target.id === "commitmentCategory") updateCommitmentCategoryField();
     if (event.target.id === "commitmentType") updateCommitmentProviderField();
+    if (event.target.id === "subscriptionPaymentMethod") updateSubscriptionCardField();
+    if (event.target.id === "subscriptionServiceKey") updateSubscriptionCustomField();
   });
 
   window.addEventListener("resize", debounce(drawVisibleCharts, 120));
@@ -503,6 +541,7 @@
       investments: Array.isArray(raw.investments) ? raw.investments : base.investments,
       creditCards: Array.isArray(raw.creditCards) ? raw.creditCards : base.creditCards,
       cardPurchases: Array.isArray(raw.cardPurchases) ? raw.cardPurchases : base.cardPurchases,
+      subscriptions: Array.isArray(raw.subscriptions) ? raw.subscriptions : base.subscriptions,
       cryptoAssets: Array.isArray(raw.cryptoAssets) ? raw.cryptoAssets : base.cryptoAssets,
       cryptoQuotes: raw.cryptoQuotes || base.cryptoQuotes,
       fxQuotes: raw.fxQuotes || base.fxQuotes,
@@ -533,7 +572,8 @@
       ui: {
         activeCountry: "global",
         activeTab: "dashboard",
-        selectedMonth
+        selectedMonth,
+        activeCardIndex: 0
       },
       transactions: [],
       transfers: [],
@@ -542,6 +582,7 @@
       investments: [],
       creditCards: [],
       cardPurchases: [],
+      subscriptions: [],
       cryptoAssets: [],
       cryptoQuotes: {
         prices: {},
@@ -651,6 +692,7 @@
     document.querySelectorAll(".nav-item").forEach((item) => {
       item.classList.toggle("is-active", item.dataset.tab === state.ui.activeTab);
     });
+    updateCountrySwitcher();
 
     requestAnimationFrame(drawVisibleCharts);
     scheduleFxRefresh(false);
@@ -664,6 +706,23 @@
         ? "Ponte Financeira"
         : `Hey, ${family}`;
     }
+    if (countryContext) countryContext.textContent = countryContextLabel();
+    updateCountrySwitcher();
+  }
+
+  function updateCountrySwitcher() {
+    document.querySelectorAll(".country-chip").forEach((button) => {
+      const isActive = button.dataset.country === state.ui.activeCountry;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+  }
+
+  function countryContextLabel() {
+    if (remoteStore.enabled && remoteSession.status !== "ready") return "Acesso seguro";
+    if (state.ui.activeCountry === "brasil") return "Contas do Brasil";
+    if (state.ui.activeCountry === "japao") return "Contas do Japao";
+    return "Visao Global";
   }
 
   function renderAuthGate() {
@@ -753,13 +812,6 @@
   function renderToolbar() {
     return `
       <section class="toolbar">
-        <div class="segmented" role="tablist" aria-label="Pais">
-          ${["global", "brasil", "japao"].map((country) => `
-            <button type="button" data-action="set-country" data-country="${country}" class="${state.ui.activeCountry === country ? "is-active" : ""}">
-              ${countryMeta[country].short} ${countryMeta[country].label}
-            </button>
-          `).join("")}
-        </div>
         <div class="month-switcher" aria-label="Mes selecionado">
           <button class="month-button" type="button" data-action="month-prev" aria-label="Mes anterior">‹</button>
           <div class="month-current">${formatMonthLabel(state.ui.selectedMonth)}</div>
@@ -821,14 +873,14 @@
   function renderDashboard() {
     const summary = summarizeMonth(state.ui.selectedMonth, state.ui.activeCountry);
     const countryLabel = countryMeta[state.ui.activeCountry].label;
-    const remainingClass = summary.remaining >= 0 ? "good" : "warn";
+    const breathClass = summary.coverage > 20 ? "good" : "warn";
 
     return `
       <section class="dashboard-grid">
         <div class="hero-panel">
           <div class="hero-top">
             <div>
-              <p class="hero-title">Saldo do mes - ${countryLabel}</p>
+              <p class="hero-title">Saldo atual - ${countryLabel}</p>
               <p class="hero-value">${formatMoney(summary.remaining, summary.currency)}</p>
               <p class="hero-subvalue">${summaryLine(summary)}</p>
             </div>
@@ -856,17 +908,17 @@
           <article class="metric-card warn">
             <p class="metric-label">Saidas</p>
             <p class="metric-value">${formatMoney(summary.expenses + summary.investments + summary.wiseOut + summary.fees, summary.currency)}</p>
-            <p class="metric-foot">Contas, cartoes e reservas</p>
+            <p class="metric-foot">Pagas e abertas no mes</p>
           </article>
           <article class="metric-card">
             <p class="metric-label">Wise</p>
             <p class="metric-value">${formatMoney(summary.wiseDisplay, summary.currency)}</p>
             <p class="metric-foot">${summary.wiseLabel}</p>
           </article>
-          <article class="metric-card ${remainingClass}">
+          <article class="metric-card ${breathClass}">
             <p class="metric-label">Folego</p>
             <p class="metric-value">${summary.coverage}%</p>
-            <p class="metric-foot">Do plano mensal coberto</p>
+            <p class="metric-foot">Saldo livre das entradas</p>
           </article>
         </div>
       </section>
@@ -888,12 +940,12 @@
           ${renderCreditCardsPanel(3)}
         </article>
 
-        <article class="content-panel crypto-panel">
+        <article class="content-panel subscriptions-panel">
           <div class="panel-head">
-            <h2>Saldo cripto</h2>
-            <button class="small-action" type="button" data-action="open-modal" data-modal="crypto">Nova</button>
+            <h2>Subscricoes</h2>
+            <button class="small-action" type="button" data-action="open-modal" data-modal="subscription">Nova</button>
           </div>
-          ${renderCryptoPanel()}
+          ${renderSubscriptionsPanel(6)}
         </article>
       </section>
 
@@ -906,6 +958,16 @@
           ${renderIncomePanel(3)}
         </article>
 
+        <article class="content-panel crypto-panel">
+          <div class="panel-head">
+            <h2>Saldo cripto</h2>
+            <button class="small-action" type="button" data-action="open-modal" data-modal="crypto">Nova</button>
+          </div>
+          ${renderCryptoPanel()}
+        </article>
+      </section>
+
+      <section class="split-grid">
         <article class="content-panel vehicle-panel">
           <div class="panel-head">
             <h2>Veiculo Japao</h2>
@@ -913,42 +975,30 @@
           </div>
           ${renderVehiclePanel(3)}
         </article>
-      </section>
 
-      <section class="split-grid">
         <article class="content-panel">
           <div class="panel-head">
             <h2>Comparativo</h2>
-            <span class="chip gold">${latestRateLabel()}</span>
+            <span class="chip blue">6 meses</span>
           </div>
           <div class="chart-wrap"><canvas id="trend-chart" aria-label="Grafico mensal"></canvas></div>
         </article>
-
-        <article class="content-panel">
-          <div class="panel-head">
-            <h2>Proximas contas</h2>
-            <button class="small-action" type="button" data-action="open-modal" data-modal="commitment">Nova</button>
-          </div>
-          ${renderCommitmentList(6)}
-        </article>
       </section>
 
-      <section class="split-grid">
-        <article class="content-panel">
-          <div class="panel-head">
-            <h2>Ultimos lancamentos</h2>
-            <button class="small-action ghost" type="button" data-action="set-tab" data-tab="accounts">Ver contas</button>
-          </div>
-          ${renderTransactionList(monthLedgerEntries(state.ui.selectedMonth, state.ui.activeCountry).slice(0, 7))}
-        </article>
+      <section class="content-panel">
+        <div class="panel-head">
+          <h2>Proximas contas</h2>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="commitment">Nova</button>
+        </div>
+        ${renderCommitmentList(6)}
+      </section>
 
-        <article class="content-panel">
-          <div class="panel-head">
-            <h2>Ponte Brasil-Japao</h2>
-            <button class="small-action dark" type="button" data-action="set-tab" data-tab="wise">Abrir</button>
-          </div>
-          ${renderBridgePanel()}
-        </article>
+      <section class="content-panel">
+        <div class="panel-head">
+          <h2>Ultimos lancamentos</h2>
+          <button class="small-action ghost" type="button" data-action="set-tab" data-tab="accounts">Ver contas</button>
+        </div>
+        ${renderTransactionList(monthLedgerEntries(state.ui.selectedMonth, state.ui.activeCountry).slice(0, 7))}
       </section>
     `;
   }
@@ -1001,6 +1051,14 @@
           </div>
           ${renderCryptoPanel()}
         </article>
+      </section>
+
+      <section class="content-panel">
+        <div class="panel-head">
+          <h2>Subscricoes</h2>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="subscription">Nova subscricao</button>
+        </div>
+        ${renderSubscriptionsPanel(null)}
       </section>
 
       <section class="content-panel">
@@ -1141,7 +1199,7 @@
             <strong>${formatMoney(summary.investments, summary.currency)}</strong>
           </div>
           <div class="stat-box">
-            <p class="mini-label">Saldo final</p>
+            <p class="mini-label">Saldo atual</p>
             <strong>${formatMoney(summary.remaining, summary.currency)}</strong>
           </div>
         </div>
@@ -1425,15 +1483,52 @@
     const cards = state.creditCards || [];
     if (!cards.length) return `<p class="empty-state">Nenhum cartao cadastrado.</p>`;
     const visible = limit ? cards.slice(0, limit) : cards;
+    const activeIndex = normalizeCardCarouselIndex(visible.length);
+    const wallet = cardWalletSummary(cards);
+    const walletCountLabel = `${cards.length} cartao${cards.length === 1 ? "" : "es"} no mes`;
+    const walletSummary = `
+      <div class="wallet-total-glass">
+        <span>Total dos cartoes</span>
+        <strong>${formatMoney(wallet.total, wallet.currency)}</strong>
+        <small>${walletCountLabel}</small>
+      </div>
+    `;
+    const walletFullSummary = `
+      <div class="wallet-total-inline">
+        <span>Total dos cartoes</span>
+        <strong>${formatMoney(wallet.total, wallet.currency)}</strong>
+        <small>${walletCountLabel}</small>
+      </div>
+    `;
+    const controls = visible.length > 1 ? `
+      <div class="card-carousel-controls" aria-label="Navegar cartoes">
+        <button class="carousel-arrow" type="button" data-action="card-carousel-prev" data-total="${visible.length}" aria-label="Cartao anterior">‹</button>
+        <div class="carousel-dots" aria-label="Cartao ativo">
+          ${visible.map((item, index) => `
+            <button class="carousel-dot ${index === activeIndex ? "is-active" : ""}" type="button" data-action="card-carousel-select" data-index="${index}" data-total="${visible.length}" aria-label="Ver cartao ${index + 1}"></button>
+          `).join("")}
+        </div>
+        <button class="carousel-arrow" type="button" data-action="card-carousel-next" data-total="${visible.length}" aria-label="Proximo cartao">›</button>
+      </div>
+    ` : "";
+
     return `
-      <div class="cards-wallet">
-        ${visible.map((item) => {
+      <div class="cards-wallet cards-carousel ${limit ? "" : "with-actions"}">
+        ${limit ? "" : walletFullSummary}
+        <div class="card-carousel-stage">
+        ${visible.map((item, index) => {
           const country = countryMeta[item.country] || countryMeta.japao;
           const bill = creditCardMonthBill(item, state.ui.selectedMonth);
           const paid = isCardBillPaid(item.id, state.ui.selectedMonth);
           const usage = item.limitAmount ? clamp(Math.round((bill.total / item.limitAmount) * 100), 0, 999) : 0;
+          const position = cardCarouselPosition(index, activeIndex, visible.length);
+          const sideAction = position === "is-next"
+            ? ` data-action="card-carousel-next" data-total="${visible.length}"`
+            : position === "is-prev"
+              ? ` data-action="card-carousel-prev" data-total="${visible.length}"`
+              : "";
           return `
-            <div class="credit-card-tile ${item.country === "brasil" ? "br-card" : "jp-card"}">
+            <div class="credit-card-tile carousel-card ${position} ${item.country === "brasil" ? "br-card" : "jp-card"} ${cardVisualStyle(item)}"${sideAction} aria-hidden="${position === "is-hidden" ? "true" : "false"}">
               <div class="flag-badge ${item.country === "brasil" ? "br" : "jp"}">${country.short}</div>
               <div class="card-brand">${escapeHtml(item.brand || "Credito")}</div>
               <p class="card-name">${escapeHtml(item.nickname || item.issuer)}</p>
@@ -1461,7 +1556,123 @@
             </div>
           `;
         }).join("")}
+        ${limit ? walletSummary : ""}
+        </div>
+        ${controls}
       </div>
+    `;
+  }
+
+  function cardWalletSummary(cards) {
+    const currency = state.ui.activeCountry === "brasil" ? "BRL" : state.settings.baseCurrency || "JPY";
+    const rate = latestRate(state.ui.selectedMonth);
+    const total = cards.reduce((sumValue, card) => {
+      const bill = creditCardMonthBill(card, state.ui.selectedMonth);
+      return sumValue + convert(bill.total, card.currency, currency, rate);
+    }, 0);
+    return { total, currency };
+  }
+
+  function moveCardCarousel(delta, total) {
+    if (total <= 1) return;
+    const current = normalizeCardCarouselIndex(total);
+    state.ui.activeCardIndex = (current + delta + total) % total;
+    saveState();
+    render();
+  }
+
+  function selectCardCarousel(index, total) {
+    if (!total) return;
+    state.ui.activeCardIndex = clamp(Math.round(index), 0, total - 1);
+    saveState();
+    render();
+  }
+
+  function normalizeCardCarouselIndex(total) {
+    if (!total) return 0;
+    return clamp(Math.round(number(state.ui.activeCardIndex)), 0, total - 1);
+  }
+
+  function cardCarouselPosition(index, activeIndex, total) {
+    if (index === activeIndex || total <= 1) return "is-active";
+    if (index === (activeIndex + 1) % total) return "is-next";
+    if (total > 2 && index === (activeIndex - 1 + total) % total) return "is-prev";
+    return "is-hidden";
+  }
+
+  function cardVisualStyle(card) {
+    const text = normalizeLookupText(`${card?.issuer || ""} ${card?.nickname || ""} ${card?.brand || ""}`);
+    if (text.includes("nubank")) return "style-nubank";
+    if (text.includes("santander")) return "style-santander";
+    if (text.includes("caixa")) return "style-caixa";
+    if (text.includes("wise")) return "style-wise";
+    if (text.includes("jcb")) return "style-jcb";
+    if (text.includes("amex")) return "style-amex";
+    if (text.includes("visa")) return "style-visa";
+    if (text.includes("mastercard")) return "style-mastercard";
+    return card?.country === "brasil" ? "style-brasil" : "style-japao";
+  }
+
+  function renderSubscriptionsPanel(limit) {
+    const month = state.ui.selectedMonth;
+    const subscriptions = monthSubscriptions(month, state.ui.activeCountry);
+    const visible = limit ? subscriptions.slice(0, limit) : subscriptions;
+    const total = subscriptions.reduce((sumValue, item) => {
+      const currency = state.ui.activeCountry === "brasil" ? "BRL" : state.settings.baseCurrency || "JPY";
+      return sumValue + convert(item.amount, item.currency, currency, latestRate(month));
+    }, 0);
+    const totalCurrency = state.ui.activeCountry === "brasil" ? "BRL" : state.settings.baseCurrency || "JPY";
+
+    if (!subscriptions.length) {
+      return `<p class="empty-state">Nenhuma subscricao cadastrada.</p>`;
+    }
+
+    return `
+      <div class="subscription-summary">
+        <p class="mini-label">${subscriptions.length} ativa${subscriptions.length === 1 ? "" : "s"} no mes</p>
+        <strong>${formatMoney(total, totalCurrency)}</strong>
+      </div>
+      ${limit ? `
+        <div class="subscription-grid">
+          ${visible.map((item) => {
+            const meta = subscriptionMeta(item);
+            return `
+              <button class="subscription-badge" type="button" data-action="open-modal" data-modal="subscription" data-id="${item.id}">
+                <span class="subscription-icon" style="background:${escapeAttr(meta.color)}">${escapeHtml(meta.icon)}</span>
+                <strong>${escapeHtml(subscriptionName(item))}</strong>
+                <small>${formatMoney(item.amount, item.currency)}</small>
+              </button>
+            `;
+          }).join("")}
+        </div>
+      ` : ""}
+      ${limit || !visible.length ? "" : `
+        <div class="subscription-list">
+          ${visible.map((item) => {
+            const meta = subscriptionMeta(item);
+            const card = item.cardId ? creditCardById(item.cardId) : null;
+            const payment = item.paymentMethod === "card"
+              ? `Cartao ${card ? card.nickname || card.issuer : ""}`.trim()
+              : "Pix";
+            return `
+              <div class="list-row subscription-detail-row">
+                <span class="row-icon subscription-row-icon" style="background:${escapeAttr(meta.color)}">${escapeHtml(meta.icon)}</span>
+                <div class="row-main">
+                  <p class="row-title">${escapeHtml(subscriptionName(item))}</p>
+                  <p class="row-meta">${countryMeta[item.country]?.label || ""} - vence dia ${item.dueDay || "--"} - ${escapeHtml(payment)}</p>
+                </div>
+                <div class="row-amount expense">
+                  ${formatMoney(item.amount, item.currency)}
+                  <div class="row-actions">
+                    <button class="small-action ghost" type="button" data-action="open-modal" data-modal="subscription" data-id="${item.id}">Editar</button>
+                    <button class="small-action ghost" type="button" data-action="delete-subscription" data-id="${item.id}">Excluir</button>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `}
     `;
   }
 
@@ -1471,9 +1682,14 @@
     const visible = limit ? rows.slice(0, limit) : rows;
     return `
       <div class="list">
-        ${visible.map((row) => `
+        ${visible.map((row) => {
+          const rowIcon = row.generated ? row.icon || "S" : `${row.installment}/${row.installments}`;
+          const iconStyle = row.color ? ` style="background:${escapeAttr(row.color)}"` : "";
+          const editModal = row.editModal || "cardPurchase";
+          const deleteAction = row.deleteAction || "delete-card-purchase";
+          return `
           <div class="list-row">
-            <span class="row-icon blue">${row.installment}/${row.installments}</span>
+            <span class="row-icon blue"${iconStyle}>${escapeHtml(rowIcon)}</span>
             <div class="row-main">
               <p class="row-title">${escapeHtml(row.title)}</p>
               <p class="row-meta">${escapeHtml(row.cardName)} - ${escapeHtml(row.category || "Cartao")} - compra ${formatShortDate(row.purchaseDate)}</p>
@@ -1482,13 +1698,14 @@
               ${formatMoney(row.amount, row.currency)}
               ${limit ? "" : `
                 <div class="row-actions">
-                  <button class="small-action ghost" type="button" data-action="open-modal" data-modal="cardPurchase" data-id="${row.id}">Editar</button>
-                  <button class="small-action ghost" type="button" data-action="delete-card-purchase" data-id="${row.id}">Excluir</button>
+                  <button class="small-action ghost" type="button" data-action="open-modal" data-modal="${editModal}" data-id="${row.id}">Editar</button>
+                  <button class="small-action ghost" type="button" data-action="${deleteAction}" data-id="${row.id}">Excluir</button>
                 </div>
               `}
             </div>
           </div>
-        `).join("")}
+          `;
+        }).join("")}
       </div>
     `;
   }
@@ -1499,22 +1716,25 @@
     const visible = limit ? items.slice(0, limit) : items;
     return `
       <div class="calendar-list">
-        ${visible.map((item) => `
-          <div class="calendar-item ${item.tone}">
-            <div class="calendar-date">
-              <span>${formatCalendarDay(item.date)}</span>
-              <small>${formatCalendarWeekday(item.date)}</small>
+        ${visible.map((item) => {
+          const titleStyle = item.titleColor ? ` style="color:${escapeAttr(item.titleColor)}"` : "";
+          return `
+            <div class="calendar-item ${item.kind === "income" ? "calendar-income" : "calendar-expense"} ${item.tone}">
+              <div class="calendar-date">
+                <span>${formatCalendarDay(item.date)}</span>
+                <small>${formatCalendarWeekday(item.date)}</small>
+              </div>
+              <div class="calendar-main">
+                <p class="row-title"${titleStyle}>${escapeHtml(item.title)}</p>
+                <p class="row-meta">${escapeHtml(item.meta)}</p>
+              </div>
+              <div class="calendar-amount ${item.kind === "income" ? "income" : "expense"}">
+                ${item.kind === "income" ? "+" : "-"} ${formatMoney(item.amount, item.currency)}
+                <span class="chip ${item.tone}">${escapeHtml(item.status)}</span>
+              </div>
             </div>
-            <div class="calendar-main">
-              <p class="row-title">${escapeHtml(item.title)}</p>
-              <p class="row-meta">${escapeHtml(item.meta)}</p>
-            </div>
-            <div class="calendar-amount ${item.kind === "income" ? "income" : "expense"}">
-              ${item.kind === "income" ? "+" : "-"} ${formatMoney(item.amount, item.currency)}
-              <span class="chip ${item.tone}">${escapeHtml(item.status)}</span>
-            </div>
-          </div>
-        `).join("")}
+          `;
+        }).join("")}
       </div>
     `;
   }
@@ -1820,43 +2040,6 @@
     `;
   }
 
-  function renderBridgePanel() {
-    const month = state.ui.selectedMonth;
-    const transfers = monthTransfers(month);
-    const brSummary = summarizeMonth(month, "brasil");
-    const jpSummary = summarizeMonth(month, "japao");
-    const received = sum(transfers, "receivedAmount");
-    const brNeed = brSummary.expenses + brSummary.investments;
-    const jpyNeeded = brNeed / latestRate(month);
-    const coverage = brNeed ? clamp(Math.round((received / brNeed) * 100), 0, 999) : 100;
-
-    return `
-      <div class="list">
-        <div class="list-row compact">
-          <div>
-            <p class="row-title">Brasil precisa</p>
-            <p class="row-meta">Equivale a ${formatMoney(jpyNeeded, "JPY")} pela cotacao atual</p>
-          </div>
-          <div class="row-amount expense">${formatMoney(brNeed, "BRL")}</div>
-        </div>
-        <div class="list-row compact">
-          <div>
-            <p class="row-title">Wise cobriu</p>
-            <p class="row-meta">${coverage}% do plano do Brasil</p>
-          </div>
-          <div class="row-amount income">${formatMoney(received, "BRL")}</div>
-        </div>
-        <div class="list-row compact">
-          <div>
-            <p class="row-title">Japao apos ponte</p>
-            <p class="row-meta">Salario menos contas locais e Wise</p>
-          </div>
-          <div class="row-amount ${jpSummary.remaining >= 0 ? "income" : "expense"}">${formatMoney(jpSummary.remaining, "JPY")}</div>
-        </div>
-      </div>
-    `;
-  }
-
   function openModal(type, id = "") {
     const map = {
       addHub: renderAddHubModal,
@@ -1871,7 +2054,8 @@
       vehicle: renderVehicleModal,
       vehicleMaintenance: renderVehicleMaintenanceModal,
       incomeSource: renderIncomeSourceModal,
-      workIncome: renderWorkIncomeModal
+      workIncome: renderWorkIncomeModal,
+      subscription: renderSubscriptionModal
     };
     const content = map[type] ? map[type](editableItem(type, id)) : "";
     modalRoot.innerHTML = `
@@ -1887,6 +2071,8 @@
     updateIncomeSourceOtherField();
     updateCommitmentCategoryField();
     updateCommitmentProviderField();
+    updateSubscriptionCardField();
+    updateSubscriptionCustomField();
   }
 
   function closeModal() {
@@ -1899,6 +2085,7 @@
       { modal: "workIncome", icon: "¥", title: "Cadastro de Pagamento", meta: "Recebimento ligado a uma empresa cadastrada" },
       { modal: "vehicle", icon: "V", title: "Cadastrar veiculo", meta: "Carro do Japao, Shaken, seguro e dados principais" },
       { modal: "creditCard", icon: "C", title: "Cadastrar cartao", meta: "Cartao do Brasil ou Japao com bandeira e vencimento" },
+      { modal: "subscription", icon: "S", title: "Cadastrar subscricao", meta: "Streaming, apps e servicos recorrentes no Pix ou cartao" },
       { modal: "crypto", icon: "B", title: "Cadastrar cripto", meta: "Quantidade comprada, custo e acompanhamento de cotacao" },
       { modal: "commitment", icon: "F", title: "Cadastrar contas", meta: "Despesas fixas, financiamentos, consorcios e recorrencias" },
       { modal: "investment", icon: "I", title: "Cadastrar investimentos", meta: "Instituicao, saldo atual e aporte mensal" },
@@ -2403,6 +2590,75 @@
     `;
   }
 
+  function renderSubscriptionModal(item = null) {
+    const activeCountry = item?.country || (state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry);
+    const selectedCurrency = item?.currency || countryMeta[activeCountry].currency;
+    const serviceKey = item?.serviceKey || "spotify";
+    const paymentMethod = item?.paymentMethod || "card";
+    const cards = state.creditCards || [];
+    const dueDate = item?.dueDate || dateInMonth(state.ui.selectedMonth, item?.dueDay || new Date().getDate());
+    return `
+      <div class="modal-head">
+        <h2>${item ? "Editar subscricao" : "Nova subscricao"}</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="subscription">
+        ${editHidden(item)}
+        <div class="two-cols">
+          ${countrySelect(activeCountry)}
+          <div class="field">
+            <label for="subscriptionServiceKey">Servico</label>
+            <select id="subscriptionServiceKey" name="serviceKey">
+              ${Object.entries(subscriptionCatalog).map(([key, meta]) => `<option value="${key}" ${selectedAttr(key, serviceKey)}>${escapeHtml(meta.name)}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+        <div class="field subscription-custom-field ${serviceKey === "other" ? "" : "is-hidden"}">
+          <label for="subscriptionCustomName">Nome do servico</label>
+          <input id="subscriptionCustomName" name="customName" placeholder="Ex: app, clube, ferramenta" value="${escapeAttr(item?.customName || "")}" />
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="subscriptionAmount">Valor</label>
+            <input id="subscriptionAmount" name="amount" required type="number" min="0" step="0.01" value="${item ? number(item.amount) : ""}" />
+          </div>
+          <div class="field">
+            <label for="subscriptionCurrency">Moeda</label>
+            <select id="subscriptionCurrency" name="currency">
+              <option value="${countryMeta[activeCountry].currency}" ${selectedAttr(countryMeta[activeCountry].currency, selectedCurrency)}>${countryMeta[activeCountry].currency}</option>
+              <option value="${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY", selectedCurrency)}>${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="subscriptionDueDate">Vencimento</label>
+            <input id="subscriptionDueDate" name="dueDate" required type="date" value="${escapeAttr(dueDate)}" />
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="subscriptionPaymentMethod">Forma de pagamento</label>
+            <select id="subscriptionPaymentMethod" name="paymentMethod">
+              <option value="card" ${selectedAttr("card", paymentMethod)}>Cartao de credito</option>
+              <option value="pix" ${selectedAttr("pix", paymentMethod)}>Pix</option>
+            </select>
+          </div>
+          <div class="field subscription-card-field ${paymentMethod === "card" ? "" : "is-hidden"}">
+            <label for="subscriptionCardId">Cartao</label>
+            <select id="subscriptionCardId" name="cardId">
+              <option value="">Selecione</option>
+              ${cards.map((card) => `<option value="${card.id}" ${selectedAttr(card.id, item?.cardId)}>${escapeHtml(card.nickname || card.issuer)} - ${countryMeta[card.country]?.short || "JP"} - ${card.currency}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+        ${!cards.length ? `<p class="empty-state subscription-card-hint">Cadastre um cartao para conectar a subscricao na fatura mensal.</p>` : ""}
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar subscricao</button>
+        </div>
+      </form>
+    `;
+  }
+
   function renderCryptoModal(item = null) {
     const symbol = String(item?.symbol || "BTC").toUpperCase();
     return `
@@ -2834,6 +3090,35 @@
     closeModal();
     render();
     showToast(updated ? "Compra atualizada." : "Compra salva no cartao.");
+  }
+
+  function saveSubscription(form) {
+    const data = formData(form);
+    const dueDate = data.dueDate || dateInMonth(state.ui.selectedMonth, 1);
+    const dueDay = parseLocalDate(dueDate).getDate();
+    const paymentMethod = data.paymentMethod || "card";
+    if (paymentMethod === "card" && !data.cardId) {
+      showToast("Selecione o cartao da subscricao.");
+      return;
+    }
+    const updated = upsertItem("subscriptions", data.id, {
+      country: data.country,
+      serviceKey: data.serviceKey || "other",
+      customName: String(data.customName || "").trim(),
+      amount: number(data.amount),
+      currency: data.currency,
+      dueDate,
+      dueDay: clamp(dueDay, 1, 31),
+      startMonth: dueDate.slice(0, 7),
+      paymentMethod,
+      cardId: paymentMethod === "card" ? data.cardId : "",
+      active: true
+    }, true);
+    state.ui.selectedMonth = dueDate.slice(0, 7);
+    saveState();
+    closeModal();
+    render();
+    showToast(updated ? "Subscricao atualizada." : "Subscricao salva.");
   }
 
   function saveCryptoAsset(form) {
@@ -3578,6 +3863,12 @@
       plannedExpenses += converted;
     });
 
+    plannedSubscriptionEntries(month, country).forEach((item) => {
+      const converted = convert(item.amount, item.currency, targetCurrency, rate);
+      expenses += converted;
+      plannedExpenses += converted;
+    });
+
     if (country === "global" || country === "japao") {
       vehicleMonthlyCosts(month).forEach((item) => {
         const converted = convert(item.amount, item.currency, targetCurrency, rate);
@@ -3604,14 +3895,17 @@
     }
 
     const planned = expenses + investments + wiseOut + fees;
-    const remaining = income + bridgeIn - planned;
-    const coverage = planned ? clamp(Math.round(((income + bridgeIn) / planned) * 100), 0, 999) : 100;
     const actualOutflow = actualExpenses + actualInvestments + actualWiseOut + actualFees;
     const plannedOutflow = plannedExpenses + plannedInvestments;
     const actualInflow = actualIncome + actualBridgeIn;
     const projectedInflow = income + bridgeIn;
     const projectedOutflow = planned;
     const actualBalance = actualInflow - actualOutflow;
+    const projectedBalance = projectedInflow - projectedOutflow;
+    const coverage = projectedInflow
+      ? clamp(Math.round((projectedBalance / projectedInflow) * 100), -999, 100)
+      : projectedOutflow ? 0 : 100;
+    const remaining = actualBalance;
     const plannedBalance = 0 - plannedOutflow;
 
     return {
@@ -3639,6 +3933,7 @@
       plannedBalance,
       projectedInflow,
       projectedOutflow,
+      projectedBalance,
       wiseDisplay: country === "brasil" ? bridgeIn : wiseOut || fees,
       wiseLabel: country === "brasil" ? "Recebido no Brasil" : country === "japao" ? "Enviado ao Brasil" : "Taxas no global"
     };
@@ -3790,10 +4085,40 @@
       .filter((item) => item.amount > 0);
   }
 
+  function plannedSubscriptionEntries(month, country) {
+    return subscriptionCalendarEntries(month, country).filter((item) => item.paymentMethod !== "card");
+  }
+
+  function subscriptionCalendarEntries(month, country) {
+    return monthSubscriptions(month, country)
+      .filter((item) => item.paymentMethod !== "card")
+      .map((item) => {
+        const dueDate = subscriptionDateForMonth(item, month);
+        const dueState = dueStateForDate(dueDate, false);
+        const meta = subscriptionMeta(item);
+        return {
+          id: item.id,
+          country: item.country,
+          type: "expense",
+          title: subscriptionName(item),
+          category: "Subscricao",
+          amount: number(item.amount),
+          currency: item.currency,
+          date: dueDate,
+          status: dueState.label,
+          tone: dueState.tone,
+          meta: `Subscricao - ${item.paymentMethod === "pix" ? "Pix" : "Cartao"}`,
+          kind: "expense",
+          titleColor: meta.color
+        };
+      });
+  }
+
   function financialCalendarItems(month, country) {
     const items = [
       ...commitmentCalendarEntries(month, country),
       ...cardBillCalendarEntries(month, country),
+      ...subscriptionCalendarEntries(month, country),
       ...vehicleCalendarEntries(month, country),
       ...incomeCalendarEntries(month, country),
       ...wiseCalendarEntries(month, country)
@@ -3835,7 +4160,8 @@
         status: "Entrada",
         tone: "green",
         meta: "Pagamento recebido",
-        kind: "income"
+        kind: "income",
+        titleColor: source.color
       };
     });
   }
@@ -3901,25 +4227,27 @@
   }
 
   function cardPurchaseRows(month, country) {
-    return (state.cardPurchases || [])
+    const purchases = (state.cardPurchases || [])
       .flatMap((purchase) => {
         const card = creditCardById(purchase.cardId);
         if (!card) return [];
         if (country !== "global" && card.country !== country) return [];
         return cardPurchaseInstallmentRow(purchase, card, month);
       })
-      .filter(Boolean)
+      .filter(Boolean);
+    return [...purchases, ...subscriptionCardRows(month, country)]
       .sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
   }
 
   function cardPurchaseRowsForCard(cardId, month) {
-    return (state.cardPurchases || [])
+    const purchases = (state.cardPurchases || [])
       .filter((purchase) => purchase.cardId === cardId)
       .map((purchase) => {
         const card = creditCardById(cardId);
         return card ? cardPurchaseInstallmentRow(purchase, card, month) : null;
       })
       .filter(Boolean);
+    return [...purchases, ...subscriptionCardRowsForCard(cardId, month)];
   }
 
   function cardPurchaseInstallmentRow(purchase, card, month) {
@@ -3942,6 +4270,52 @@
       rawCurrency: purchase.currency || card.currency,
       amount: convert(rawAmount, purchase.currency || card.currency, card.currency, latestRate(month)),
       currency: card.currency
+    };
+  }
+
+  function subscriptionCardRows(month, country) {
+    return (state.subscriptions || [])
+      .flatMap((item) => {
+        if (item.paymentMethod !== "card" || !isSubscriptionDueInMonth(item, month)) return [];
+        const card = creditCardById(item.cardId);
+        if (!card) return [];
+        if (country !== "global" && card.country !== country) return [];
+        return subscriptionCardRow(item, card, month);
+      });
+  }
+
+  function subscriptionCardRowsForCard(cardId, month) {
+    const card = creditCardById(cardId);
+    if (!card) return [];
+    return (state.subscriptions || [])
+      .filter((item) => item.paymentMethod === "card" && item.cardId === cardId)
+      .filter((item) => isSubscriptionDueInMonth(item, month))
+      .map((item) => subscriptionCardRow(item, card, month));
+  }
+
+  function subscriptionCardRow(item, card, month) {
+    const meta = subscriptionMeta(item);
+    const rawAmount = number(item.amount);
+    const rawCurrency = item.currency || card.currency;
+    return {
+      id: item.id,
+      generated: true,
+      editModal: "subscription",
+      deleteAction: "delete-subscription",
+      cardId: card.id,
+      cardName: card.nickname || card.issuer,
+      country: card.country,
+      title: subscriptionName(item),
+      category: "Subscricao",
+      purchaseDate: subscriptionDateForMonth(item, month),
+      installment: 1,
+      installments: 1,
+      rawAmount,
+      rawCurrency,
+      amount: convert(rawAmount, rawCurrency, card.currency, latestRate(month)),
+      currency: card.currency,
+      icon: meta.icon,
+      color: meta.color
     };
   }
 
@@ -3968,6 +4342,35 @@
       hourlyRate: 0,
       customType: ""
     };
+  }
+
+  function subscriptionMeta(item) {
+    return subscriptionCatalog[item?.serviceKey] || subscriptionCatalog.other;
+  }
+
+  function subscriptionName(item) {
+    const meta = subscriptionMeta(item);
+    if (item?.serviceKey === "other") return item.customName || meta.name;
+    return meta.name;
+  }
+
+  function monthSubscriptions(month, country) {
+    return (state.subscriptions || [])
+      .filter((item) => item.active !== false)
+      .filter((item) => country === "global" || item.country === country || (item.cardId && creditCardById(item.cardId)?.country === country))
+      .filter((item) => isSubscriptionDueInMonth(item, month))
+      .sort((a, b) => subscriptionDateForMonth(a, month).localeCompare(subscriptionDateForMonth(b, month)));
+  }
+
+  function isSubscriptionDueInMonth(item, month) {
+    if (item.active === false) return false;
+    const startMonth = item.startMonth || item.dueDate?.slice(0, 7) || "";
+    return !startMonth || month >= startMonth;
+  }
+
+  function subscriptionDateForMonth(item, month) {
+    const dueDay = item?.dueDay || parseLocalDate(item?.dueDate).getDate() || 1;
+    return dateInMonth(month, dueDay);
   }
 
   function normalizedSourceType(type) {
@@ -4024,6 +4427,28 @@
     const option = sourceSelect.selectedOptions?.[0];
     const currency = option?.dataset?.currency;
     if (currency) currencySelect.value = currency;
+  }
+
+  function updateSubscriptionCardField() {
+    const select = modalRoot.querySelector("#subscriptionPaymentMethod");
+    const field = modalRoot.querySelector(".subscription-card-field");
+    const cardSelect = modalRoot.querySelector("#subscriptionCardId");
+    if (!select || !field || !cardSelect) return;
+    const show = select.value === "card";
+    field.classList.toggle("is-hidden", !show);
+    cardSelect.required = show;
+    if (!show) cardSelect.value = "";
+  }
+
+  function updateSubscriptionCustomField() {
+    const select = modalRoot.querySelector("#subscriptionServiceKey");
+    const field = modalRoot.querySelector(".subscription-custom-field");
+    const input = modalRoot.querySelector("#subscriptionCustomName");
+    if (!select || !field || !input) return;
+    const show = select.value === "other";
+    field.classList.toggle("is-hidden", !show);
+    input.required = show;
+    if (!show) input.value = "";
   }
 
   function vehicleMonthlyCosts(month) {
@@ -4134,6 +4559,10 @@
       const current = totals.get("Cartao") || 0;
       totals.set("Cartao", current + convert(item.amount, item.currency, currency, rate));
     });
+    plannedSubscriptionEntries(month, country).forEach((item) => {
+      const current = totals.get("Subscricao") || 0;
+      totals.set("Subscricao", current + convert(item.amount, item.currency, currency, rate));
+    });
     if (country === "global" || country === "japao") {
       vehicleMonthlyCosts(month).forEach((item) => {
         const current = totals.get("Veiculo") || 0;
@@ -4152,16 +4581,10 @@
     return previous ? Number(previous.rate) : Number(state.settings.defaultRate || 0.035);
   }
 
-  function latestRateLabel() {
-    return `Wise ${formatRate(latestRate())}`;
-  }
-
   function summaryLine(summary) {
-    const parts = [
-      `Entradas ${formatMoney(summary.income + summary.bridgeIn, summary.currency)}`,
-      `saidas ${formatMoney(summary.expenses + summary.investments + summary.wiseOut + summary.fees, summary.currency)}`
-    ];
-    return parts.join(" · ");
+    const projected = formatMoney(summary.projectedBalance, summary.currency);
+    if (!summary.plannedOutflow) return `Previsto ${projected} · nenhuma conta aberta`;
+    return `Previsto ${projected} · aberto ${formatMoney(summary.plannedOutflow, summary.currency)}`;
   }
 
   function inCountryScope(country) {
@@ -4379,6 +4802,7 @@
       investment: "investments",
       creditCard: "creditCards",
       cardPurchase: "cardPurchases",
+      subscription: "subscriptions",
       crypto: "cryptoAssets",
       vehicleMaintenance: "vehicleMaintenance",
       incomeSource: "incomeSources",

@@ -1,10 +1,10 @@
-const CACHE_NAME = "ponte-financeira-v19";
+const CACHE_NAME = "ponte-financeira-v23";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=19",
-  "./app.js?v=19",
-  "./supabase-config.js?v=19",
+  "./styles.css?v=23",
+  "./app.js?v=23",
+  "./supabase-config.js?v=23",
   "./manifest.webmanifest",
   "./assets/icon.svg"
 ];
