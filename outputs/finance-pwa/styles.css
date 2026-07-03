@@ -746,6 +746,12 @@ canvas {
   margin-top: 8px;
 }
 
+.income-payments-block {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .source-row .row-title {
   display: flex;
   align-items: center;
@@ -1149,6 +1155,10 @@ canvas {
 .field {
   display: grid;
   gap: 6px;
+}
+
+.is-hidden {
+  display: none !important;
 }
 
 .field label {

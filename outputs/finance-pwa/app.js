@@ -35,10 +35,12 @@
     workIncomes: "wi"
   };
   const incomeSourceTypeMeta = {
-    salary: "Salario Empresa",
-    amazon: "Amazon Flex",
-    uber: "Uber Eats",
-    extra: "Renda extra"
+    factory: "Fabrica",
+    salary: "Fabrica",
+    amazon: "Amazon",
+    uber: "Uber",
+    extra: "Renda Extra",
+    other: "Outros"
   };
   const cryptoCatalog = {
     BTC: { id: "bitcoin", name: "Bitcoin", color: "#f7931a" },
@@ -169,6 +171,8 @@
 
   document.addEventListener("change", (event) => {
     if (event.target.id === "import-file") importData(event.target.files[0]);
+    if (event.target.id === "sourceType") updateIncomeSourceOtherField();
+    if (event.target.id === "incomeSourceId") updateWorkIncomeCurrencyField();
   });
 
   window.addEventListener("resize", debounce(drawVisibleCharts, 120));
@@ -1598,12 +1602,15 @@
       <div class="list source-list">
         ${visibleSources.map((source) => {
           const rows = monthRows.filter((row) => row.sourceId === source.id);
-          const amount = sum(rows, "amount");
+          const sourceCurrency = source.currency || "JPY";
+          const amount = rows.reduce((totalValue, row) => (
+            totalValue + convert(row.amount, row.currency || sourceCurrency, sourceCurrency, rate)
+          ), 0);
           return `
             <div class="list-row compact source-row">
               <div>
                 <p class="row-title"><span class="source-dot" style="background:${escapeAttr(source.color)}"></span>${escapeHtml(source.name)}</p>
-                <p class="row-meta">${incomeSourceTypeMeta[source.type] || "Renda"} - ${source.hourlyRate ? `${formatMoney(source.hourlyRate, source.currency || "JPY")}/h` : "sem valor hora"}</p>
+                <p class="row-meta">${escapeHtml(sourceTypeLabel(source))} - ${source.currency || "JPY"}</p>
               </div>
               <div class="row-amount income">
                 ${formatMoney(amount, source.currency || "JPY")}
@@ -1618,12 +1625,22 @@
           `;
         }).join("")}
       </div>
+      ${!limit && monthRows.length ? `
+        <div class="income-payments-block">
+          <p class="mini-label">Pagamentos do mes</p>
+          ${renderIncomePaymentsList(monthRows)}
+        </div>
+      ` : ""}
     `;
   }
 
   function renderIncomeReport() {
     const rows = monthWorkIncomes(state.ui.selectedMonth);
     if (!rows.length) return `<p class="empty-state">Nenhum recebimento neste mes.</p>`;
+    return renderIncomePaymentsList(rows);
+  }
+
+  function renderIncomePaymentsList(rows) {
     return `
       <div class="list">
         ${rows.map((item) => {
@@ -1633,7 +1650,7 @@
               <span class="row-icon" style="background:${escapeAttr(source.color)}">¥</span>
               <div class="row-main">
                 <p class="row-title">${escapeHtml(source.name)}</p>
-                <p class="row-meta">${formatShortDate(item.date)} - ${incomeSourceTypeMeta[source.type] || "Renda"} - ${workIncomeMeta(item)}</p>
+                <p class="row-meta">${formatShortDate(item.date)} - ${escapeHtml(sourceTypeLabel(source))} - ${item.currency || source.currency || "JPY"}</p>
               </div>
               <div class="row-amount income">
                 + ${formatMoney(item.amount, item.currency)}
@@ -1849,6 +1866,7 @@
     const first = modalRoot.querySelector("input, select, textarea, button");
     if (first) first.focus();
     updateTransferPreview();
+    updateIncomeSourceOtherField();
   }
 
   function closeModal() {
@@ -2482,6 +2500,8 @@
 
   function renderIncomeSourceModal(item = null) {
     const nextColor = item?.color || sourceColors[(state.incomeSources || []).length % sourceColors.length];
+    const sourceType = normalizedSourceType(item?.type);
+    const customType = item?.customType || (sourceType === "other" && item?.type && !incomeSourceTypeMeta[item.type] ? item.type : "");
     return `
       <div class="modal-head">
         <h2>${item ? "Editar empresa" : "Nova empresa"}</h2>
@@ -2492,23 +2512,24 @@
         <div class="two-cols">
           <div class="field">
             <label for="sourceName">Nome</label>
-            <input id="sourceName" name="name" required placeholder="Ex: Empresa, Amazon Flex" value="${escapeAttr(item?.name || "")}" />
+            <input id="sourceName" name="name" required placeholder="Ex: Fabrica, Amazon, Uber" value="${escapeAttr(item?.name || "")}" />
           </div>
           <div class="field">
             <label for="sourceType">Tipo</label>
             <select id="sourceType" name="type">
-              <option value="salary" ${selectedAttr("salary", item?.type || "salary")}>Salario Empresa</option>
-              <option value="amazon" ${selectedAttr("amazon", item?.type)}>Amazon Flex</option>
-              <option value="uber" ${selectedAttr("uber", item?.type)}>Uber Eats</option>
-              <option value="extra" ${selectedAttr("extra", item?.type)}>Renda extra</option>
+              <option value="factory" ${selectedAttr("factory", sourceType)}>Fabrica</option>
+              <option value="amazon" ${selectedAttr("amazon", sourceType)}>Amazon</option>
+              <option value="uber" ${selectedAttr("uber", sourceType)}>Uber</option>
+              <option value="extra" ${selectedAttr("extra", sourceType)}>Renda Extra</option>
+              <option value="other" ${selectedAttr("other", sourceType)}>Outros</option>
             </select>
           </div>
         </div>
-        <div class="three-cols">
-          <div class="field">
-            <label for="sourceHourlyRate">Valor hora</label>
-            <input id="sourceHourlyRate" name="hourlyRate" type="number" min="0" step="1" value="${item ? number(item.hourlyRate) : 0}" />
-          </div>
+        <div class="field other-source-field ${sourceType === "other" ? "" : "is-hidden"}">
+          <label for="sourceCustomType">Descreva o tipo</label>
+          <input id="sourceCustomType" name="customType" placeholder="Ex: Servico particular, bonus, outro app" value="${escapeAttr(customType)}" />
+        </div>
+        <div class="two-cols">
           <div class="field">
             <label for="sourceColor">Cor</label>
             <input id="sourceColor" name="color" type="color" value="${nextColor}" />
@@ -2521,10 +2542,6 @@
             </select>
           </div>
         </div>
-        <div class="field">
-          <label for="sourcePayRule">Regra de pagamento</label>
-          <textarea id="sourcePayRule" name="payRule" placeholder="Ex: Amazon Flex quarta a terca, paga na quarta">${escapeHtml(item?.payRule || "")}</textarea>
-        </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
           <button class="primary-button" type="submit">Salvar empresa</button>
@@ -2535,6 +2552,8 @@
 
   function renderWorkIncomeModal(item = null) {
     const sources = state.incomeSources || [];
+    const selectedSource = item ? incomeSourceById(item.sourceId) : sources[0];
+    const selectedCurrency = item?.currency || selectedSource?.currency || "JPY";
     if (!sources.length) {
       return `
         <div class="modal-head">
@@ -2557,59 +2576,30 @@
       </div>
       <form class="form-grid" data-form="work-income">
         ${editHidden(item)}
-        <div class="three-cols">
+        <div class="two-cols">
           <div class="field">
-            <label for="incomeSourceId">Fonte</label>
+            <label for="incomeSourceId">Empresa</label>
             <select id="incomeSourceId" name="sourceId">
-              ${sources.map((source) => `<option value="${source.id}" ${selectedAttr(source.id, item?.sourceId || sources[0]?.id)}>${escapeHtml(source.name)}</option>`).join("")}
+              ${sources.map((source) => `<option value="${source.id}" data-currency="${escapeAttr(source.currency || "JPY")}" ${selectedAttr(source.id, item?.sourceId || sources[0]?.id)}>${escapeHtml(source.name)}</option>`).join("")}
             </select>
           </div>
           <div class="field">
             <label for="incomeAmount">Valor recebido</label>
-            <input id="incomeAmount" name="amount" type="number" min="0" step="1" required value="${item ? number(item.amount) : ""}" />
+            <input id="incomeAmount" name="amount" type="number" min="0" step="0.01" required value="${item ? number(item.amount) : ""}" />
           </div>
+        </div>
+        <div class="two-cols">
           <div class="field">
             <label for="incomeDate">Data de pagamento</label>
             <input id="incomeDate" name="date" type="date" required value="${escapeAttr(item?.date || dateInMonth(state.ui.selectedMonth, new Date().getDate()))}" />
           </div>
-        </div>
-        <div class="two-cols">
           <div class="field">
-            <label for="incomePeriodStart">Inicio do periodo</label>
-            <input id="incomePeriodStart" name="periodStart" type="date" value="${escapeAttr(item?.periodStart || "")}" />
+            <label for="incomeCurrency">Moeda</label>
+            <select id="incomeCurrency" name="currency">
+              <option value="JPY" ${selectedAttr("JPY", selectedCurrency)}>JPY</option>
+              <option value="BRL" ${selectedAttr("BRL", selectedCurrency)}>BRL</option>
+            </select>
           </div>
-          <div class="field">
-            <label for="incomePeriodEnd">Fim do periodo</label>
-            <input id="incomePeriodEnd" name="periodEnd" type="date" value="${escapeAttr(item?.periodEnd || "")}" />
-          </div>
-        </div>
-        <div class="three-cols">
-          <div class="field">
-            <label for="workDays">Dias trabalhados</label>
-            <input id="workDays" name="workDays" type="number" min="0" step="1" value="${item ? number(item.workDays) : 0}" />
-          </div>
-          <div class="field">
-            <label for="hirukinDays">Hirukin</label>
-            <input id="hirukinDays" name="hirukinDays" type="number" min="0" step="1" value="${item ? number(item.hirukinDays) : 0}" />
-          </div>
-          <div class="field">
-            <label for="yakinDays">Yakin</label>
-            <input id="yakinDays" name="yakinDays" type="number" min="0" step="1" value="${item ? number(item.yakinDays) : 0}" />
-          </div>
-        </div>
-        <div class="two-cols">
-          <div class="field">
-            <label for="weekendDays">Finais de semana</label>
-            <input id="weekendDays" name="weekendDays" type="number" min="0" step="1" value="${item ? number(item.weekendDays) : 0}" />
-          </div>
-          <div class="field">
-            <label for="incomeHourlyRate">Valor hora usado</label>
-            <input id="incomeHourlyRate" name="hourlyRate" type="number" min="0" step="1" value="${item ? number(item.hourlyRate) : 0}" />
-          </div>
-        </div>
-        <div class="field">
-          <label for="incomeNote">Observacao</label>
-          <textarea id="incomeNote" name="note" placeholder="Ex: semana Amazon Flex quarta a terca">${escapeHtml(item?.note || "")}</textarea>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -2845,13 +2835,15 @@
 
   function saveIncomeSource(form) {
     const data = formData(form);
+    const sourceType = normalizedSourceType(data.type);
     const updated = upsertItem("incomeSources", data.id, {
       name: data.name.trim(),
-      type: data.type,
-      hourlyRate: number(data.hourlyRate),
+      type: sourceType,
+      customType: sourceType === "other" ? String(data.customType || "").trim() : "",
+      hourlyRate: 0,
       color: data.color || sourceColors[state.incomeSources.length % sourceColors.length],
       currency: data.currency || "JPY",
-      payRule: data.payRule.trim()
+      payRule: ""
     });
     saveState();
     closeModal();
@@ -2867,16 +2859,16 @@
       sourceName: source.name,
       sourceType: source.type,
       amount: number(data.amount),
-      currency: source.currency || "JPY",
+      currency: data.currency || source.currency || "JPY",
       date: data.date,
-      periodStart: data.periodStart,
-      periodEnd: data.periodEnd,
-      workDays: number(data.workDays),
-      hirukinDays: number(data.hirukinDays),
-      yakinDays: number(data.yakinDays),
-      weekendDays: number(data.weekendDays),
-      hourlyRate: number(data.hourlyRate) || number(source.hourlyRate),
-      note: data.note.trim()
+      periodStart: "",
+      periodEnd: "",
+      workDays: 0,
+      hirukinDays: 0,
+      yakinDays: 0,
+      weekendDays: 0,
+      hourlyRate: 0,
+      note: ""
     }, true);
     state.ui.selectedMonth = data.date.slice(0, 7);
     saveState();
@@ -3740,13 +3732,13 @@
         country: "japao",
         type: "income",
         title: source.name,
-        category: incomeSourceTypeMeta[source.type] || "Renda",
+        category: sourceTypeLabel(source),
         amount: number(item.amount),
         currency: item.currency || source.currency || "JPY",
         date: item.date,
         status: "Entrada",
         tone: "green",
-        meta: workIncomeMeta(item),
+        meta: "Pagamento recebido",
         kind: "income"
       };
     });
@@ -3877,18 +3869,42 @@
       type: "extra",
       color: "#42a67a",
       currency: "JPY",
-      hourlyRate: 0
+      hourlyRate: 0,
+      customType: ""
     };
   }
 
-  function workIncomeMeta(item) {
-    const parts = [];
-    if (item.workDays) parts.push(`${item.workDays} dias`);
-    if (item.hirukinDays) parts.push(`${item.hirukinDays} hirukin`);
-    if (item.yakinDays) parts.push(`${item.yakinDays} yakin`);
-    if (item.weekendDays) parts.push(`${item.weekendDays} fim semana`);
-    if (item.periodStart && item.periodEnd) parts.push(`${formatShortDate(item.periodStart)}-${formatShortDate(item.periodEnd)}`);
-    return parts.join(" - ") || item.note || "recebimento";
+  function normalizedSourceType(type) {
+    const value = String(type || "factory");
+    if (value === "salary") return "factory";
+    if (["factory", "amazon", "uber", "extra", "other"].includes(value)) return value;
+    return "other";
+  }
+
+  function sourceTypeLabel(source) {
+    const type = normalizedSourceType(source?.type);
+    if (type === "other") return source?.customType || "Outros";
+    return incomeSourceTypeMeta[type] || "Renda";
+  }
+
+  function updateIncomeSourceOtherField() {
+    const select = modalRoot.querySelector("#sourceType");
+    const field = modalRoot.querySelector(".other-source-field");
+    const input = modalRoot.querySelector("#sourceCustomType");
+    if (!select || !field || !input) return;
+    const show = select.value === "other";
+    field.classList.toggle("is-hidden", !show);
+    input.required = show;
+    if (!show) input.value = "";
+  }
+
+  function updateWorkIncomeCurrencyField() {
+    const sourceSelect = modalRoot.querySelector("#incomeSourceId");
+    const currencySelect = modalRoot.querySelector("#incomeCurrency");
+    if (!sourceSelect || !currencySelect) return;
+    const option = sourceSelect.selectedOptions?.[0];
+    const currency = option?.dataset?.currency;
+    if (currency) currencySelect.value = currency;
   }
 
   function vehicleMonthlyCosts(month) {
@@ -3966,11 +3982,11 @@
           country: "japao",
           type: "income",
           title: source.name,
-          category: incomeSourceTypeMeta[source.type] || "Renda",
+          category: sourceTypeLabel(source),
           amount: number(item.amount),
           currency: item.currency || source.currency || "JPY",
           date: item.date,
-          note: workIncomeMeta(item),
+          note: "Pagamento recebido",
           color: source.color,
           icon: "+"
         };
