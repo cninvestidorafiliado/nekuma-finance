@@ -42,6 +42,15 @@
     extra: "Renda Extra",
     other: "Outros"
   };
+  const commitmentCategoryMeta = {
+    imovel: "Imovel",
+    veiculo: "Veiculo",
+    governo: "Governo",
+    estudos: "Estudos",
+    diversao: "Diversao",
+    investimento: "Investimento",
+    other: "Outros"
+  };
   const cryptoCatalog = {
     BTC: { id: "bitcoin", name: "Bitcoin", color: "#f7931a" },
     ETH: { id: "ethereum", name: "Ethereum", color: "#627eea" },
@@ -173,6 +182,8 @@
     if (event.target.id === "import-file") importData(event.target.files[0]);
     if (event.target.id === "sourceType") updateIncomeSourceOtherField();
     if (event.target.id === "incomeSourceId") updateWorkIncomeCurrencyField();
+    if (event.target.id === "commitmentCategory") updateCommitmentCategoryField();
+    if (event.target.id === "commitmentType") updateCommitmentProviderField();
   });
 
   window.addEventListener("resize", debounce(drawVisibleCharts, 120));
@@ -1321,19 +1332,25 @@
       .filter((item) => item.active !== false)
       .filter((item) => inCountryScope(item.country))
       .filter((item) => isCommitmentDueInMonth(item, month))
-      .sort((a, b) => a.dueDay - b.dueDay);
+      .sort((a, b) => commitmentDateForMonth(a, month).localeCompare(commitmentDateForMonth(b, month)));
     const rows = (limit ? commitments.slice(0, limit) : commitments).map((item) => {
       const paid = isCommitmentPaid(item.id, month);
       const meta = typeMeta[item.type] || typeMeta.expense;
-      const dueDate = dateInMonth(month, item.dueDay);
+      const dueDate = commitmentDateForMonth(item, month);
       const dueState = dueStateForDate(dueDate, paid);
       const frequency = commitmentFrequencyLabel(item);
+      const details = [
+        countryMeta[item.country]?.label || "",
+        `vence ${formatShortDate(dueDate)}`,
+        frequency,
+        item.provider || item.category
+      ].filter(Boolean).join(" - ");
       return `
         <div class="list-row">
           <span class="row-icon ${paid ? "green" : dueState.tone || meta.tone}">${paid ? "OK" : meta.icon}</span>
           <div class="row-main">
             <p class="row-title">${escapeHtml(item.title)}</p>
-            <p class="row-meta">${countryMeta[item.country].label} - dia ${item.dueDay} - ${frequency} - ${escapeHtml(item.provider || item.category)}</p>
+            <p class="row-meta">${escapeHtml(details)}</p>
             <p class="row-meta">${dueState.label}${item.alertDays ? ` - alerta ${item.alertDays} dias antes` : ""}</p>
           </div>
             <div class="row-amount">
@@ -1867,6 +1884,8 @@
     if (first) first.focus();
     updateTransferPreview();
     updateIncomeSourceOtherField();
+    updateCommitmentCategoryField();
+    updateCommitmentProviderField();
   }
 
   function closeModal() {
@@ -1985,6 +2004,10 @@
   function renderCommitmentModal(item = null) {
     const activeCountry = item?.country || (state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry);
     const selectedCurrency = item?.currency || countryMeta[activeCountry].currency;
+    const commitmentType = item?.type || "expense";
+    const categoryKey = normalizedCommitmentCategory(item?.category);
+    const categoryCustom = categoryKey === "other" ? item?.category || "" : "";
+    const dueDate = commitmentDueDate(item);
     return `
       <div class="modal-head">
         <h2>${item ? "Editar conta fixa" : "Nova conta fixa"}</h2>
@@ -1997,37 +2020,43 @@
           <div class="field">
             <label for="commitmentType">Tipo</label>
             <select id="commitmentType" name="type">
-              <option value="expense" ${selectedAttr("expense", item?.type || "expense")}>Despesa</option>
-              <option value="debt" ${selectedAttr("debt", item?.type)}>Financiamento</option>
-              <option value="card" ${selectedAttr("card", item?.type)}>Cartao</option>
-              <option value="consortium" ${selectedAttr("consortium", item?.type)}>Consorcio</option>
-              <option value="investment" ${selectedAttr("investment", item?.type)}>Investimento</option>
+              <option value="expense" ${selectedAttr("expense", commitmentType)}>Despesa</option>
+              <option value="debt" ${selectedAttr("debt", commitmentType)}>Financiamento</option>
+              <option value="card" ${selectedAttr("card", commitmentType)}>Cartao</option>
+              <option value="consortium" ${selectedAttr("consortium", commitmentType)}>Consorcio</option>
+              <option value="investment" ${selectedAttr("investment", commitmentType)}>Investimento</option>
             </select>
           </div>
         </div>
         <div class="two-cols">
-          <div class="field">
+          <div class="field commitment-provider-field ${commitmentType === "expense" ? "is-hidden" : ""}">
             <label for="provider">Fornecedor</label>
-            <input id="provider" name="provider" required placeholder="Ex: Santander" value="${escapeAttr(item?.provider || "")}" />
+            <input id="provider" name="provider" ${commitmentType === "expense" ? "" : "required"} placeholder="Ex: Santander" value="${escapeAttr(item?.provider || "")}" />
           </div>
-          <div class="field">
+          <div class="field commitment-title-field ${commitmentType === "expense" ? "is-wide" : ""}">
             <label for="commitmentTitle">Nome</label>
-            <input id="commitmentTitle" name="title" required placeholder="Ex: Financiamento" value="${escapeAttr(item?.title || "")}" />
+            <input id="commitmentTitle" name="title" required placeholder="Ex: Luz, agua, gas" value="${escapeAttr(item?.title || "")}" />
           </div>
         </div>
         <div class="three-cols">
           <div class="field">
             <label for="commitmentCategory">Categoria</label>
-            <input id="commitmentCategory" name="category" required placeholder="Ex: Imovel" value="${escapeAttr(item?.category || "")}" />
+            <select id="commitmentCategory" name="categoryKey" required>
+              ${Object.entries(commitmentCategoryMeta).map(([key, label]) => `<option value="${key}" ${selectedAttr(key, categoryKey)}>${label}</option>`).join("")}
+            </select>
           </div>
           <div class="field">
             <label for="commitmentAmount">Valor</label>
             <input id="commitmentAmount" name="amount" required type="number" min="0" step="0.01" value="${item ? number(item.amount) : ""}" />
           </div>
           <div class="field">
-            <label for="dueDay">Vencimento</label>
-            <input id="dueDay" name="dueDay" required type="number" min="1" max="31" value="${item?.dueDay || ""}" />
+            <label for="dueDate">Vencimento</label>
+            <input id="dueDate" name="dueDate" required type="date" value="${escapeAttr(dueDate)}" />
           </div>
+        </div>
+        <div class="field commitment-category-other ${categoryKey === "other" ? "" : "is-hidden"}">
+          <label for="commitmentCategoryOther">Descreva a categoria</label>
+          <input id="commitmentCategoryOther" name="categoryOther" placeholder="Ex: Assinatura, saude, pets" value="${escapeAttr(categoryCustom)}" />
         </div>
         <div class="field">
           <label for="commitmentCurrency">Moeda</label>
@@ -2036,7 +2065,7 @@
             <option value="${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY", selectedCurrency)}>${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}</option>
           </select>
         </div>
-        <div class="three-cols">
+        <div class="two-cols">
           <div class="field">
             <label for="frequency">Frequencia</label>
             <select id="frequency" name="frequency">
@@ -2046,17 +2075,9 @@
             </select>
           </div>
           <div class="field">
-            <label for="startMonth">A partir de</label>
-            <input id="startMonth" name="startMonth" type="month" value="${escapeAttr(item?.startMonth || state.ui.selectedMonth)}" />
+            <label for="alertDays">Avisar quantos dias antes</label>
+            <input id="alertDays" name="alertDays" type="number" min="0" max="60" value="${item?.alertDays ?? 3}" />
           </div>
-          <div class="field">
-            <label for="endMonth">Ate</label>
-            <input id="endMonth" name="endMonth" type="month" value="${escapeAttr(item?.endMonth || "")}" />
-          </div>
-        </div>
-        <div class="field">
-          <label for="alertDays">Avisar quantos dias antes</label>
-          <input id="alertDays" name="alertDays" type="number" min="0" max="60" value="${item?.alertDays ?? 3}" />
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -2672,18 +2693,22 @@
   function saveCommitment(form) {
     const data = formData(form);
     const current = findItem("commitments", data.id);
+    const dueDate = data.dueDate || commitmentDueDate(current);
+    const dueDay = parseLocalDate(dueDate).getDate();
+    const type = data.type || "expense";
     const updated = upsertItem("commitments", data.id, {
       country: data.country,
-      provider: data.provider.trim(),
+      provider: type === "expense" ? "" : String(data.provider || "").trim(),
       title: data.title.trim(),
-      category: data.category.trim(),
-      type: data.type,
+      category: commitmentCategoryFromForm(data),
+      type,
       amount: number(data.amount),
       currency: data.currency,
-      dueDay: clamp(Math.round(number(data.dueDay)), 1, 31),
+      dueDate,
+      dueDay: clamp(dueDay, 1, 31),
       frequency: data.frequency || "monthly",
-      startMonth: data.startMonth || "",
-      endMonth: data.endMonth || "",
+      startMonth: dueDate.slice(0, 7),
+      endMonth: "",
       alertDays: clamp(Math.round(number(data.alertDays)), 0, 60),
       active: current?.active !== false
     });
@@ -2903,7 +2928,7 @@
     state.paidCommitments[key] = true;
     state.transactions.unshift({
       id: uid("tx"),
-      date: dateInMonth(state.ui.selectedMonth, item.dueDay),
+      date: commitmentDateForMonth(item, state.ui.selectedMonth),
       country: item.country,
       type: item.type,
       title: item.title,
@@ -3621,7 +3646,7 @@
       .filter((item) => isCommitmentDueInMonth(item, month))
       .map((item) => {
         const paid = isCommitmentPaid(item.id, month);
-        const dueDate = dateInMonth(month, item.dueDay || 1);
+        const dueDate = commitmentDateForMonth(item, month);
         const dueState = dueStateForDate(dueDate, paid);
         return {
           id: item.id,
@@ -3643,13 +3668,13 @@
 
   function isCommitmentDueInMonth(item, month) {
     const frequency = item.frequency || "monthly";
-    const startMonth = item.startMonth || "";
+    const startMonth = commitmentStartMonth(item);
     const endMonth = item.endMonth || "";
     if (startMonth && month < startMonth) return false;
     if (endMonth && month > endMonth) return false;
     if (frequency === "once") return startMonth ? month === startMonth : true;
     if (frequency === "yearly") {
-      const dueMonth = (startMonth || month).slice(5, 7);
+      const dueMonth = commitmentDueDate(item).slice(5, 7);
       return month.slice(5, 7) === dueMonth;
     }
     return true;
@@ -3660,6 +3685,43 @@
     if (frequency === "once") return "uma vez";
     if (frequency === "yearly") return "anual";
     return "mensal";
+  }
+
+  function commitmentCategoryFromForm(data) {
+    const categoryKey = normalizedCommitmentCategory(data.categoryKey);
+    if (categoryKey === "other") return String(data.categoryOther || "").trim() || "Outros";
+    return commitmentCategoryMeta[categoryKey] || "Outros";
+  }
+
+  function normalizedCommitmentCategory(category) {
+    const text = String(category || "").trim();
+    if (!text) return "imovel";
+    const normalized = normalizeLookupText(text);
+    const match = Object.entries(commitmentCategoryMeta).find(([key, label]) => (
+      key === normalized || normalizeLookupText(label) === normalized
+    ));
+    return match ? match[0] : "other";
+  }
+
+  function commitmentDueDate(item) {
+    if (item?.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(item.dueDate)) return item.dueDate;
+    const month = item?.startMonth || state.ui.selectedMonth || currentMonth();
+    const fallbackDay = item ? item.dueDay || 1 : new Date().getDate();
+    return dateInMonth(month, fallbackDay);
+  }
+
+  function commitmentStartMonth(item) {
+    if (item?.startMonth) return item.startMonth;
+    if (item?.dueDate) return item.dueDate.slice(0, 7);
+    return "";
+  }
+
+  function commitmentDateForMonth(item, month) {
+    const dueDate = commitmentDueDate(item);
+    const frequency = item?.frequency || "monthly";
+    if (frequency === "once" && item?.dueDate) return dueDate;
+    const dueDay = item?.dueDay || parseLocalDate(dueDate).getDate() || 1;
+    return dateInMonth(month, dueDay);
   }
 
   function plannedCardBillEntries(month, country) {
@@ -3896,6 +3958,29 @@
     field.classList.toggle("is-hidden", !show);
     input.required = show;
     if (!show) input.value = "";
+  }
+
+  function updateCommitmentCategoryField() {
+    const select = modalRoot.querySelector("#commitmentCategory");
+    const field = modalRoot.querySelector(".commitment-category-other");
+    const input = modalRoot.querySelector("#commitmentCategoryOther");
+    if (!select || !field || !input) return;
+    const show = select.value === "other";
+    field.classList.toggle("is-hidden", !show);
+    input.required = show;
+    if (!show) input.value = "";
+  }
+
+  function updateCommitmentProviderField() {
+    const select = modalRoot.querySelector("#commitmentType");
+    const field = modalRoot.querySelector(".commitment-provider-field");
+    const input = modalRoot.querySelector("#provider");
+    const titleField = modalRoot.querySelector(".commitment-title-field");
+    if (!select || !field || !input) return;
+    const show = select.value !== "expense";
+    field.classList.toggle("is-hidden", !show);
+    if (titleField) titleField.classList.toggle("is-wide", !show);
+    input.required = show;
   }
 
   function updateWorkIncomeCurrencyField() {
@@ -4240,6 +4325,14 @@
 
   function normalizeInviteCode(value) {
     return String(value || "").trim().replace(/\s+/g, "").toUpperCase();
+  }
+
+  function normalizeLookupText(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
   }
 
   function editableItem(type, id) {

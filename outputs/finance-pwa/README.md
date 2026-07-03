@@ -22,7 +22,7 @@ Esse servidor local e a senha basica sao apenas para teste no computador. Para f
 - Modo Global, Brasil e Japao.
 - Lancamentos por pais, moeda, categoria e mes.
 - Transferencias Wise com cotacao, taxa e valor recebido.
-- Contas recorrentes com frequencia mensal, anual ou unica, alerta e previsao no mes.
+- Contas recorrentes com categorias predefinidas, vencimento por data, frequencia mensal/anual/unica e alerta.
 - Financiamentos, consorcio, cartao e investimentos.
 - Meus Cartoes com identificacao Brasil/Japao, fechamento, vencimento, fatura e compras parceladas.
 - Calendario financeiro mensal com vencimentos, Wise, rendas, veiculo e cartoes.

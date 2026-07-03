@@ -1157,6 +1157,10 @@ canvas {
   gap: 6px;
 }
 
+.field.is-wide {
+  grid-column: 1 / -1;
+}
+
 .is-hidden {
   display: none !important;
 }
