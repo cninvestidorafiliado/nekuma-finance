@@ -414,9 +414,6 @@ h3 {
 }
 
 .fx-strip {
-  position: sticky;
-  top: 8px;
-  z-index: 8;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
@@ -1327,6 +1324,42 @@ canvas {
   font-weight: 950;
 }
 
+.add-hub-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.add-hub-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  min-height: 70px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.48);
+  text-align: left;
+}
+
+.add-hub-option strong,
+.add-hub-option small {
+  display: block;
+}
+
+.add-hub-option strong {
+  font-size: 0.95rem;
+}
+
+.add-hub-option small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
 .toast {
   position: fixed;
   right: 16px;
@@ -1415,6 +1448,10 @@ canvas {
 
   .modal-backdrop {
     place-items: center;
+  }
+
+  .add-hub-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

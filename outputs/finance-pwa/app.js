@@ -835,8 +835,8 @@
             <span class="status-pill">${state.settings.dataMode === "local" ? "Local" : "Online"}</span>
           </div>
           <div class="quick-actions">
-            <button class="quick-action accent" type="button" data-action="open-modal" data-modal="transaction">
-              <span aria-hidden="true">+</span> Lancamento
+            <button class="quick-action accent" type="button" data-action="open-modal" data-modal="addHub">
+              <span aria-hidden="true">+</span> Adicionar
             </button>
             <button class="quick-action" type="button" data-action="open-modal" data-modal="transfer">
               <span aria-hidden="true">W</span> Transferir Wise
@@ -1859,6 +1859,7 @@
 
   function openModal(type, id = "") {
     const map = {
+      addHub: renderAddHubModal,
       transaction: renderTransactionModal,
       transfer: renderTransferModal,
       commitment: renderCommitmentModal,
@@ -1892,11 +1893,44 @@
     modalRoot.innerHTML = "";
   }
 
+  function renderAddHubModal() {
+    const actions = [
+      { modal: "incomeSource", icon: "E", title: "Cadastro de Empresa", meta: "Fontes como fabrica, Amazon, Uber e renda extra" },
+      { modal: "workIncome", icon: "¥", title: "Cadastro de Pagamento", meta: "Recebimento ligado a uma empresa cadastrada" },
+      { modal: "vehicle", icon: "V", title: "Cadastrar veiculo", meta: "Carro do Japao, Shaken, seguro e dados principais" },
+      { modal: "creditCard", icon: "C", title: "Cadastrar cartao", meta: "Cartao do Brasil ou Japao com bandeira e vencimento" },
+      { modal: "crypto", icon: "B", title: "Cadastrar cripto", meta: "Quantidade comprada, custo e acompanhamento de cotacao" },
+      { modal: "commitment", icon: "F", title: "Cadastrar contas", meta: "Despesas fixas, financiamentos, consorcios e recorrencias" },
+      { modal: "investment", icon: "I", title: "Cadastrar investimentos", meta: "Instituicao, saldo atual e aporte mensal" },
+      { modal: "transaction", icon: "+", title: "Lancamento avulso", meta: "Entrada ou despesa unica fora dos cadastros acima" }
+    ];
+    return `
+      <div class="modal-head">
+        <h2>Adicionar</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <div class="add-hub-grid">
+        ${actions.map((item) => `
+          <button class="add-hub-option" type="button" data-action="open-modal" data-modal="${item.modal}">
+            <span class="row-icon">${item.icon}</span>
+            <span>
+              <strong>${escapeHtml(item.title)}</strong>
+              <small>${escapeHtml(item.meta)}</small>
+            </span>
+          </button>
+        `).join("")}
+      </div>
+    `;
+  }
+
   function renderTransactionModal(item = null) {
     const activeCountry = item?.country || (state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry);
     const currency = countryMeta[activeCountry].currency;
     const selectedCurrency = item?.currency || currency;
     const date = item?.date || dateInMonth(state.ui.selectedMonth, new Date().getDate());
+    const transactionType = item?.type || "expense";
+    const transactionTypes = ["expense", "income"];
+    if (item?.type && !transactionTypes.includes(item.type)) transactionTypes.push(item.type);
     return `
       <div class="modal-head">
         <h2>${item ? "Editar lancamento" : "Novo lancamento"}</h2>
@@ -1909,7 +1943,7 @@
           <div class="field">
             <label for="type">Tipo</label>
             <select id="type" name="type">
-              ${Object.entries(typeMeta).map(([key, meta]) => `<option value="${key}" ${selectedAttr(key, item?.type || "expense")}>${meta.label}</option>`).join("")}
+              ${transactionTypes.map((key) => `<option value="${key}" ${selectedAttr(key, transactionType)}>${typeMeta[key]?.label || key}</option>`).join("")}
             </select>
           </div>
         </div>
