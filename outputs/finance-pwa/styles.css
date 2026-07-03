@@ -743,6 +743,15 @@ canvas {
   gap: 8px;
 }
 
+.join-family-card {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px dashed rgba(49, 44, 81, 0.22);
+  border-radius: var(--radius);
+  background: rgba(255, 250, 244, 0.54);
+}
+
 .list-row {
   display: grid;
   grid-template-columns: auto 1fr auto;

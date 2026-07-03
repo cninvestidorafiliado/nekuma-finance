@@ -36,6 +36,7 @@ Esse servidor local e a senha basica sao apenas para teste no computador. Para f
 - Backup e importacao em JSON.
 - Dados salvos no navegador via `localStorage` quando o Supabase estiver desligado.
 - Modo Supabase ativo com login real e sincronizacao por familia.
+- Codigo de familia para convidar outro usuario e compartilhar os mesmos dados.
 - Cards de cotacao USD/BRL, USD/JPY e BTC/USD com atualizacao automatica.
 
 ## Publicar 24h online
@@ -93,4 +94,4 @@ Quando `url` e `anonKey` estiverem preenchidos, o app mostra a tela de login e s
 
 ## Multiusuario
 
-O schema cria uma familia (`households`) para cada primeiro login e salva os dados em `app_states`. As politicas RLS usam `household_members`, entao um usuario so acessa os dados das familias em que e membro.
+O schema cria uma familia (`households`) e salva os dados em `app_states`. Em **Ajustes > Nuvem**, o dono ve o codigo da familia. Outro usuario pode informar esse codigo no login, no cadastro ou em **Entrar em outra familia** para virar membro da mesma familia. As politicas RLS usam `household_members`, entao um usuario so acessa os dados das familias em que e membro.

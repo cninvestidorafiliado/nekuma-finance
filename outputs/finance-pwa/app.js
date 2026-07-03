@@ -2,6 +2,7 @@
   "use strict";
 
   const STORAGE_KEY = "ponte-financeira-state-v4";
+  const REMOTE_HOUSEHOLD_KEY = "ponte-financeira-household-id";
   const LEGACY_STORAGE_KEYS = ["ponte-financeira-state-v1", "ponte-financeira-state-v2"];
   const outflowTypes = ["expense", "debt", "card", "consortium", "vehicle"];
   const allOutflowTypes = ["expense", "debt", "card", "consortium", "investment", "vehicle"];
@@ -158,6 +159,7 @@
     if (formType === "work-income") saveWorkIncome(form);
     if (formType === "auth-login") signInRemote(form);
     if (formType === "auth-signup") signUpRemote(form);
+    if (formType === "join-family") joinFamilyFromForm(form);
     if (formType === "settings") saveSettings(form);
   });
 
@@ -223,10 +225,12 @@
       });
       if (error) throw error;
       remoteSession.user = authData.user;
-      await loadRemoteState(remoteSession.user?.user_metadata?.family_name);
+      const inviteCode = normalizeInviteCode(data.inviteCode);
+      if (inviteCode) await joinRemoteHouseholdByCode(inviteCode);
+      else await loadRemoteState(remoteSession.user?.user_metadata?.family_name);
       remoteSession.status = "ready";
       render();
-      showToast("Login realizado.");
+      showToast(inviteCode ? "Familia conectada." : "Login realizado.");
     } catch (error) {
       remoteSession.status = "signedOut";
       remoteSession.error = error.message || "Nao foi possivel entrar.";
@@ -251,16 +255,18 @@
       if (!authData.session?.user) {
         remoteSession.status = "signedOut";
         render();
-        showToast("Conta criada. Confirme o email para entrar.");
+        showToast("Conta criada. Confirme o email e depois entre com o codigo da familia.");
         return;
       }
 
       remoteSession.user = authData.user;
       state.settings.familyName = data.familyName.trim() || state.settings.familyName;
-      await loadRemoteState(state.settings.familyName);
+      const inviteCode = normalizeInviteCode(data.inviteCode);
+      if (inviteCode) await joinRemoteHouseholdByCode(inviteCode);
+      else await loadRemoteState(state.settings.familyName);
       remoteSession.status = "ready";
       render();
-      showToast("Conta criada.");
+      showToast(inviteCode ? "Conta criada e familia conectada." : "Conta criada.");
     } catch (error) {
       remoteSession.status = "signedOut";
       remoteSession.error = error.message || "Nao foi possivel criar a conta.";
@@ -281,21 +287,64 @@
     showToast("Voce saiu da conta.");
   }
 
+  async function joinFamilyFromForm(form) {
+    const data = formData(form);
+    const inviteCode = normalizeInviteCode(data.inviteCode);
+    if (!inviteCode) {
+      showToast("Informe o codigo da familia.");
+      return;
+    }
+
+    remoteSession.saving = true;
+    remoteSession.error = "";
+    render();
+    try {
+      if (remoteSession.householdId) await flushRemoteState();
+      await joinRemoteHouseholdByCode(inviteCode);
+      remoteSession.saving = false;
+      render();
+      showToast("Familia conectada.");
+    } catch (error) {
+      remoteSession.saving = false;
+      remoteSession.error = error.message || "Nao foi possivel conectar a familia.";
+      render();
+    }
+  }
+
+  async function joinRemoteHouseholdByCode(inviteCode) {
+    const code = normalizeInviteCode(inviteCode);
+    if (!code) throw new Error("Informe o codigo da familia.");
+    const { data, error } = await remoteStore.client.rpc("join_household_by_code", {
+      join_code: code
+    });
+    if (error) throw error;
+    rememberRemoteHousehold(data);
+    await loadRemoteStateForHousehold(data, false);
+  }
+
   async function ensureRemoteHousehold(familyName) {
     const preferredName = familyName || remoteSession.user?.user_metadata?.family_name || state.settings.familyName || "Familia";
+    const storedHouseholdId = rememberedRemoteHousehold();
+    if (storedHouseholdId) {
+      const storedHousehold = await fetchRemoteHousehold(storedHouseholdId);
+      if (storedHousehold) {
+        remoteSession.householdId = storedHousehold.id;
+        remoteSession.household = storedHousehold;
+        if (storedHousehold.name) state.settings.familyName = storedHousehold.name;
+        return storedHousehold.id;
+      }
+      forgetRemoteHousehold();
+    }
+
     const { data, error } = await remoteStore.client.rpc("ensure_default_household", {
       household_name: preferredName
     });
     if (error) throw error;
     remoteSession.householdId = data;
-    const household = await remoteStore.client
-      .from("households")
-      .select("id,name,invite_code")
-      .eq("id", data)
-      .maybeSingle();
-    if (household.error) throw household.error;
-    remoteSession.household = household.data;
-    if (household.data?.name === "Familia" && preferredName && preferredName !== "Familia") {
+    rememberRemoteHousehold(data);
+    const household = await fetchRemoteHousehold(data);
+    remoteSession.household = household;
+    if (household?.name === "Familia" && preferredName && preferredName !== "Familia") {
       await updateRemoteHouseholdName(preferredName);
     }
     if (remoteSession.household?.name) state.settings.familyName = remoteSession.household.name;
@@ -304,6 +353,16 @@
 
   async function loadRemoteState(familyName) {
     const householdId = await ensureRemoteHousehold(familyName);
+    await loadRemoteStateForHousehold(householdId, true);
+  }
+
+  async function loadRemoteStateForHousehold(householdId, createIfEmpty) {
+    const household = await fetchRemoteHousehold(householdId);
+    if (!household) throw new Error("Familia nao encontrada para este usuario.");
+    remoteSession.householdId = household.id;
+    remoteSession.household = household;
+    rememberRemoteHousehold(household.id);
+
     const { data, error } = await remoteStore.client
       .from("app_states")
       .select("state,updated_at")
@@ -313,12 +372,43 @@
 
     if (data?.state && Object.keys(data.state).length) {
       state = normalizeState(data.state);
+    } else if (!createIfEmpty) {
+      state = createInitialState();
     }
     state.settings.dataMode = "online";
     if (remoteSession.household?.name) state.settings.familyName = remoteSession.household.name;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     remoteSession.lastSyncedAt = data?.updated_at || null;
-    if (!data?.state || !Object.keys(data.state).length) await flushRemoteState();
+    if ((!data?.state || !Object.keys(data.state).length) && createIfEmpty) await flushRemoteState();
+  }
+
+  async function fetchRemoteHousehold(householdId) {
+    if (!householdId) return null;
+    const household = await remoteStore.client
+      .from("households")
+      .select("id,name,invite_code")
+      .eq("id", householdId)
+      .maybeSingle();
+    if (household.error) throw household.error;
+    return household.data || null;
+  }
+
+  function remoteHouseholdStorageKey() {
+    const userId = remoteSession.user?.id || "anonymous";
+    return `${REMOTE_HOUSEHOLD_KEY}:${userId}`;
+  }
+
+  function rememberRemoteHousehold(householdId) {
+    if (!householdId) return;
+    localStorage.setItem(remoteHouseholdStorageKey(), householdId);
+  }
+
+  function rememberedRemoteHousehold() {
+    return localStorage.getItem(remoteHouseholdStorageKey()) || "";
+  }
+
+  function forgetRemoteHousehold() {
+    localStorage.removeItem(remoteHouseholdStorageKey());
   }
 
   function scheduleRemoteSave() {
@@ -604,6 +694,10 @@
                 <label for="loginPassword">Senha</label>
                 <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
               </div>
+              <div class="field">
+                <label for="loginInviteCode">Codigo da familia</label>
+                <input id="loginInviteCode" name="inviteCode" inputmode="text" autocomplete="off" placeholder="Opcional para entrar na familia existente" />
+              </div>
               <button class="primary-button" type="submit">Entrar</button>
             </form>
           `}
@@ -619,7 +713,7 @@
             <form class="form-grid" data-form="auth-signup">
               <div class="field">
                 <label for="signupFamily">Nome da familia</label>
-                <input id="signupFamily" name="familyName" value="${escapeAttr(state.settings.familyName)}" required />
+                <input id="signupFamily" name="familyName" value="${escapeAttr(state.settings.familyName)}" placeholder="Use se estiver criando uma nova familia" />
               </div>
               <div class="field">
                 <label for="signupEmail">Email</label>
@@ -628,6 +722,10 @@
               <div class="field">
                 <label for="signupPassword">Senha</label>
                 <input id="signupPassword" name="password" type="password" autocomplete="new-password" minlength="6" required />
+              </div>
+              <div class="field">
+                <label for="signupInviteCode">Codigo da familia</label>
+                <input id="signupInviteCode" name="inviteCode" inputmode="text" autocomplete="off" placeholder="Opcional para entrar na familia existente" />
               </div>
               <button class="secondary-button" type="submit">Criar login</button>
             </form>
@@ -1235,10 +1333,17 @@
           <div class="list-row compact">
             <div>
               <p class="row-title">${escapeHtml(household.name || state.settings.familyName)}</p>
-              <p class="row-meta">Codigo da familia: ${escapeHtml(household.invite_code || "--")}</p>
+              <p class="row-meta">Compartilhe este codigo: ${escapeHtml(household.invite_code || "--")}</p>
             </div>
             <button class="small-action" type="button" data-action="remote-sync-now">Sincronizar</button>
           </div>
+          <form class="join-family-card" data-form="join-family">
+            <div class="field">
+              <label for="joinInviteCode">Entrar em outra familia</label>
+              <input id="joinInviteCode" name="inviteCode" inputmode="text" autocomplete="off" required placeholder="Cole aqui o codigo da familia" />
+            </div>
+            <button class="secondary-button" type="submit">Conectar familia</button>
+          </form>
           <div class="list-row compact">
             <div>
               <p class="row-title">Ultima sincronizacao</p>
@@ -4161,6 +4266,10 @@
 
   function formData(form) {
     return Object.fromEntries(new FormData(form).entries());
+  }
+
+  function normalizeInviteCode(value) {
+    return String(value || "").trim().replace(/\s+/g, "").toUpperCase();
   }
 
   function editableItem(type, id) {
