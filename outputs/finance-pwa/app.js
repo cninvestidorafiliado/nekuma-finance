@@ -4,6 +4,7 @@
   const STORAGE_KEY = "ponte-financeira-state-v4";
   const REMOTE_HOUSEHOLD_KEY = "ponte-financeira-household-id";
   const LEGACY_STORAGE_KEYS = ["ponte-financeira-state-v1", "ponte-financeira-state-v2"];
+  const PRIMARY_CURRENCY = "JPY";
   const outflowTypes = ["expense", "debt", "card", "consortium", "vehicle"];
   const allOutflowTypes = ["expense", "debt", "card", "consortium", "investment", "vehicle"];
   const countryMeta = {
@@ -109,6 +110,8 @@
     user: null,
     householdId: "",
     household: null,
+    householdMembers: [],
+    membersError: "",
     error: "",
     lastSyncedAt: null,
     saving: false
@@ -117,7 +120,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=23")
+      navigator.serviceWorker.register("./service-worker.js?v=32")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -135,12 +138,6 @@
     if (!button) return;
 
     const action = button.dataset.action;
-    if (action === "set-country") {
-      state.ui.activeCountry = button.dataset.country;
-      saveState();
-      render();
-    }
-
     if (action === "set-tab") {
       state.ui.activeTab = button.dataset.tab;
       saveState();
@@ -239,6 +236,7 @@
   }
 
   async function initApp() {
+    persistLocalState();
     if (!remoteStore.enabled) {
       render();
       return;
@@ -335,6 +333,8 @@
     remoteSession.user = null;
     remoteSession.householdId = "";
     remoteSession.household = null;
+    remoteSession.householdMembers = [];
+    remoteSession.membersError = "";
     remoteSession.error = "";
     render();
     showToast("Voce saiu da conta.");
@@ -415,6 +415,7 @@
     remoteSession.householdId = household.id;
     remoteSession.household = household;
     rememberRemoteHousehold(household.id);
+    await loadRemoteHouseholdMembers(household.id);
 
     const { data, error } = await remoteStore.client
       .from("app_states")
@@ -423,8 +424,12 @@
       .maybeSingle();
     if (error) throw error;
 
+    let shouldRewriteRemoteState = false;
     if (data?.state && Object.keys(data.state).length) {
-      state = normalizeState(data.state);
+      const remoteState = normalizeState(data.state);
+      const mergedCrypto = mergeCryptoAssetsWithLocal(remoteState.cryptoAssets, state.cryptoAssets);
+      shouldRewriteRemoteState = cryptoAssetsWereNormalized(data.state.cryptoAssets, remoteState.cryptoAssets) || mergedCrypto.changed;
+      state = { ...remoteState, cryptoAssets: mergedCrypto.items };
     } else if (!createIfEmpty) {
       state = createInitialState();
     }
@@ -432,7 +437,67 @@
     if (remoteSession.household?.name) state.settings.familyName = remoteSession.household.name;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     remoteSession.lastSyncedAt = data?.updated_at || null;
+    if (shouldRewriteRemoteState) await flushRemoteState();
     if ((!data?.state || !Object.keys(data.state).length) && createIfEmpty) await flushRemoteState();
+  }
+
+  async function loadRemoteHouseholdMembers(householdId = remoteSession.householdId) {
+    remoteSession.membersError = "";
+    remoteSession.householdMembers = [];
+    if (!remoteStore.enabled || !householdId) return;
+
+    try {
+      const rpc = await remoteStore.client.rpc("list_household_members", {
+        target_household_id: householdId
+      });
+      if (!rpc.error && Array.isArray(rpc.data)) {
+        remoteSession.householdMembers = normalizeRemoteMembers(rpc.data);
+        return;
+      }
+
+      const fallback = await remoteStore.client
+        .from("household_members")
+        .select("household_id,user_id,role,created_at")
+        .eq("household_id", householdId)
+        .order("created_at", { ascending: true });
+      if (fallback.error) throw fallback.error;
+      remoteSession.householdMembers = normalizeRemoteMembers(fallback.data || []);
+      if (rpc.error) remoteSession.membersError = "Aplique o SQL de membros para mostrar email e nome.";
+    } catch (error) {
+      remoteSession.membersError = error.message || "Nao foi possivel carregar membros.";
+      remoteSession.householdMembers = fallbackCurrentMember();
+    }
+  }
+
+  function normalizeRemoteMembers(items) {
+    const currentUserId = remoteSession.user?.id || "";
+    const currentEmail = remoteSession.user?.email || "";
+    return (items || []).map((item) => {
+      const userId = item.user_id || item.userId || item.id || "";
+      const isCurrentUser = Boolean(item.is_current_user || userId === currentUserId);
+      const email = item.email || (isCurrentUser ? currentEmail : "");
+      const displayName = item.display_name || item.displayName || item.name || email || (isCurrentUser ? "Voce" : `Membro ${String(userId).slice(0, 8)}`);
+      return {
+        userId,
+        email,
+        displayName,
+        role: item.role || "member",
+        joinedAt: item.joined_at || item.created_at || item.createdAt || "",
+        isCurrentUser
+      };
+    });
+  }
+
+  function fallbackCurrentMember() {
+    if (!remoteSession.user) return [];
+    return [{
+      userId: remoteSession.user.id,
+      email: remoteSession.user.email || "",
+      displayName: remoteSession.user.email || "Voce",
+      role: "member",
+      joinedAt: "",
+      isCurrentUser: true
+    }];
   }
 
   async function fetchRemoteHousehold(householdId) {
@@ -497,6 +562,7 @@
   async function syncRemoteNow() {
     try {
       await flushRemoteState();
+      await loadRemoteHouseholdMembers();
       render();
       showToast("Sincronizado.");
     } catch (error) {
@@ -531,7 +597,8 @@
 
   function normalizeState(raw) {
     const base = createInitialState();
-    return {
+    const cryptoQuotes = raw.cryptoQuotes || base.cryptoQuotes;
+    const normalized = {
       settings: { ...base.settings, ...(raw.settings || {}) },
       ui: { ...base.ui, ...(raw.ui || {}) },
       transactions: Array.isArray(raw.transactions) ? raw.transactions : base.transactions,
@@ -542,8 +609,8 @@
       creditCards: Array.isArray(raw.creditCards) ? raw.creditCards : base.creditCards,
       cardPurchases: Array.isArray(raw.cardPurchases) ? raw.cardPurchases : base.cardPurchases,
       subscriptions: Array.isArray(raw.subscriptions) ? raw.subscriptions : base.subscriptions,
-      cryptoAssets: Array.isArray(raw.cryptoAssets) ? raw.cryptoAssets : base.cryptoAssets,
-      cryptoQuotes: raw.cryptoQuotes || base.cryptoQuotes,
+      cryptoAssets: normalizeCryptoAssets(raw.cryptoAssets, base.cryptoAssets, cryptoQuotes),
+      cryptoQuotes,
       fxQuotes: raw.fxQuotes || base.fxQuotes,
       vehicle: { ...base.vehicle, ...(raw.vehicle || {}) },
       vehicleMaintenance: Array.isArray(raw.vehicleMaintenance) ? raw.vehicleMaintenance : base.vehicleMaintenance,
@@ -551,11 +618,74 @@
       workIncomes: Array.isArray(raw.workIncomes) ? raw.workIncomes : base.workIncomes,
       paidCommitments: raw.paidCommitments || {}
     };
+    normalized.settings.baseCurrency = PRIMARY_CURRENCY;
+    normalized.ui.activeCountry = "global";
+    return normalized;
   }
 
-  function saveState() {
+  function normalizeCryptoAssets(items, fallback = [], quotes = state?.cryptoQuotes) {
+    if (!Array.isArray(items)) return fallback;
+    return items.map((item) => ({
+      ...item,
+      symbol: String(item.symbol || "BTC").toUpperCase(),
+      quantity: normalizeCryptoQuantityText(item, quotes),
+      costAmount: number(item.costAmount),
+      costCurrency: item.costCurrency || PRIMARY_CURRENCY,
+      updatedAt: item.updatedAt || item.savedAt || ""
+    }));
+  }
+
+  function cryptoAssetsWereNormalized(rawItems, normalizedItems) {
+    if (!Array.isArray(rawItems) || !Array.isArray(normalizedItems)) return false;
+    return normalizedItems.some((item, index) => String(rawItems[index]?.quantity ?? "") !== String(item.quantity ?? ""));
+  }
+
+  function mergeCryptoAssetsWithLocal(remoteItems, localItems) {
+    const localById = new Map((localItems || []).map((item) => [item.id, item]));
+    let changed = false;
+    const merged = (remoteItems || []).map((remoteItem) => {
+      const localItem = localById.get(remoteItem.id);
+      if (shouldPreferLocalCryptoAsset(remoteItem, localItem)) {
+        changed = true;
+        return { ...remoteItem, ...localItem, quantity: normalizeCryptoQuantityText(localItem) };
+      }
+      return remoteItem;
+    });
+
+    (localItems || []).forEach((localItem) => {
+      if (localItem?.id && !merged.some((item) => item.id === localItem.id)) {
+        changed = true;
+        merged.push({ ...localItem, quantity: normalizeCryptoQuantityText(localItem) });
+      }
+    });
+
+    return { items: merged, changed };
+  }
+
+  function shouldPreferLocalCryptoAsset(remoteItem, localItem) {
+    if (!remoteItem || !localItem) return false;
+    const remoteTime = Date.parse(remoteItem.updatedAt || remoteItem.savedAt || "") || 0;
+    const localTime = Date.parse(localItem.updatedAt || localItem.savedAt || "") || 0;
+    if (localTime && localTime >= remoteTime) return true;
+    const remoteQuantity = cryptoQuantityNumber(remoteItem.quantity);
+    const localQuantity = cryptoQuantityNumber(localItem.quantity);
+    return localQuantity > 0 && localQuantity < 1 && remoteQuantity >= 1;
+  }
+
+  function saveState(options = {}) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (options.remoteNow) {
+      flushRemoteState().catch((error) => {
+        remoteSession.error = error.message || "Falha ao sincronizar.";
+        render();
+      });
+      return;
+    }
     scheduleRemoteSave();
+  }
+
+  function persistLocalState() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 
   function createInitialState() {
@@ -564,9 +694,8 @@
     return {
       settings: {
         familyName: "Familia",
-        baseCurrency: "JPY",
+        baseCurrency: PRIMARY_CURRENCY,
         defaultRate: 0.0352,
-        salaryDay: 25,
         dataMode: "local"
       },
       ui: {
@@ -692,7 +821,6 @@
     document.querySelectorAll(".nav-item").forEach((item) => {
       item.classList.toggle("is-active", item.dataset.tab === state.ui.activeTab);
     });
-    updateCountrySwitcher();
 
     requestAnimationFrame(drawVisibleCharts);
     scheduleFxRefresh(false);
@@ -707,22 +835,11 @@
         : `Hey, ${family}`;
     }
     if (countryContext) countryContext.textContent = countryContextLabel();
-    updateCountrySwitcher();
-  }
-
-  function updateCountrySwitcher() {
-    document.querySelectorAll(".country-chip").forEach((button) => {
-      const isActive = button.dataset.country === state.ui.activeCountry;
-      button.classList.toggle("is-active", isActive);
-      button.setAttribute("aria-selected", isActive ? "true" : "false");
-    });
   }
 
   function countryContextLabel() {
     if (remoteStore.enabled && remoteSession.status !== "ready") return "Acesso seguro";
-    if (state.ui.activeCountry === "brasil") return "Contas do Brasil";
-    if (state.ui.activeCountry === "japao") return "Contas do Japao";
-    return "Visao Global";
+    return "Global em ienes";
   }
 
   function renderAuthGate() {
@@ -871,32 +988,14 @@
   }
 
   function renderDashboard() {
-    const summary = summarizeMonth(state.ui.selectedMonth, state.ui.activeCountry);
-    const countryLabel = countryMeta[state.ui.activeCountry].label;
+    const summary = summarizeMonth(state.ui.selectedMonth, "global");
     const breathClass = summary.coverage > 20 ? "good" : "warn";
 
     return `
       <section class="dashboard-grid">
-        <div class="hero-panel">
-          <div class="hero-top">
-            <div>
-              <p class="hero-title">Saldo atual - ${countryLabel}</p>
-              <p class="hero-value">${formatMoney(summary.remaining, summary.currency)}</p>
-              <p class="hero-subvalue">${summaryLine(summary)}</p>
-            </div>
-            <span class="status-pill">${state.settings.dataMode === "local" ? "Local" : "Online"}</span>
-          </div>
-          <div class="quick-actions">
-            <button class="quick-action accent" type="button" data-action="open-modal" data-modal="addHub">
-              <span aria-hidden="true">+</span> Adicionar
-            </button>
-            <button class="quick-action" type="button" data-action="open-modal" data-modal="transfer">
-              <span aria-hidden="true">W</span> Transferir Wise
-            </button>
-            <button class="quick-action" type="button" data-action="open-modal" data-modal="workIncome">
-              <span aria-hidden="true">¥</span> Recebimento
-            </button>
-          </div>
+        <div class="hero-panel balance-hero">
+          <p class="hero-title">Saldo atual</p>
+          <p class="hero-value">${formatMoney(summary.remaining, summary.currency)}</p>
         </div>
 
         <div class="kpi-grid">
@@ -998,7 +1097,7 @@
           <h2>Ultimos lancamentos</h2>
           <button class="small-action ghost" type="button" data-action="set-tab" data-tab="accounts">Ver contas</button>
         </div>
-        ${renderTransactionList(monthLedgerEntries(state.ui.selectedMonth, state.ui.activeCountry).slice(0, 7))}
+          ${renderTransactionList(monthLedgerEntries(state.ui.selectedMonth, "global").slice(0, 7))}
       </section>
     `;
   }
@@ -1175,9 +1274,8 @@
   }
 
   function renderReports() {
-    const summary = summarizeMonth(state.ui.selectedMonth, state.ui.activeCountry);
-    const country = state.ui.activeCountry;
-    const scope = countryMeta[country].label;
+    const summary = summarizeMonth(state.ui.selectedMonth, "global");
+    const scope = "Global em ienes";
 
     return `
       <section class="content-panel">
@@ -1224,7 +1322,7 @@
         <article class="content-panel">
           <div class="panel-head">
             <h2>Categorias</h2>
-            <span class="chip gold">${countryMeta[country].short}</span>
+            <span class="chip gold">${countryMeta.global.short}</span>
           </div>
           <div class="chart-wrap"><canvas id="category-chart" aria-label="Gastos por categoria"></canvas></div>
         </article>
@@ -1259,6 +1357,7 @@
   }
 
   function renderSettings() {
+    const fx = currentFxQuoteInfo();
     return `
       <section class="content-panel">
         <div class="panel-head">
@@ -1272,22 +1371,28 @@
               <input id="familyName" name="familyName" value="${escapeAttr(state.settings.familyName)}" />
             </div>
             <div class="field">
-              <label for="salaryDay">Dia do salario</label>
-              <input id="salaryDay" name="salaryDay" type="number" min="1" max="31" value="${state.settings.salaryDay}" />
+              <label>Moeda principal</label>
+              <div class="readonly-field">JPY - Ienes</div>
+              <p class="row-meta">Padrao fixo para uso no Japao.</p>
             </div>
           </div>
-          <div class="two-cols">
-            <div class="field">
-              <label for="defaultRate">Cotacao padrao BRL por JPY</label>
-              <input id="defaultRate" name="defaultRate" type="number" min="0" step="0.0001" value="${state.settings.defaultRate}" />
+          <div class="settings-rate-card">
+            <div class="panel-head compact">
+              <h3>Cotacao automatica</h3>
+              <span class="chip ${fx.tone}">${escapeHtml(fx.status)}</span>
             </div>
-            <div class="field">
-              <label for="baseCurrency">Moeda global</label>
-              <select id="baseCurrency" name="baseCurrency">
-                <option value="JPY" ${state.settings.baseCurrency === "JPY" ? "selected" : ""}>JPY</option>
-                <option value="BRL" ${state.settings.baseCurrency === "BRL" ? "selected" : ""}>BRL</option>
-              </select>
+            <div class="settings-rate-grid">
+              <div class="readonly-field">
+                <span>Real por iene</span>
+                <strong>${fx.jpyBrl ? formatRate(fx.jpyBrl) : "--"}</strong>
+              </div>
+              <div class="readonly-field">
+                <span>Iene por real</span>
+                <strong>${fx.brlJpy ? formatYenPerReal(fx.brlJpy) : "--"}</strong>
+              </div>
             </div>
+            <p class="row-meta">${escapeHtml(fx.meta)}</p>
+            <button class="small-action ghost" type="button" data-action="refresh-fx">Atualizar cotacao</button>
           </div>
           <div class="form-actions">
             <button class="primary-button" type="submit">Salvar ajustes</button>
@@ -1364,6 +1469,7 @@
             </div>
             <button class="small-action" type="button" data-action="remote-sync-now">Sincronizar</button>
           </div>
+          ${renderHouseholdMembers()}
           <form class="join-family-card" data-form="join-family">
             <div class="field">
               <label for="joinInviteCode">Entrar em outra familia</label>
@@ -1381,6 +1487,33 @@
           ${remoteSession.error ? `<p class="auth-error">${escapeHtml(remoteSession.error)}</p>` : ""}
         </div>
       </section>
+    `;
+  }
+
+  function renderHouseholdMembers() {
+    const members = remoteSession.householdMembers || [];
+    const rows = members.length ? members : fallbackCurrentMember();
+    return `
+      <div class="family-members-card">
+        <div class="panel-head compact">
+          <h3>Usuarios da familia</h3>
+          <span class="chip blue">${rows.length}</span>
+        </div>
+        <div class="family-member-list">
+          ${rows.map((member) => `
+            <div class="family-member-row">
+              <span class="member-avatar">${memberInitials(member)}</span>
+              <div>
+                <p class="row-title">${escapeHtml(member.displayName || member.email || "Membro")}${member.isCurrentUser ? " (voce)" : ""}</p>
+                <p class="row-meta">${escapeHtml(member.email || member.userId || "Usuario vinculado")}</p>
+                <p class="row-meta">${member.joinedAt ? `Entrou em ${formatShortDate(member.joinedAt)}` : "Vinculo ativo"}</p>
+              </div>
+              <span class="chip ${member.role === "owner" ? "gold" : "green"}">${member.role === "owner" ? "Dono" : "Membro"}</span>
+            </div>
+          `).join("")}
+        </div>
+        ${remoteSession.membersError ? `<p class="row-meta">${escapeHtml(remoteSession.membersError)}</p>` : ""}
+      </div>
     `;
   }
 
@@ -1412,7 +1545,7 @@
             <p class="row-meta">${dueState.label}${item.alertDays ? ` - alerta ${item.alertDays} dias antes` : ""}</p>
           </div>
             <div class="row-amount">
-              ${formatMoney(item.amount, item.currency)}
+              ${formatMoneyWithPrimary(item.amount, item.currency, month)}
               <div class="chips" style="justify-content:flex-end;margin-top:6px">
                 <button class="small-action ${paid ? "ghost" : ""}" type="button" data-action="pay-commitment" data-id="${item.id}">${paid ? "Pago" : "Pagar"}</button>
                 ${limit ? "" : `<button class="small-action ghost" type="button" data-action="open-modal" data-modal="commitment" data-id="${item.id}">Editar</button>`}
@@ -1438,9 +1571,9 @@
             <div class="list-row compact">
               <div>
                 <p class="row-title">${escapeHtml(item.title)}</p>
-                <p class="row-meta">${countryMeta[item.country].label} · ${escapeHtml(item.provider)} · parcela ${formatMoney(item.installmentAmount, item.currency)}</p>
+                <p class="row-meta">${countryMeta[item.country].label} · ${escapeHtml(item.provider)} · parcela ${formatMoneyWithPrimary(item.installmentAmount, item.currency)}</p>
                 <div class="progress-track" aria-hidden="true"><div class="progress-fill" style="width:${progress}%"></div></div>
-                <p class="row-meta">${progress}% quitado · saldo ${formatMoney(item.outstandingAmount, item.currency)}</p>
+                <p class="row-meta">${progress}% quitado · saldo ${formatMoneyWithPrimary(item.outstandingAmount, item.currency)}</p>
               </div>
               <div class="row-actions">
                 <button class="small-action ghost" type="button" data-action="open-modal" data-modal="debt" data-id="${item.id}">Editar</button>
@@ -1466,8 +1599,8 @@
               <p class="row-meta">${countryMeta[item.country].label} · ${escapeHtml(item.provider)} · risco ${escapeHtml(item.risk)}</p>
             </div>
             <div class="row-amount">
-              ${formatMoney(item.currentAmount, item.currency)}
-              <p class="row-meta">+ ${formatMoney(item.monthlyContribution, item.currency)}/mes</p>
+              ${formatMoneyWithPrimary(item.currentAmount, item.currency)}
+              <p class="row-meta">+ ${formatMoneyWithPrimary(item.monthlyContribution, item.currency)}/mes</p>
               <div class="row-actions">
                 <button class="small-action ghost" type="button" data-action="open-modal" data-modal="investment" data-id="${item.id}">Editar</button>
                 <button class="small-action ghost" type="button" data-action="delete-investment" data-id="${item.id}">Excluir</button>
@@ -1483,58 +1616,22 @@
     const cards = state.creditCards || [];
     if (!cards.length) return `<p class="empty-state">Nenhum cartao cadastrado.</p>`;
     const visible = limit ? cards.slice(0, limit) : cards;
-    const activeIndex = normalizeCardCarouselIndex(visible.length);
-    const wallet = cardWalletSummary(cards);
-    const walletCountLabel = `${cards.length} cartao${cards.length === 1 ? "" : "es"} no mes`;
-    const walletSummary = `
-      <div class="wallet-total-glass">
-        <span>Total dos cartoes</span>
-        <strong>${formatMoney(wallet.total, wallet.currency)}</strong>
-        <small>${walletCountLabel}</small>
-      </div>
-    `;
-    const walletFullSummary = `
-      <div class="wallet-total-inline">
-        <span>Total dos cartoes</span>
-        <strong>${formatMoney(wallet.total, wallet.currency)}</strong>
-        <small>${walletCountLabel}</small>
-      </div>
-    `;
-    const controls = visible.length > 1 ? `
-      <div class="card-carousel-controls" aria-label="Navegar cartoes">
-        <button class="carousel-arrow" type="button" data-action="card-carousel-prev" data-total="${visible.length}" aria-label="Cartao anterior">‹</button>
-        <div class="carousel-dots" aria-label="Cartao ativo">
-          ${visible.map((item, index) => `
-            <button class="carousel-dot ${index === activeIndex ? "is-active" : ""}" type="button" data-action="card-carousel-select" data-index="${index}" data-total="${visible.length}" aria-label="Ver cartao ${index + 1}"></button>
-          `).join("")}
-        </div>
-        <button class="carousel-arrow" type="button" data-action="card-carousel-next" data-total="${visible.length}" aria-label="Proximo cartao">›</button>
-      </div>
-    ` : "";
 
     return `
-      <div class="cards-wallet cards-carousel ${limit ? "" : "with-actions"}">
-        ${limit ? "" : walletFullSummary}
-        <div class="card-carousel-stage">
-        ${visible.map((item, index) => {
+      <div class="cards-grid ${limit ? "compact" : "with-actions"}">
+        ${visible.map((item) => {
           const country = countryMeta[item.country] || countryMeta.japao;
           const bill = creditCardMonthBill(item, state.ui.selectedMonth);
           const paid = isCardBillPaid(item.id, state.ui.selectedMonth);
           const usage = item.limitAmount ? clamp(Math.round((bill.total / item.limitAmount) * 100), 0, 999) : 0;
-          const position = cardCarouselPosition(index, activeIndex, visible.length);
-          const sideAction = position === "is-next"
-            ? ` data-action="card-carousel-next" data-total="${visible.length}"`
-            : position === "is-prev"
-              ? ` data-action="card-carousel-prev" data-total="${visible.length}"`
-              : "";
           return `
-            <div class="credit-card-tile carousel-card ${position} ${item.country === "brasil" ? "br-card" : "jp-card"} ${cardVisualStyle(item)}"${sideAction} aria-hidden="${position === "is-hidden" ? "true" : "false"}">
+            <div class="credit-card-tile ${item.country === "brasil" ? "br-card" : "jp-card"} ${cardVisualStyle(item)}">
               <div class="flag-badge ${item.country === "brasil" ? "br" : "jp"}">${country.short}</div>
               <div class="card-brand">${escapeHtml(item.brand || "Credito")}</div>
               <p class="card-name">${escapeHtml(item.nickname || item.issuer)}</p>
               <p class="card-number">**** ${escapeHtml(item.last4 || "0000")}</p>
               <div class="card-foot">
-                <span>Fatura ${formatMoney(bill.total, item.currency)}</span>
+                <span>A pagar ${formatMoneyWithPrimary(bill.total, item.currency)}</span>
                 <span>${usage}%</span>
               </div>
               <div class="progress-track card-progress" aria-hidden="true"><div class="progress-fill" style="width:${clamp(usage, 0, 100)}%"></div></div>
@@ -1556,21 +1653,24 @@
             </div>
           `;
         }).join("")}
-        ${limit ? walletSummary : ""}
-        </div>
-        ${controls}
       </div>
     `;
   }
 
   function cardWalletSummary(cards) {
-    const currency = state.ui.activeCountry === "brasil" ? "BRL" : state.settings.baseCurrency || "JPY";
+    const currency = PRIMARY_CURRENCY;
     const rate = latestRate(state.ui.selectedMonth);
+    const originalTotals = new Map();
     const total = cards.reduce((sumValue, card) => {
       const bill = creditCardMonthBill(card, state.ui.selectedMonth);
+      if (bill.total > 0) originalTotals.set(card.currency, (originalTotals.get(card.currency) || 0) + bill.total);
       return sumValue + convert(bill.total, card.currency, currency, rate);
     }, 0);
-    return { total, currency };
+    const detail = Array.from(originalTotals.entries())
+      .filter(([originalCurrency, value]) => originalCurrency !== PRIMARY_CURRENCY && value > 0)
+      .map(([originalCurrency, value]) => `${formatMoney(value, originalCurrency)} (${formatMoney(convert(value, originalCurrency, PRIMARY_CURRENCY, rate), PRIMARY_CURRENCY)})`)
+      .join(" - ");
+    return { total, currency, detail };
   }
 
   function moveCardCarousel(delta, total) {
@@ -1615,13 +1715,12 @@
 
   function renderSubscriptionsPanel(limit) {
     const month = state.ui.selectedMonth;
-    const subscriptions = monthSubscriptions(month, state.ui.activeCountry);
+    const subscriptions = monthSubscriptions(month, "global");
     const visible = limit ? subscriptions.slice(0, limit) : subscriptions;
     const total = subscriptions.reduce((sumValue, item) => {
-      const currency = state.ui.activeCountry === "brasil" ? "BRL" : state.settings.baseCurrency || "JPY";
-      return sumValue + convert(item.amount, item.currency, currency, latestRate(month));
+      return sumValue + convert(item.amount, item.currency, PRIMARY_CURRENCY, latestRate(month));
     }, 0);
-    const totalCurrency = state.ui.activeCountry === "brasil" ? "BRL" : state.settings.baseCurrency || "JPY";
+    const totalCurrency = PRIMARY_CURRENCY;
 
     if (!subscriptions.length) {
       return `<p class="empty-state">Nenhuma subscricao cadastrada.</p>`;
@@ -1640,7 +1739,7 @@
               <button class="subscription-badge" type="button" data-action="open-modal" data-modal="subscription" data-id="${item.id}">
                 <span class="subscription-icon" style="background:${escapeAttr(meta.color)}">${escapeHtml(meta.icon)}</span>
                 <strong>${escapeHtml(subscriptionName(item))}</strong>
-                <small>${formatMoney(item.amount, item.currency)}</small>
+                <span class="subscription-value">${formatMoneyWithPrimary(item.amount, item.currency, month)}</span>
               </button>
             `;
           }).join("")}
@@ -1662,7 +1761,7 @@
                   <p class="row-meta">${countryMeta[item.country]?.label || ""} - vence dia ${item.dueDay || "--"} - ${escapeHtml(payment)}</p>
                 </div>
                 <div class="row-amount expense">
-                  ${formatMoney(item.amount, item.currency)}
+                  ${formatMoneyWithPrimary(item.amount, item.currency, month)}
                   <div class="row-actions">
                     <button class="small-action ghost" type="button" data-action="open-modal" data-modal="subscription" data-id="${item.id}">Editar</button>
                     <button class="small-action ghost" type="button" data-action="delete-subscription" data-id="${item.id}">Excluir</button>
@@ -1677,7 +1776,7 @@
   }
 
   function renderCardPurchasesList(limit) {
-    const rows = cardPurchaseRows(state.ui.selectedMonth, state.ui.activeCountry);
+    const rows = cardPurchaseRows(state.ui.selectedMonth, "global");
     if (!rows.length) return `<p class="empty-state">Nenhuma compra de cartao neste mes.</p>`;
     const visible = limit ? rows.slice(0, limit) : rows;
     return `
@@ -1695,7 +1794,7 @@
               <p class="row-meta">${escapeHtml(row.cardName)} - ${escapeHtml(row.category || "Cartao")} - compra ${formatShortDate(row.purchaseDate)}</p>
             </div>
             <div class="row-amount expense">
-              ${formatMoney(row.amount, row.currency)}
+              ${formatMoneyWithPrimary(row.amount, row.currency)}
               ${limit ? "" : `
                 <div class="row-actions">
                   <button class="small-action ghost" type="button" data-action="open-modal" data-modal="${editModal}" data-id="${row.id}">Editar</button>
@@ -1711,7 +1810,7 @@
   }
 
   function renderFinancialCalendar(limit) {
-    const items = financialCalendarItems(state.ui.selectedMonth, state.ui.activeCountry);
+    const items = financialCalendarItems(state.ui.selectedMonth, "global");
     if (!items.length) return `<p class="empty-state">Nenhum evento financeiro neste mes.</p>`;
     const visible = limit ? items.slice(0, limit) : items;
     return `
@@ -1729,7 +1828,7 @@
                 <p class="row-meta">${escapeHtml(item.meta)}</p>
               </div>
               <div class="calendar-amount ${item.kind === "income" ? "income" : "expense"}">
-                ${item.kind === "income" ? "+" : "-"} ${formatMoney(item.amount, item.currency)}
+                ${item.kind === "income" ? "+" : "-"} ${formatMoneyWithPrimary(item.amount, item.currency, item.date?.slice(0, 7) || state.ui.selectedMonth)}
                 <span class="chip ${item.tone}">${escapeHtml(item.status)}</span>
               </div>
             </div>
@@ -1757,28 +1856,39 @@
         <div class="crypto-donut-wrap">
           <canvas id="crypto-donut-chart" aria-label="Distribuicao da carteira cripto"></canvas>
           <div class="crypto-center">
-            <span>Total</span>
-            <strong>${formatMoney(summary.totalValue, summary.currency)}</strong>
-            <small class="${summary.pnl >= 0 ? "income" : "expense"}">${formatSignedMoney(summary.pnl, summary.currency)}</small>
+            <span>BTC total</span>
+            <strong>${formatCryptoAmount(summary.totalBtcQuantity)}</strong>
+            <small>${formatPercent(summary.btcProgressPct)} de 1 BTC</small>
           </div>
         </div>
-        <div class="crypto-side">
-          <div class="stat-strip crypto-stats">
-            <div class="stat-box">
-              <p class="mini-label">Investido</p>
-              <strong>${formatMoney(summary.totalCost, summary.currency)}</strong>
-            </div>
-            <div class="stat-box">
-              <p class="mini-label">Resultado</p>
-              <strong class="${summary.pnl >= 0 ? "income" : "expense"}">${summary.pnlPct}%</strong>
-            </div>
+
+        <div class="stat-strip crypto-stats">
+          <div class="stat-box">
+            <p class="mini-label">Investido</p>
+            <strong>${formatCryptoInvestedSummary(summary)}</strong>
           </div>
-          <div class="chips crypto-status">
-            <span class="chip ${status.tone}">${status.label}</span>
-            <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
+          <div class="stat-box">
+            <p class="mini-label">Resultado</p>
+            <strong>${formatPercent(summary.btcProgressPct)}</strong>
+            <p class="row-meta">${formatCryptoAmount(summary.totalBtcQuantity)} BTC</p>
           </div>
-          ${renderCryptoAssetsList()}
         </div>
+
+        <div class="crypto-value-card">
+          <div class="panel-head compact">
+            <h3>Investido x valor atual</h3>
+            <span class="chip ${summary.pnl >= 0 ? "green" : "red"}">${summary.pnl >= 0 ? "Valorizado" : "Desvalorizado"}</span>
+          </div>
+          <canvas id="crypto-value-chart" aria-label="Comparativo entre investimento e valor atual"></canvas>
+          <p class="row-meta ${summary.pnl >= 0 ? "income" : "expense"}">${formatSignedMoney(summary.pnl, summary.currency)} (${formatPercent(summary.pnlPct)})</p>
+        </div>
+
+        <div class="chips crypto-status">
+          <span class="chip ${status.tone}">${status.label}</span>
+          <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
+        </div>
+
+        ${renderCryptoAssetsList()}
       </div>
     `;
   }
@@ -1789,15 +1899,37 @@
     return `
       <div class="list crypto-list">
         ${rows.map((item) => `
-          <div class="list-row crypto-row">
-            <span class="row-icon" style="background:${item.color}">${escapeHtml(item.symbol.slice(0, 1))}</span>
-            <div class="row-main">
-              <p class="row-title">${escapeHtml(item.name)}</p>
-              <p class="row-meta">${formatCryptoAmount(item.quantity)} ${escapeHtml(item.symbol)} - preco ${formatMoney(item.price, item.currency)}</p>
+          <div class="crypto-entry-card">
+            <div class="crypto-entry-head">
+              <span class="row-icon" style="background:${item.color}">${escapeHtml(item.symbol.slice(0, 1))}</span>
+              <div>
+                <p class="row-title">${escapeHtml(item.name)}</p>
+                <p class="row-meta">${escapeHtml(item.provider)}</p>
+              </div>
+              <span class="chip ${item.pnl >= 0 ? "green" : "red"}">${item.pnl >= 0 ? "Valorizou" : "Desvalorizou"}</span>
             </div>
-            <div class="row-amount ${item.pnl >= 0 ? "income" : "expense"}">
-              ${formatMoney(item.value, item.currency)}
-              <p class="row-meta">${formatSignedMoney(item.pnl, item.currency)}</p>
+
+            <div class="crypto-entry-grid">
+              <div>
+                <span>Quantidade</span>
+                <strong>${formatCryptoAmount(item.quantity)} ${escapeHtml(item.symbol)}</strong>
+              </div>
+              <div>
+                <span>Comprado</span>
+                <strong>${formatMoneyWithPrimary(item.rawCost, item.costCurrency, item.purchaseDate?.slice(0, 7) || state.ui.selectedMonth)}</strong>
+              </div>
+              <div>
+                <span>Valor atual</span>
+                <strong>${formatMoney(item.value, item.currency)}</strong>
+              </div>
+              <div>
+                <span>Desde a compra</span>
+                <strong class="${item.pnl >= 0 ? "income" : "expense"}">${formatSignedMoney(item.pnl, item.currency)} (${formatPercent(item.pnlPct)})</strong>
+              </div>
+            </div>
+
+            <div class="crypto-entry-actions">
+              <p class="row-meta">Comprado em ${formatShortDate(item.purchaseDate)}</p>
               <div class="row-actions">
                 <button class="small-action ghost" type="button" data-action="open-modal" data-modal="crypto" data-id="${item.id}">Editar</button>
                 <button class="small-action ghost" type="button" data-action="delete-crypto" data-id="${item.id}">Excluir</button>
@@ -1890,7 +2022,7 @@
                 <p class="row-meta">${formatShortDate(item.date)} - ${escapeHtml(sourceTypeLabel(source))} - ${item.currency || source.currency || "JPY"}</p>
               </div>
               <div class="row-amount income">
-                + ${formatMoney(item.amount, item.currency)}
+                + ${formatMoneyWithPrimary(item.amount, item.currency || source.currency || PRIMARY_CURRENCY, item.date?.slice(0, 7) || state.ui.selectedMonth)}
                 <div class="row-actions">
                   <button class="small-action ghost" type="button" data-action="open-modal" data-modal="workIncome" data-id="${item.id}">Editar</button>
                   <button class="small-action ghost" type="button" data-action="delete-work-income" data-id="${item.id}">Excluir</button>
@@ -1948,7 +2080,7 @@
                 <p class="row-meta">${formatShortDate(item.date)} - ${escapeHtml(item.location || "local nao informado")} - ${escapeHtml(item.paymentMethod || "pagamento")}</p>
               </div>
               <div class="row-amount expense">
-                ${formatMoney(item.amount, item.currency || "JPY")}
+                ${formatMoneyWithPrimary(item.amount, item.currency || PRIMARY_CURRENCY, item.date?.slice(0, 7) || state.ui.selectedMonth)}
                 ${limit ? "" : `
                   <div class="row-actions">
                     <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicleMaintenance" data-id="${item.id}">Editar</button>
@@ -1975,7 +2107,7 @@
               <p class="row-title">${escapeHtml(item.title)}</p>
               <p class="row-meta">${formatShortDate(item.date)} - ${escapeHtml(item.note || item.category)}</p>
             </div>
-            <div class="row-amount expense">${formatMoney(item.amount, item.currency)}</div>
+            <div class="row-amount expense">${formatMoneyWithPrimary(item.amount, item.currency, item.date?.slice(0, 7) || state.ui.selectedMonth)}</div>
           </div>
         `).join("")}
       </div>
@@ -2000,7 +2132,7 @@
                 <p class="row-meta">${formatShortDate(item.date)} · ${countryMeta[item.country].label} · ${escapeHtml(item.category)}</p>
               </div>
               <div class="row-amount ${isIncome ? "income" : "expense"}">
-                ${isIncome ? "+" : "-"} ${formatMoney(item.amount, item.currency)}
+                ${isIncome ? "+" : "-"} ${formatMoneyWithPrimary(item.amount, item.currency, item.date?.slice(0, 7) || state.ui.selectedMonth)}
                 ${editModal || deleteAction ? `
                   <div class="row-actions">
                     ${editModal ? `<button class="small-action ghost" type="button" data-action="open-modal" data-modal="${editModal}" data-id="${item.id}">Editar</button>` : ""}
@@ -2677,13 +2809,13 @@
           </div>
           <div class="field">
             <label for="cryptoQuantity">Quantidade</label>
-            <input id="cryptoQuantity" name="quantity" required type="number" min="0" step="0.00000001" placeholder="0.01" value="${item ? number(item.quantity) : ""}" />
+            <input id="cryptoQuantity" name="quantity" required type="text" inputmode="decimal" placeholder="0.00027018" value="${item ? formatCryptoInputValue(item.quantity) : ""}" />
           </div>
         </div>
         <div class="three-cols">
           <div class="field">
             <label for="cryptoCost">Valor comprado</label>
-            <input id="cryptoCost" name="costAmount" required type="number" min="0" step="0.01" value="${item ? number(item.costAmount) : ""}" />
+            <input id="cryptoCost" name="costAmount" required type="text" inputmode="decimal" value="${item ? formatPlainNumber(item.costAmount) : ""}" />
           </div>
           <div class="field">
             <label for="cryptoCurrency">Moeda da compra</label>
@@ -2698,8 +2830,12 @@
           </div>
         </div>
         <div class="field">
+          <label for="cryptoProvider">Banco ou corretora</label>
+          <input id="cryptoProvider" name="provider" value="${escapeAttr(item?.provider || item?.note || "")}" placeholder="Ex: Nubank, Binance, Mercado Bitcoin" />
+        </div>
+        <div class="field">
           <label for="cryptoNote">Observacao</label>
-          <textarea id="cryptoNote" name="note" placeholder="Ex: compra na Binance">${escapeHtml(item?.note || "")}</textarea>
+          <textarea id="cryptoNote" name="note" placeholder="Observacao opcional">${escapeHtml(item?.note || "")}</textarea>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -3126,13 +3262,15 @@
     const symbol = String(data.symbol || "BTC").toUpperCase();
     const updated = upsertItem("cryptoAssets", data.id, {
       symbol,
-      quantity: number(data.quantity),
+      quantity: cryptoQuantityText(data.quantity),
       costAmount: number(data.costAmount),
       costCurrency: data.costCurrency,
       purchaseDate: data.purchaseDate || dateInMonth(state.ui.selectedMonth, new Date().getDate()),
-      note: data.note.trim()
+      provider: data.provider.trim(),
+      note: data.note.trim(),
+      updatedAt: new Date().toISOString()
     });
-    saveState();
+    saveState({ remoteNow: true });
     closeModal();
     render();
     refreshCryptoQuotes(true);
@@ -3224,9 +3362,7 @@
   function saveSettings(form) {
     const data = formData(form);
     state.settings.familyName = data.familyName.trim() || "Familia";
-    state.settings.salaryDay = clamp(Math.round(number(data.salaryDay)), 1, 31);
-    state.settings.defaultRate = number(data.defaultRate) || state.settings.defaultRate;
-    state.settings.baseCurrency = data.baseCurrency;
+    state.settings.baseCurrency = PRIMARY_CURRENCY;
     saveState();
     updateRemoteHouseholdName(state.settings.familyName).catch((error) => {
       remoteSession.error = error.message || "Falha ao atualizar familia.";
@@ -3364,6 +3500,8 @@
     if (country) drawCountryChart(country);
     const crypto = document.getElementById("crypto-donut-chart");
     if (crypto) drawCryptoDonutChart(crypto);
+    const cryptoValue = document.getElementById("crypto-value-chart");
+    if (cryptoValue) drawCryptoValueChart(cryptoValue);
   }
 
   function drawTrendChart(canvas) {
@@ -3372,7 +3510,7 @@
     const height = canvas.clientHeight;
     const months = recentMonthsFrom(state.ui.selectedMonth, 6);
     const series = months.map((month) => {
-      const s = summarizeMonth(month, state.ui.activeCountry);
+      const s = summarizeMonth(month, "global");
       return {
         label: shortMonthLabel(month),
         income: Math.max(0, s.income + s.bridgeIn),
@@ -3415,7 +3553,7 @@
     const ctx = prepCanvas(canvas);
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
-    const data = categoryTotals(state.ui.selectedMonth, state.ui.activeCountry);
+    const data = categoryTotals(state.ui.selectedMonth, "global");
     const maxValue = Math.max(1, ...data.map((item) => item.value));
     const top = 28;
     const left = 92;
@@ -3490,32 +3628,58 @@
     const ctx = prepCanvas(canvas);
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
-    const rows = cryptoAssetRows();
-    const total = rows.reduce((amount, item) => amount + item.value, 0);
+    const summary = cryptoSummary();
+    const progress = clamp(summary.totalBtcQuantity, 0, 1);
     const centerX = width / 2;
     const centerY = height / 2;
     const radius = Math.min(width, height) * 0.34;
-    let start = -Math.PI / 2;
 
     ctx.clearRect(0, 0, width, height);
     ctx.lineWidth = Math.max(16, radius * 0.22);
     ctx.lineCap = "round";
 
-    if (!rows.length || !total) {
-      ctx.beginPath();
-      ctx.strokeStyle = "#ded4c4";
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-      ctx.stroke();
-      return;
-    }
+    ctx.beginPath();
+    ctx.strokeStyle = "#ded4c4";
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.stroke();
 
-    rows.forEach((item) => {
-      const slice = (item.value / total) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.strokeStyle = item.color;
-      ctx.arc(centerX, centerY, radius, start + 0.04, start + slice - 0.04);
-      ctx.stroke();
-      start += slice;
+    if (!summary.totalBtcQuantity) return;
+
+    ctx.beginPath();
+    ctx.strokeStyle = cryptoCatalog.BTC.color;
+    ctx.arc(centerX, centerY, radius, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function drawCryptoValueChart(canvas) {
+    const ctx = prepCanvas(canvas);
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const summary = cryptoSummary();
+    const maxValue = Math.max(1, summary.totalCost, summary.totalValue);
+    const left = 82;
+    const right = 18;
+    const barH = 18;
+    const rows = [
+      ["Investido", summary.totalCost, "#f5c84c"],
+      ["Atual", summary.totalValue, summary.pnl >= 0 ? "#42a67a" : "#d95d4e"]
+    ];
+
+    ctx.clearRect(0, 0, width, height);
+    rows.forEach((row, index) => {
+      const [label, value, color] = row;
+      const y = 18 + index * 38;
+      const barW = ((width - left - right) * value) / maxValue;
+      ctx.fillStyle = "#312c51";
+      ctx.font = "850 12px system-ui";
+      ctx.textAlign = "left";
+      ctx.fillText(label, 10, y + 14);
+      roundRect(ctx, left, y, width - left - right, barH, 7, "rgba(49, 44, 81, 0.1)");
+      roundRect(ctx, left, y, Math.max(4, barW), barH, 7, color);
+      ctx.fillStyle = "#766f62";
+      ctx.font = "800 11px system-ui";
+      ctx.textAlign = "right";
+      ctx.fillText(formatCompact(value, summary.currency), width - right, y + 14);
     });
   }
 
@@ -3702,36 +3866,64 @@
   }
 
   function cryptoSummary() {
-    const currency = state.settings.baseCurrency || "JPY";
+    const currency = PRIMARY_CURRENCY;
     const rows = cryptoAssetRows(currency);
     const totalValue = sum(rows, "value");
     const totalCost = sum(rows, "cost");
+    const totalQuantity = sum(rows, "quantity");
+    const totalBtcQuantity = rows
+      .filter((item) => item.symbol === "BTC")
+      .reduce((total, item) => total + item.quantity, 0);
     const pnl = totalValue - totalCost;
     const pnlPct = totalCost ? round((pnl / totalCost) * 100, 2) : 0;
-    return { currency, totalValue, totalCost, pnl, pnlPct };
+    const btcProgressPct = round(totalBtcQuantity * 100, 8);
+    const originalCosts = rows.reduce((items, row) => {
+      const current = items.get(row.costCurrency) || 0;
+      items.set(row.costCurrency, current + row.rawCost);
+      return items;
+    }, new Map());
+    return {
+      currency,
+      totalValue,
+      totalCost,
+      totalQuantity,
+      totalBtcQuantity,
+      btcProgressPct,
+      pnl,
+      pnlPct,
+      originalCosts: Array.from(originalCosts.entries()).map(([costCurrency, amount]) => ({ currency: costCurrency, amount }))
+    };
   }
 
-  function cryptoAssetRows(currency = state.settings.baseCurrency || "JPY") {
+  function cryptoAssetRows(currency = PRIMARY_CURRENCY) {
     const rate = latestRate(state.ui.selectedMonth);
     return (state.cryptoAssets || []).map((item) => {
       const symbol = String(item.symbol || "BTC").toUpperCase();
       const meta = cryptoCatalog[symbol] || { name: symbol, color: "#f5c84c" };
-      const quantity = number(item.quantity);
-      const cost = convert(number(item.costAmount), item.costCurrency || currency, currency, rate);
+      const quantity = cryptoQuantityNumber(item.quantity);
+      const rawCost = number(item.costAmount);
+      const costCurrency = item.costCurrency || currency;
+      const cost = convert(rawCost, costCurrency, currency, rate);
       const average = quantity ? cost / quantity : 0;
       const price = cryptoPrice(symbol, currency) || average;
       const value = price * quantity;
       const pnl = value - cost;
+      const pnlPct = cost ? round((pnl / cost) * 100, 2) : 0;
       return {
         id: item.id,
         symbol,
         name: meta.name,
         color: meta.color,
         quantity,
+        rawCost,
+        costCurrency,
         cost,
         price,
         value,
         pnl,
+        pnlPct,
+        provider: item.provider || item.note || "Banco/corretora nao informado",
+        purchaseDate: item.purchaseDate || dateInMonth(state.ui.selectedMonth, 1),
         currency
       };
     }).sort((a, b) => b.value - a.value);
@@ -4575,10 +4767,26 @@
   }
 
   function latestRate(month = state.ui.selectedMonth) {
+    const liveRate = Number(state.fxQuotes?.jpyBrl || 0);
+    if (liveRate > 0 && state.fxQuotes?.status === "ok") return liveRate;
     const previous = state.transfers
       .filter((item) => item.rate && (!month || item.date.slice(0, 7) <= month))
       .sort((a, b) => b.date.localeCompare(a.date))[0];
     return previous ? Number(previous.rate) : Number(state.settings.defaultRate || 0.035);
+  }
+
+  function currentFxQuoteInfo() {
+    const liveRate = Number(state.fxQuotes?.jpyBrl || 0);
+    const rate = liveRate || latestRate(state.ui.selectedMonth);
+    const source = liveRate ? state.fxQuotes?.source || "Mercado" : "Ultima Wise cadastrada";
+    const updated = liveRate && state.fxQuotes?.updatedAt ? `Atualizada ${formatTime(state.fxQuotes.updatedAt)}` : "Sem cotacao online recente";
+    return {
+      jpyBrl: rate,
+      brlJpy: rate ? 1 / rate : 0,
+      status: liveRate ? "Online" : "Fallback",
+      tone: liveRate ? "green" : "gold",
+      meta: `${source} - ${updated}. Transferencias Wise continuam salvando a cotacao real usada.`
+    };
   }
 
   function summaryLine(summary) {
@@ -4626,6 +4834,14 @@
     return value;
   }
 
+  function formatMoneyWithPrimary(value, currency, month = state.ui.selectedMonth) {
+    const originalCurrency = currency || PRIMARY_CURRENCY;
+    const original = formatMoney(value, originalCurrency);
+    if (originalCurrency === PRIMARY_CURRENCY) return original;
+    const converted = convert(value, originalCurrency, PRIMARY_CURRENCY, latestRate(month));
+    return `${original} <small class="money-converted">(${formatMoney(converted, PRIMARY_CURRENCY)})</small>`;
+  }
+
   function formatMoney(value, currency) {
     const amount = Number(value || 0);
     const locale = currency === "JPY" ? "ja-JP" : "pt-BR";
@@ -4644,11 +4860,57 @@
     return `${sign} ${formatMoney(Math.abs(amount), currency)}`;
   }
 
+  function formatCryptoInvestedSummary(summary) {
+    const totals = summary.originalCosts || [];
+    const nonPrimary = totals.filter((item) => item.currency !== PRIMARY_CURRENCY && item.amount > 0);
+    const primary = totals.find((item) => item.currency === PRIMARY_CURRENCY);
+
+    if (nonPrimary.length === 1 && (!primary || !primary.amount)) {
+      const item = nonPrimary[0];
+      return `${formatMoney(item.amount, item.currency)} <small class="money-converted">(${formatMoney(summary.totalCost, PRIMARY_CURRENCY)})</small>`;
+    }
+
+    if (!nonPrimary.length) return formatMoney(summary.totalCost, PRIMARY_CURRENCY);
+
+    const detail = nonPrimary
+      .map((item) => formatMoney(item.amount, item.currency))
+      .join(" + ");
+    return `${formatMoney(summary.totalCost, PRIMARY_CURRENCY)} <small class="money-converted">${detail}</small>`;
+  }
+
   function formatCryptoAmount(value) {
+    const amount = cryptoQuantityNumber(value);
     return new Intl.NumberFormat("pt-BR", {
       maximumFractionDigits: 8,
       minimumFractionDigits: 0
-    }).format(Number(value || 0));
+    }).format(amount);
+  }
+
+  function formatCryptoInputValue(value) {
+    const amount = cryptoQuantityNumber(value);
+    if (!amount) return "";
+    return amount.toLocaleString("en-US", {
+      maximumFractionDigits: 12,
+      useGrouping: false
+    });
+  }
+
+  function formatPlainNumber(value) {
+    const amount = Number(value || 0);
+    if (!amount) return "";
+    return amount.toLocaleString("en-US", {
+      maximumFractionDigits: 8,
+      useGrouping: false
+    });
+  }
+
+  function formatPercent(value) {
+    const amount = Number(value || 0);
+    const digits = Math.abs(amount) < 1 && amount !== 0 ? 4 : 2;
+    return `${new Intl.NumberFormat("pt-BR", {
+      maximumFractionDigits: digits,
+      minimumFractionDigits: 0
+    }).format(amount)}%`;
   }
 
   function formatCompact(value, currency) {
@@ -4677,6 +4939,10 @@
     }).format(Number(value || 0));
   }
 
+  function formatYenPerReal(value) {
+    return `${formatYenRate(value)} / R$1`;
+  }
+
   function formatUsdRate(value) {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -4684,6 +4950,15 @@
       maximumFractionDigits: 2,
       minimumFractionDigits: 2
     }).format(Number(value || 0));
+  }
+
+  function memberInitials(member) {
+    const source = member.displayName || member.email || "Membro";
+    const parts = String(source).replace(/@.*/, "").split(/\s+/).filter(Boolean);
+    const letters = parts.length > 1
+      ? `${parts[0][0] || ""}${parts[1][0] || ""}`
+      : String(parts[0] || "M").slice(0, 2);
+    return letters.toUpperCase();
   }
 
   function formatMonthLabel(month) {
@@ -4698,9 +4973,15 @@
     return new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(new Date(year, monthIndex - 1, 1)).replace(".", "");
   }
 
-  function formatShortDate(date) {
-    const [year, month, day] = date.split("-").map(Number);
-    return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(new Date(year, month - 1, day));
+  function formatShortDate(value) {
+    if (!value) return "--";
+    const text = String(value);
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const date = match
+      ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+      : new Date(text);
+    if (Number.isNaN(date.getTime())) return "--";
+    return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(date);
   }
 
   function formatCalendarDay(date) {
@@ -4847,8 +5128,110 @@
     return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
   }
 
+  function cryptoQuantityNumber(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw) return 0;
+    const negative = raw.startsWith("-");
+    let text = raw.replace(/[^\d,.]/g, "");
+    if (!text) return 0;
+
+    const commaIndex = text.lastIndexOf(",");
+    const dotIndex = text.lastIndexOf(".");
+    if (commaIndex !== -1 && dotIndex !== -1) {
+      const decimalSeparator = commaIndex > dotIndex ? "," : ".";
+      const groupSeparator = decimalSeparator === "," ? "." : ",";
+      text = text.replaceAll(groupSeparator, "");
+      if (decimalSeparator === ",") text = text.replace(",", ".");
+    } else if (commaIndex !== -1) {
+      text = text.replace(",", ".");
+    }
+
+    const firstDot = text.indexOf(".");
+    if (firstDot !== -1) {
+      text = `${text.slice(0, firstDot + 1)}${text.slice(firstDot + 1).replaceAll(".", "")}`;
+    }
+
+    const parsed = Number(`${negative ? "-" : ""}${text}`);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function cryptoQuantityText(value) {
+    const amount = cryptoQuantityNumber(value);
+    if (!amount) return "0";
+    return amount.toLocaleString("en-US", {
+      maximumFractionDigits: 12,
+      useGrouping: false
+    });
+  }
+
+  function normalizeCryptoQuantityText(itemOrValue, quotes = state?.cryptoQuotes) {
+    if (!itemOrValue || typeof itemOrValue !== "object") return cryptoQuantityText(itemOrValue);
+    let amount = cryptoQuantityNumber(itemOrValue.quantity);
+    const symbol = String(itemOrValue.symbol || "BTC").toUpperCase();
+    const expected = expectedCryptoQuantity(itemOrValue, symbol, quotes);
+    if (symbol === "BTC" && expected > 0 && amount > expected * 5) {
+      amount = closestScaledCryptoQuantity(amount, expected);
+    }
+    return cryptoQuantityText(amount);
+  }
+
+  function expectedCryptoQuantity(item, symbol, quotes) {
+    const costAmount = number(item.costAmount);
+    const costCurrency = item.costCurrency || PRIMARY_CURRENCY;
+    if (!costAmount) return 0;
+    const price = Number(quotes?.prices?.[symbol]?.[costCurrency] || fallbackCryptoPrice(symbol, costCurrency));
+    return price > 0 ? costAmount / price : 0;
+  }
+
+  function fallbackCryptoPrice(symbol, currency) {
+    if (symbol !== "BTC") return 0;
+    if (currency === "BRL") return 350000;
+    if (currency === "JPY") return 10000000;
+    if (currency === "USD") return 65000;
+    return 0;
+  }
+
+  function closestScaledCryptoQuantity(amount, expected) {
+    let best = amount;
+    let bestScore = cryptoScaleScore(amount, expected);
+    for (let divisor = 10; divisor <= 10000000000; divisor *= 10) {
+      const candidate = amount / divisor;
+      const score = cryptoScaleScore(candidate, expected);
+      if (score < bestScore) {
+        best = candidate;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
+
+  function cryptoScaleScore(value, expected) {
+    if (value <= 0 || expected <= 0) return Number.POSITIVE_INFINITY;
+    return Math.abs(Math.log(value / expected));
+  }
+
   function number(value) {
-    return Number(String(value || "0").replace(",", "."));
+    const raw = String(value ?? "").trim();
+    if (!raw) return 0;
+    let text = raw.replace(/[^\d,.\-]/g, "");
+    const hasComma = text.includes(",");
+    const hasDot = text.includes(".");
+
+    if (hasComma && hasDot) {
+      text = text.lastIndexOf(",") > text.lastIndexOf(".")
+        ? text.replaceAll(".", "").replace(",", ".")
+        : text.replaceAll(",", "");
+    } else if (hasComma) {
+      const parts = text.split(",");
+      const decimalLike = parts.length === 2 && (parts[1].length !== 3 || /^-?0$/.test(parts[0]));
+      text = decimalLike ? `${parts[0]}.${parts[1]}` : text.replaceAll(",", "");
+    } else if (hasDot) {
+      const parts = text.split(".");
+      if (parts.length > 2) text = parts.join("");
+    }
+
+    const parsed = Number(text);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   function sum(items, key) {
