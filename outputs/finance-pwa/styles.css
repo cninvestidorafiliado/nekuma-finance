@@ -798,6 +798,112 @@ canvas {
     rgba(255, 250, 240, 0.82);
 }
 
+.housing-panel {
+  background:
+    linear-gradient(135deg, rgba(240, 195, 142, 0.18), rgba(66, 166, 122, 0.08)),
+    rgba(255, 250, 240, 0.82);
+}
+
+.housing-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.housing-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(49, 44, 81, 0.12);
+  border-radius: var(--radius);
+  background: rgba(255, 250, 244, 0.74);
+}
+
+.housing-card-head,
+.housing-total,
+.housing-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.housing-card-head h3 {
+  margin: 2px 0 0;
+  font-size: 1rem;
+}
+
+.housing-total {
+  padding: 10px;
+  border: 1px solid rgba(49, 44, 81, 0.08);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.housing-total span,
+.housing-total small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.housing-total strong {
+  color: #2f7f5f;
+  font-size: 1.22rem;
+  font-weight: 950;
+  text-align: center;
+}
+
+.housing-items {
+  display: grid;
+  gap: 8px;
+}
+
+.housing-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.housing-item.is-paid {
+  opacity: 0.72;
+}
+
+.housing-form-list {
+  display: grid;
+  gap: 10px;
+}
+
+.housing-form-row {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.8fr) repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 250, 244, 0.62);
+}
+
+.housing-service-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  color: var(--ink-2);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.small-action:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
 .vehicle-card {
   display: flex;
   align-items: center;
@@ -2065,6 +2171,22 @@ canvas {
   }
 
   .list-row.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .housing-card-head,
+  .housing-total,
+  .housing-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .housing-item {
+    grid-template-columns: auto 1fr;
+    align-items: start;
+  }
+
+  .housing-form-row {
     grid-template-columns: 1fr;
   }
 

@@ -92,6 +92,8 @@ window.PONTE_SUPABASE_CONFIG = {
 
 Quando `url` e `anonKey` estiverem preenchidos, o app mostra a tela de login e salva o estado da familia na tabela `app_states`. Sem essa configuracao, ele continua funcionando localmente.
 
+Se o Supabase mostrar `new row violates row-level security policy for table "app_states"`, rode `supabase-app-state-rls-fix.sql` no SQL Editor. Ele recria a politica RLS do estado da familia e adiciona a funcao segura `save_app_state`.
+
 ## Multiusuario
 
 O schema cria uma familia (`households`) e salva os dados em `app_states`. Em **Ajustes > Nuvem**, o dono ve o codigo da familia. Outro usuario pode informar esse codigo no login, no cadastro ou em **Entrar em outra familia** para virar membro da mesma familia. As politicas RLS usam `household_members`, entao um usuario so acessa os dados das familias em que e membro.

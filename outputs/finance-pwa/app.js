@@ -5,6 +5,13 @@
   const REMOTE_HOUSEHOLD_KEY = "ponte-financeira-household-id";
   const LEGACY_STORAGE_KEYS = ["ponte-financeira-state-v1", "ponte-financeira-state-v2"];
   const PRIMARY_CURRENCY = "JPY";
+  const DEFAULT_SECONDARY_CURRENCY = "BRL";
+  const supportedCurrencies = {
+    JPY: { label: "JPY - Ienes", locale: "ja-JP", fraction: 0 },
+    BRL: { label: "BRL - Real", locale: "pt-BR", fraction: 2 },
+    USD: { label: "USD - Dolar", locale: "en-US", fraction: 2 },
+    EUR: { label: "EUR - Euro", locale: "de-DE", fraction: 2 }
+  };
   const outflowTypes = ["expense", "debt", "card", "consortium", "vehicle"];
   const allOutflowTypes = ["expense", "debt", "card", "consortium", "investment", "vehicle"];
   const countryMeta = {
@@ -32,9 +39,23 @@
     cardPurchases: "cp",
     subscriptions: "su",
     cryptoAssets: "cr",
+    housingCards: "hc",
     vehicleMaintenance: "vm",
     incomeSources: "is",
     workIncomes: "wi"
+  };
+  const housingItemTemplates = [
+    { key: "rent", label: "Aluguel", icon: "A" },
+    { key: "electricity", label: "Luz", icon: "L" },
+    { key: "gas", label: "Gas", icon: "G" },
+    { key: "water", label: "Agua", icon: "W" },
+    { key: "internet", label: "Internet", icon: "I" }
+  ];
+  const housingPaymentMethodMeta = {
+    bank: "Conta/debito",
+    pix: "Pix",
+    cash: "Dinheiro",
+    card: "Cartao"
   };
   const incomeSourceTypeMeta = {
     factory: "Fabrica",
@@ -120,7 +141,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=32")
+      navigator.serviceWorker.register("./service-worker.js?v=36")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -161,6 +182,7 @@
     if (action === "open-modal") openModal(button.dataset.modal, button.dataset.id);
     if (action === "close-modal") closeModal();
     if (action === "pay-commitment") payCommitment(button.dataset.id);
+    if (action === "pay-housing-item") payHousingItem(button.dataset.id, button.dataset.itemKey);
     if (action === "pay-card-bill") payCardBill(button.dataset.id);
     if (action === "delete-transaction") deleteItem("transactions", button.dataset.id, "Lancamento removido.");
     if (action === "delete-transfer") deleteItem("transfers", button.dataset.id, "Transferencia removida.");
@@ -171,6 +193,7 @@
     if (action === "delete-card-purchase") deleteItem("cardPurchases", button.dataset.id, "Compra removida.");
     if (action === "delete-subscription") deleteItem("subscriptions", button.dataset.id, "Subscricao removida.");
     if (action === "delete-crypto") deleteItem("cryptoAssets", button.dataset.id, "Cripto removida.");
+    if (action === "delete-housing-card") deleteItem("housingCards", button.dataset.id, "Moradia removida.");
     if (action === "delete-vehicle-maintenance") deleteItem("vehicleMaintenance", button.dataset.id, "Manutencao removida.");
     if (action === "delete-income-source") deleteItem("incomeSources", button.dataset.id, "Empresa removida.");
     if (action === "delete-work-income") deleteItem("workIncomes", button.dataset.id, "Recebimento removido.");
@@ -197,6 +220,7 @@
     if (formType === "card-purchase") saveCardPurchase(form);
     if (formType === "subscription") saveSubscription(form);
     if (formType === "crypto") saveCryptoAsset(form);
+    if (formType === "housing-card") saveHousingCard(form);
     if (formType === "vehicle") saveVehicle(form);
     if (formType === "vehicle-maintenance") saveVehicleMaintenance(form);
     if (formType === "income-source") saveIncomeSource(form);
@@ -545,22 +569,42 @@
     clearTimeout(remoteSaveTimer);
     remoteSession.saving = true;
     const now = new Date().toISOString();
-    const payload = {
-      household_id: remoteSession.householdId,
-      state: { ...state, settings: { ...state.settings, dataMode: "online" } },
-      updated_by: remoteSession.user.id,
-      updated_at: now
-    };
-    const { error } = await remoteStore.client
-      .from("app_states")
-      .upsert(payload, { onConflict: "household_id" });
-    remoteSession.saving = false;
-    if (error) throw error;
-    remoteSession.lastSyncedAt = now;
+    const nextState = { ...state, settings: { ...state.settings, dataMode: "online" } };
+
+    try {
+      const { data, error } = await remoteStore.client.rpc("save_app_state", {
+        target_household_id: remoteSession.householdId,
+        app_state: nextState
+      });
+
+      if (error) {
+        const rpcMissing = error.code === "PGRST202" || /save_app_state/i.test(error.message || "");
+        if (!rpcMissing) throw error;
+
+        const fallback = await remoteStore.client
+          .from("app_states")
+          .upsert({
+            household_id: remoteSession.householdId,
+            state: nextState,
+            updated_by: remoteSession.user.id,
+            updated_at: now
+          }, { onConflict: "household_id" });
+        if (fallback.error) throw fallback.error;
+        remoteSession.lastSyncedAt = now;
+        return;
+      }
+
+      remoteSession.lastSyncedAt = data || now;
+    } finally {
+      remoteSession.saving = false;
+    }
   }
 
   async function syncRemoteNow() {
     try {
+      if (remoteSession.householdId) {
+        await loadRemoteStateForHousehold(remoteSession.householdId, false);
+      }
       await flushRemoteState();
       await loadRemoteHouseholdMembers();
       render();
@@ -598,8 +642,11 @@
   function normalizeState(raw) {
     const base = createInitialState();
     const cryptoQuotes = raw.cryptoQuotes || base.cryptoQuotes;
+    const settings = { ...base.settings, ...(raw.settings || {}) };
+    settings.baseCurrency = sanitizeCurrency(settings.baseCurrency, PRIMARY_CURRENCY);
+    settings.secondaryCurrency = sanitizeSecondaryCurrency(settings.secondaryCurrency, settings.baseCurrency);
     const normalized = {
-      settings: { ...base.settings, ...(raw.settings || {}) },
+      settings,
       ui: { ...base.ui, ...(raw.ui || {}) },
       transactions: Array.isArray(raw.transactions) ? raw.transactions : base.transactions,
       transfers: Array.isArray(raw.transfers) ? raw.transfers : base.transfers,
@@ -609,7 +656,8 @@
       creditCards: Array.isArray(raw.creditCards) ? raw.creditCards : base.creditCards,
       cardPurchases: Array.isArray(raw.cardPurchases) ? raw.cardPurchases : base.cardPurchases,
       subscriptions: Array.isArray(raw.subscriptions) ? raw.subscriptions : base.subscriptions,
-      cryptoAssets: normalizeCryptoAssets(raw.cryptoAssets, base.cryptoAssets, cryptoQuotes),
+      cryptoAssets: normalizeCryptoAssets(raw.cryptoAssets, base.cryptoAssets, cryptoQuotes, settings.baseCurrency),
+      housingCards: normalizeHousingCards(raw.housingCards, settings.baseCurrency),
       cryptoQuotes,
       fxQuotes: raw.fxQuotes || base.fxQuotes,
       vehicle: { ...base.vehicle, ...(raw.vehicle || {}) },
@@ -618,19 +666,18 @@
       workIncomes: Array.isArray(raw.workIncomes) ? raw.workIncomes : base.workIncomes,
       paidCommitments: raw.paidCommitments || {}
     };
-    normalized.settings.baseCurrency = PRIMARY_CURRENCY;
     normalized.ui.activeCountry = "global";
     return normalized;
   }
 
-  function normalizeCryptoAssets(items, fallback = [], quotes = state?.cryptoQuotes) {
+  function normalizeCryptoAssets(items, fallback = [], quotes = state?.cryptoQuotes, fallbackCurrency = primaryCurrency()) {
     if (!Array.isArray(items)) return fallback;
     return items.map((item) => ({
       ...item,
       symbol: String(item.symbol || "BTC").toUpperCase(),
       quantity: normalizeCryptoQuantityText(item, quotes),
       costAmount: number(item.costAmount),
-      costCurrency: item.costCurrency || PRIMARY_CURRENCY,
+      costCurrency: sanitizeCurrency(item.costCurrency, fallbackCurrency),
       updatedAt: item.updatedAt || item.savedAt || ""
     }));
   }
@@ -638,6 +685,39 @@
   function cryptoAssetsWereNormalized(rawItems, normalizedItems) {
     if (!Array.isArray(rawItems) || !Array.isArray(normalizedItems)) return false;
     return normalizedItems.some((item, index) => String(rawItems[index]?.quantity ?? "") !== String(item.quantity ?? ""));
+  }
+
+  function normalizeHousingCards(items, fallbackCurrency = PRIMARY_CURRENCY) {
+    if (!Array.isArray(items)) return [];
+    return items.map((item) => {
+      const currency = sanitizeCurrency(item.currency, fallbackCurrency);
+      return {
+        ...item,
+        id: item.id || uid("hc"),
+        name: String(item.name || "Moradia").trim(),
+        country: countryMeta[item.country] ? item.country : "japao",
+        currency,
+        active: item.active !== false,
+        items: normalizeHousingItems(item.items, currency)
+      };
+    });
+  }
+
+  function normalizeHousingItems(items, fallbackCurrency = PRIMARY_CURRENCY) {
+    const byKey = new Map((Array.isArray(items) ? items : []).map((item) => [item.key, item]));
+    return housingItemTemplates.map((template) => {
+      const item = byKey.get(template.key) || {};
+      return {
+        key: template.key,
+        label: item.label || template.label,
+        active: item.active !== false,
+        amount: number(item.amount),
+        currency: sanitizeCurrency(item.currency, fallbackCurrency),
+        dueDay: item.dueDay ? clamp(Math.round(number(item.dueDay)), 1, 31) : 1,
+        paymentMethod: housingPaymentMethodMeta[item.paymentMethod] ? item.paymentMethod : "bank",
+        cardId: item.cardId || ""
+      };
+    });
   }
 
   function mergeCryptoAssetsWithLocal(remoteItems, localItems) {
@@ -695,6 +775,7 @@
       settings: {
         familyName: "Familia",
         baseCurrency: PRIMARY_CURRENCY,
+        secondaryCurrency: DEFAULT_SECONDARY_CURRENCY,
         defaultRate: 0.0352,
         dataMode: "local"
       },
@@ -712,6 +793,7 @@
       creditCards: [],
       cardPurchases: [],
       subscriptions: [],
+      housingCards: [],
       cryptoAssets: [],
       cryptoQuotes: {
         prices: {},
@@ -722,6 +804,9 @@
         usdBrl: 0,
         jpyBrl: 0,
         usdJpy: 0,
+        usdEur: 0,
+        eurBrl: 0,
+        eurJpy: 0,
         btcUsd: 0,
         source: "",
         ratesDate: "",
@@ -839,7 +924,7 @@
 
   function countryContextLabel() {
     if (remoteStore.enabled && remoteSession.status !== "ready") return "Acesso seguro";
-    return "Global em ienes";
+    return `Global em ${primaryCurrency()}`;
   }
 
   function renderAuthGate() {
@@ -995,23 +1080,23 @@
       <section class="dashboard-grid">
         <div class="hero-panel balance-hero">
           <p class="hero-title">Saldo atual</p>
-          <p class="hero-value">${formatMoney(summary.remaining, summary.currency)}</p>
+          <p class="hero-value">${formatMoneyWithPrimary(summary.remaining, summary.currency)}</p>
         </div>
 
         <div class="kpi-grid">
           <article class="metric-card good">
             <p class="metric-label">Entradas</p>
-            <p class="metric-value">${formatMoney(summary.income + summary.bridgeIn, summary.currency)}</p>
+            <p class="metric-value">${formatMoneyWithPrimary(summary.income + summary.bridgeIn, summary.currency)}</p>
             <p class="metric-foot">${summary.bridgeIn ? "Inclui Wise recebido" : "Receitas do mes"}</p>
           </article>
           <article class="metric-card warn">
             <p class="metric-label">Saidas</p>
-            <p class="metric-value">${formatMoney(summary.expenses + summary.investments + summary.wiseOut + summary.fees, summary.currency)}</p>
+            <p class="metric-value">${formatMoneyWithPrimary(summary.expenses + summary.investments + summary.wiseOut + summary.fees, summary.currency)}</p>
             <p class="metric-foot">Pagas e abertas no mes</p>
           </article>
           <article class="metric-card">
             <p class="metric-label">Wise</p>
-            <p class="metric-value">${formatMoney(summary.wiseDisplay, summary.currency)}</p>
+            <p class="metric-value">${formatMoneyWithPrimary(summary.wiseDisplay, summary.currency)}</p>
             <p class="metric-foot">${summary.wiseLabel}</p>
           </article>
           <article class="metric-card ${breathClass}">
@@ -1028,6 +1113,14 @@
           <span class="chip gold">${formatMonthLabel(state.ui.selectedMonth)}</span>
         </div>
         ${renderFinancialCalendar(8)}
+      </section>
+
+      <section class="content-panel housing-panel">
+        <div class="panel-head">
+          <h2>Moradia</h2>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="housingCard">Nova moradia</button>
+        </div>
+        ${renderHousingPanel(2)}
       </section>
 
       <section class="split-grid">
@@ -1150,6 +1243,14 @@
           </div>
           ${renderCryptoPanel()}
         </article>
+      </section>
+
+      <section class="content-panel housing-panel">
+        <div class="panel-head">
+          <h2>Moradia</h2>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="housingCard">Nova moradia</button>
+        </div>
+        ${renderHousingPanel(null)}
       </section>
 
       <section class="content-panel">
@@ -1275,7 +1376,7 @@
 
   function renderReports() {
     const summary = summarizeMonth(state.ui.selectedMonth, "global");
-    const scope = "Global em ienes";
+    const scope = `Global em ${primaryCurrency()}`;
 
     return `
       <section class="content-panel">
@@ -1286,19 +1387,19 @@
         <div class="stat-strip">
           <div class="stat-box">
             <p class="mini-label">Entradas</p>
-            <strong>${formatMoney(summary.income + summary.bridgeIn, summary.currency)}</strong>
+            <strong>${formatMoneyWithPrimary(summary.income + summary.bridgeIn, summary.currency)}</strong>
           </div>
           <div class="stat-box">
             <p class="mini-label">Saidas</p>
-            <strong>${formatMoney(summary.expenses + summary.investments + summary.wiseOut + summary.fees, summary.currency)}</strong>
+            <strong>${formatMoneyWithPrimary(summary.expenses + summary.investments + summary.wiseOut + summary.fees, summary.currency)}</strong>
           </div>
           <div class="stat-box">
             <p class="mini-label">Investido</p>
-            <strong>${formatMoney(summary.investments, summary.currency)}</strong>
+            <strong>${formatMoneyWithPrimary(summary.investments, summary.currency)}</strong>
           </div>
           <div class="stat-box">
             <p class="mini-label">Saldo atual</p>
-            <strong>${formatMoney(summary.remaining, summary.currency)}</strong>
+            <strong>${formatMoneyWithPrimary(summary.remaining, summary.currency)}</strong>
           </div>
         </div>
       </section>
@@ -1331,7 +1432,7 @@
       <section class="content-panel">
         <div class="panel-head">
           <h2>Brasil x Japao</h2>
-          <span class="chip green">Convertido em JPY</span>
+          <span class="chip green">Convertido em ${primaryCurrency()}</span>
         </div>
         <div class="chart-wrap"><canvas id="country-chart" aria-label="Comparativo entre paises"></canvas></div>
       </section>
@@ -1371,10 +1472,19 @@
               <input id="familyName" name="familyName" value="${escapeAttr(state.settings.familyName)}" />
             </div>
             <div class="field">
-              <label>Moeda principal</label>
-              <div class="readonly-field">JPY - Ienes</div>
-              <p class="row-meta">Padrao fixo para uso no Japao.</p>
+              <label for="baseCurrency">Moeda principal</label>
+              <select id="baseCurrency" name="baseCurrency">
+                ${currencyOptions(primaryCurrency())}
+              </select>
+              <p class="row-meta">Usada nos saldos, graficos e relatorios.</p>
             </div>
+          </div>
+          <div class="field">
+            <label for="secondaryCurrency">Moeda secundaria</label>
+            <select id="secondaryCurrency" name="secondaryCurrency">
+              ${currencyOptions(secondaryCurrency())}
+            </select>
+            <p class="row-meta">Aparece entre parenteses como comparativo. Nao pode ser igual a principal.</p>
           </div>
           <div class="settings-rate-card">
             <div class="panel-head compact">
@@ -1389,6 +1499,14 @@
               <div class="readonly-field">
                 <span>Iene por real</span>
                 <strong>${fx.brlJpy ? formatYenPerReal(fx.brlJpy) : "--"}</strong>
+              </div>
+              <div class="readonly-field">
+                <span>Real por dolar</span>
+                <strong>${fx.usdBrl ? formatUsdPerReal(fx.usdBrl) : "--"}</strong>
+              </div>
+              <div class="readonly-field">
+                <span>Real por euro</span>
+                <strong>${fx.eurBrl ? formatEuroPerReal(fx.eurBrl) : "--"}</strong>
               </div>
             </div>
             <p class="row-meta">${escapeHtml(fx.meta)}</p>
@@ -1658,7 +1776,7 @@
   }
 
   function cardWalletSummary(cards) {
-    const currency = PRIMARY_CURRENCY;
+    const currency = primaryCurrency();
     const rate = latestRate(state.ui.selectedMonth);
     const originalTotals = new Map();
     const total = cards.reduce((sumValue, card) => {
@@ -1667,8 +1785,8 @@
       return sumValue + convert(bill.total, card.currency, currency, rate);
     }, 0);
     const detail = Array.from(originalTotals.entries())
-      .filter(([originalCurrency, value]) => originalCurrency !== PRIMARY_CURRENCY && value > 0)
-      .map(([originalCurrency, value]) => `${formatMoney(value, originalCurrency)} (${formatMoney(convert(value, originalCurrency, PRIMARY_CURRENCY, rate), PRIMARY_CURRENCY)})`)
+      .filter(([originalCurrency, value]) => originalCurrency !== currency && value > 0)
+      .map(([originalCurrency, value]) => `${formatMoney(value, originalCurrency)} (${formatMoney(convert(value, originalCurrency, currency, rate), currency)})`)
       .join(" - ");
     return { total, currency, detail };
   }
@@ -1717,10 +1835,10 @@
     const month = state.ui.selectedMonth;
     const subscriptions = monthSubscriptions(month, "global");
     const visible = limit ? subscriptions.slice(0, limit) : subscriptions;
+    const totalCurrency = primaryCurrency();
     const total = subscriptions.reduce((sumValue, item) => {
-      return sumValue + convert(item.amount, item.currency, PRIMARY_CURRENCY, latestRate(month));
+      return sumValue + convert(item.amount, item.currency, totalCurrency, latestRate(month));
     }, 0);
-    const totalCurrency = PRIMARY_CURRENCY;
 
     if (!subscriptions.length) {
       return `<p class="empty-state">Nenhuma subscricao cadastrada.</p>`;
@@ -1772,6 +1890,79 @@
           }).join("")}
         </div>
       `}
+    `;
+  }
+
+  function renderHousingPanel(limit) {
+    const month = state.ui.selectedMonth;
+    const cards = (state.housingCards || [])
+      .filter((item) => item.active !== false)
+      .filter((item) => inCountryScope(item.country));
+    if (!cards.length) {
+      return `
+        <div class="empty-action">
+          <p class="empty-state">Nenhuma moradia cadastrada.</p>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="housingCard">Cadastrar moradia</button>
+        </div>
+      `;
+    }
+
+    const visible = limit ? cards.slice(0, limit) : cards;
+    return `
+      <div class="housing-stack">
+        ${visible.map((card) => renderHousingCard(card, month, Boolean(limit))).join("")}
+      </div>
+    `;
+  }
+
+  function renderHousingCard(card, month, compact = false) {
+    const rows = housingCardMonthRows(card, month);
+    const totalCurrency = primaryCurrency();
+    const totalOpen = rows
+      .filter((item) => !item.paid)
+      .reduce((total, item) => total + convert(item.amount, item.currency, totalCurrency, latestRate(month)), 0);
+    const paidCount = rows.filter((item) => item.paid).length;
+    return `
+      <div class="housing-card">
+        <div class="housing-card-head">
+          <div>
+            <p class="mini-label">${countryMeta[card.country]?.label || "Global"}</p>
+            <h3>${escapeHtml(card.name || "Moradia")}</h3>
+          </div>
+          <span class="chip gold">ALUGUEL</span>
+        </div>
+        <div class="housing-total">
+          <span>Total aberto</span>
+          <strong>${formatMoneyWithPrimary(totalOpen, totalCurrency, month)}</strong>
+          <small>${paidCount}/${rows.length} pagos no mes</small>
+        </div>
+        <div class="housing-items">
+          ${rows.length ? rows.map((item) => {
+            const cardLabel = item.paymentMethod === "card"
+              ? creditCardById(item.cardId)?.nickname || creditCardById(item.cardId)?.issuer || "cartao"
+              : housingPaymentMethodLabel(item.paymentMethod);
+            return `
+              <div class="housing-item ${item.paid ? "is-paid" : ""}">
+                <span class="row-icon ${item.paid ? "green" : "blue"}">${escapeHtml(item.icon)}</span>
+                <div class="row-main">
+                  <p class="row-title">${escapeHtml(item.label)}</p>
+                  <p class="row-meta">vence ${formatShortDate(item.date)} - ${escapeHtml(cardLabel)}</p>
+                </div>
+                <div class="row-amount ${item.paid ? "income" : "expense"}">
+                  ${formatMoneyWithPrimary(item.amount, item.currency, month)}
+                  <div class="row-actions">
+                    <button class="small-action ${item.paid ? "ghost" : ""}" type="button" data-action="pay-housing-item" data-id="${card.id}" data-item-key="${item.key}" ${item.paid ? "disabled" : ""}>${item.paid ? "Pago" : "Pagar"}</button>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join("") : `<p class="empty-state">Informe o aluguel fixo ou adicione as contas conforme forem chegando.</p>`}
+        </div>
+        <div class="housing-actions">
+          <button class="small-action ghost" type="button" data-action="open-modal" data-modal="housingCard" data-id="${card.id}">Editar</button>
+          ${compact ? "" : `<button class="small-action ghost" type="button" data-action="delete-housing-card" data-id="${card.id}">Excluir</button>`}
+        </div>
+      </div>
     `;
   }
 
@@ -1946,7 +2137,8 @@
     const monthRows = monthWorkIncomes(state.ui.selectedMonth);
     const visibleSources = limit ? sources.slice(0, limit) : sources;
     const rate = latestRate(state.ui.selectedMonth);
-    const total = monthRows.reduce((current, item) => current + convert(item.amount, item.currency || "JPY", "JPY", rate), 0);
+    const totalCurrency = primaryCurrency();
+    const total = monthRows.reduce((current, item) => current + convert(item.amount, item.currency || totalCurrency, totalCurrency, rate), 0);
 
     if (!sources.length) {
       return `
@@ -1961,7 +2153,7 @@
       <div class="stat-strip">
         <div class="stat-box">
           <p class="mini-label">Recebido no mes</p>
-          <strong>${formatMoney(total, "JPY")}</strong>
+          <strong>${formatMoneyWithPrimary(total, totalCurrency)}</strong>
         </div>
         <div class="stat-box">
           <p class="mini-label">Fontes</p>
@@ -1971,7 +2163,7 @@
       <div class="list source-list">
         ${visibleSources.map((source) => {
           const rows = monthRows.filter((row) => row.sourceId === source.id);
-          const sourceCurrency = source.currency || "JPY";
+          const sourceCurrency = source.currency || primaryCurrency();
           const amount = rows.reduce((totalValue, row) => (
             totalValue + convert(row.amount, row.currency || sourceCurrency, sourceCurrency, rate)
           ), 0);
@@ -1979,10 +2171,10 @@
             <div class="list-row compact source-row">
               <div>
                 <p class="row-title"><span class="source-dot" style="background:${escapeAttr(source.color)}"></span>${escapeHtml(source.name)}</p>
-                <p class="row-meta">${escapeHtml(sourceTypeLabel(source))} - ${source.currency || "JPY"}</p>
+                <p class="row-meta">${escapeHtml(sourceTypeLabel(source))} - ${sourceCurrency}</p>
               </div>
               <div class="row-amount income">
-                ${formatMoney(amount, source.currency || "JPY")}
+                ${formatMoneyWithPrimary(amount, sourceCurrency)}
                 ${limit ? "" : `
                   <div class="row-actions">
                     <button class="small-action ghost" type="button" data-action="open-modal" data-modal="incomeSource" data-id="${source.id}">Editar</button>
@@ -2064,7 +2256,7 @@
       <div class="stat-strip">
         <div class="stat-box">
           <p class="mini-label">Custo no mes</p>
-          <strong>${formatMoney(sum(costs, "amount"), "JPY")}</strong>
+          <strong>${formatMoneyWithPrimary(sum(costs, "amount"), "JPY")}</strong>
         </div>
         <div class="stat-box">
           <p class="mini-label">Shaken</p>
@@ -2183,6 +2375,7 @@
       creditCard: renderCreditCardModal,
       cardPurchase: renderCardPurchaseModal,
       crypto: renderCryptoModal,
+      housingCard: renderHousingCardModal,
       vehicle: renderVehicleModal,
       vehicleMaintenance: renderVehicleMaintenanceModal,
       incomeSource: renderIncomeSourceModal,
@@ -2216,6 +2409,7 @@
       { modal: "incomeSource", icon: "E", title: "Cadastro de Empresa", meta: "Fontes como fabrica, Amazon, Uber e renda extra" },
       { modal: "workIncome", icon: "¥", title: "Cadastro de Pagamento", meta: "Recebimento ligado a uma empresa cadastrada" },
       { modal: "vehicle", icon: "V", title: "Cadastrar veiculo", meta: "Carro do Japao, Shaken, seguro e dados principais" },
+      { modal: "housingCard", icon: "A", title: "Cadastrar moradia", meta: "Aluguel, luz, gas, agua e internet em um unico card" },
       { modal: "creditCard", icon: "C", title: "Cadastrar cartao", meta: "Cartao do Brasil ou Japao com bandeira e vencimento" },
       { modal: "subscription", icon: "S", title: "Cadastrar subscricao", meta: "Streaming, apps e servicos recorrentes no Pix ou cartao" },
       { modal: "crypto", icon: "B", title: "Cadastrar cripto", meta: "Quantidade comprada, custo e acompanhamento de cotacao" },
@@ -2284,8 +2478,7 @@
           <div class="field">
             <label for="currency">Moeda</label>
             <select id="currency" name="currency">
-              <option value="${currency}" ${selectedAttr(currency, selectedCurrency)}>${currency}</option>
-              <option value="${currency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(currency === "JPY" ? "BRL" : "JPY", selectedCurrency)}>${currency === "JPY" ? "BRL" : "JPY"}</option>
+              ${currencyOptions(selectedCurrency)}
             </select>
           </div>
           <div class="field">
@@ -2414,8 +2607,7 @@
         <div class="field">
           <label for="commitmentCurrency">Moeda</label>
           <select id="commitmentCurrency" name="currency">
-            <option value="${countryMeta[activeCountry].currency}" ${selectedAttr(countryMeta[activeCountry].currency, selectedCurrency)}>${countryMeta[activeCountry].currency}</option>
-            <option value="${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY", selectedCurrency)}>${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}</option>
+            ${currencyOptions(selectedCurrency)}
           </select>
         </div>
         <div class="two-cols">
@@ -2490,8 +2682,7 @@
           <div class="field">
             <label for="debtCurrency">Moeda</label>
             <select id="debtCurrency" name="currency">
-              <option value="${countryMeta[activeCountry].currency}" ${selectedAttr(countryMeta[activeCountry].currency, selectedCurrency)}>${countryMeta[activeCountry].currency}</option>
-              <option value="${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY", selectedCurrency)}>${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}</option>
+              ${currencyOptions(selectedCurrency)}
             </select>
           </div>
           <div class="field">
@@ -2550,8 +2741,7 @@
           <div class="field">
             <label for="investmentCurrency">Moeda</label>
             <select id="investmentCurrency" name="currency">
-              <option value="${countryMeta[activeCountry].currency}" ${selectedAttr(countryMeta[activeCountry].currency, selectedCurrency)}>${countryMeta[activeCountry].currency}</option>
-              <option value="${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY", selectedCurrency)}>${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}</option>
+              ${currencyOptions(selectedCurrency)}
             </select>
           </div>
         </div>
@@ -2611,8 +2801,7 @@
           <div class="field">
             <label for="cardCurrency">Moeda</label>
             <select id="cardCurrency" name="currency">
-              <option value="${currency}" ${selectedAttr(currency, selectedCurrency)}>${currency}</option>
-              <option value="${currency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(currency === "JPY" ? "BRL" : "JPY", selectedCurrency)}>${currency === "JPY" ? "BRL" : "JPY"}</option>
+              ${currencyOptions(selectedCurrency)}
             </select>
           </div>
           <div class="field">
@@ -2695,8 +2884,7 @@
           <div class="field">
             <label for="purchaseCurrency">Moeda</label>
             <select id="purchaseCurrency" name="currency">
-              <option value="${fallbackCurrency}" ${selectedAttr(fallbackCurrency, item?.currency || fallbackCurrency)}>${fallbackCurrency}</option>
-              <option value="${fallbackCurrency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(fallbackCurrency === "JPY" ? "BRL" : "JPY", item?.currency)}>${fallbackCurrency === "JPY" ? "BRL" : "JPY"}</option>
+              ${currencyOptions(item?.currency || fallbackCurrency)}
             </select>
           </div>
           <div class="field">
@@ -2757,8 +2945,7 @@
           <div class="field">
             <label for="subscriptionCurrency">Moeda</label>
             <select id="subscriptionCurrency" name="currency">
-              <option value="${countryMeta[activeCountry].currency}" ${selectedAttr(countryMeta[activeCountry].currency, selectedCurrency)}>${countryMeta[activeCountry].currency}</option>
-              <option value="${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}" ${selectedAttr(countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY", selectedCurrency)}>${countryMeta[activeCountry].currency === "JPY" ? "BRL" : "JPY"}</option>
+              ${currencyOptions(selectedCurrency)}
             </select>
           </div>
           <div class="field">
@@ -2820,8 +3007,7 @@
           <div class="field">
             <label for="cryptoCurrency">Moeda da compra</label>
             <select id="cryptoCurrency" name="costCurrency">
-              <option value="JPY" ${selectedAttr("JPY", item?.costCurrency || "JPY")}>JPY</option>
-              <option value="BRL" ${selectedAttr("BRL", item?.costCurrency)}>BRL</option>
+              ${currencyOptions(item?.costCurrency || primaryCurrency())}
             </select>
           </div>
           <div class="field">
@@ -2842,6 +3028,76 @@
           <button class="primary-button" type="submit">Salvar cripto</button>
         </div>
       </form>
+    `;
+  }
+
+  function renderHousingCardModal(item = null) {
+    const activeCountry = item?.country || "japao";
+    const selectedCurrency = item?.currency || countryMeta[activeCountry]?.currency || primaryCurrency();
+    const services = normalizeHousingItems(item?.items, selectedCurrency);
+    const cards = state.creditCards || [];
+    return `
+      <div class="modal-head">
+        <h2>${item ? "Editar moradia" : "Nova moradia"}</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="housing-card">
+        ${editHidden(item)}
+        <div class="two-cols">
+          <div class="field">
+            <label for="housingName">Nome do local</label>
+            <input id="housingName" name="name" required placeholder="Ex: Apartamento Kariya" value="${escapeAttr(item?.name || "")}" />
+          </div>
+          ${countrySelect(activeCountry)}
+        </div>
+        <div class="field">
+          <label for="housingCurrency">Moeda padrao</label>
+          <select id="housingCurrency" name="currency">
+            ${currencyOptions(selectedCurrency)}
+          </select>
+        </div>
+        <div class="housing-form-list">
+          ${services.map((service) => renderHousingServiceFormRow(service, cards)).join("")}
+        </div>
+        ${!cards.length ? `<p class="empty-state">Para pagar algum item no cartao, cadastre um cartao primeiro.</p>` : ""}
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar moradia</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderHousingServiceFormRow(service, cards) {
+    const key = service.key;
+    return `
+      <div class="housing-form-row">
+        <label class="housing-service-toggle">
+          <input type="checkbox" name="${key}Active" ${service.active !== false ? "checked" : ""} />
+          <span>${escapeHtml(service.label)}</span>
+        </label>
+        <div class="field">
+          <label for="${key}Amount">Valor</label>
+          <input id="${key}Amount" name="${key}Amount" type="number" min="0" step="0.01" value="${number(service.amount) || ""}" />
+        </div>
+        <div class="field">
+          <label for="${key}DueDay">Vencimento</label>
+          <input id="${key}DueDay" name="${key}DueDay" type="number" min="1" max="31" value="${service.dueDay || 1}" />
+        </div>
+        <div class="field">
+          <label for="${key}PaymentMethod">Pagamento</label>
+          <select id="${key}PaymentMethod" name="${key}PaymentMethod">
+            ${Object.entries(housingPaymentMethodMeta).map(([value, label]) => `<option value="${value}" ${selectedAttr(value, service.paymentMethod)}>${label}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label for="${key}CardId">Cartao</label>
+          <select id="${key}CardId" name="${key}CardId">
+            <option value="">Sem cartao</option>
+            ${cards.map((card) => `<option value="${card.id}" ${selectedAttr(card.id, service.cardId)}>${escapeHtml(card.nickname || card.issuer)} - ${card.currency}</option>`).join("")}
+          </select>
+        </div>
+      </div>
     `;
   }
 
@@ -2984,8 +3240,7 @@
           <div class="field">
             <label for="sourceCurrency">Moeda</label>
             <select id="sourceCurrency" name="currency">
-              <option value="JPY" ${selectedAttr("JPY", item?.currency || "JPY")}>JPY</option>
-              <option value="BRL" ${selectedAttr("BRL", item?.currency)}>BRL</option>
+              ${currencyOptions(item?.currency || primaryCurrency())}
             </select>
           </div>
         </div>
@@ -3043,8 +3298,7 @@
           <div class="field">
             <label for="incomeCurrency">Moeda</label>
             <select id="incomeCurrency" name="currency">
-              <option value="JPY" ${selectedAttr("JPY", selectedCurrency)}>JPY</option>
-              <option value="BRL" ${selectedAttr("BRL", selectedCurrency)}>BRL</option>
+              ${currencyOptions(selectedCurrency)}
             </select>
           </div>
         </div>
@@ -3277,6 +3531,45 @@
     showToast(updated ? "Cripto atualizada." : "Cripto salva.");
   }
 
+  function saveHousingCard(form) {
+    try {
+      const data = formData(form);
+      const currency = sanitizeCurrency(data.currency, primaryCurrency());
+      const items = housingItemTemplates.map((template) => {
+        const paymentMethod = housingPaymentMethodMeta[data[`${template.key}PaymentMethod`]]
+          ? data[`${template.key}PaymentMethod`]
+          : "bank";
+        const cardId = paymentMethod === "card" ? data[`${template.key}CardId`] || "" : "";
+        if (paymentMethod === "card" && !cardId && data[`${template.key}Active`]) {
+          throw new Error(`Selecione o cartao de ${template.label}.`);
+        }
+        return {
+          key: template.key,
+          label: template.label,
+          active: data[`${template.key}Active`] === "on",
+          amount: number(data[`${template.key}Amount`]),
+          currency,
+          dueDay: clamp(Math.round(number(data[`${template.key}DueDay`])), 1, 31),
+          paymentMethod,
+          cardId
+        };
+      });
+      const updated = upsertItem("housingCards", data.id, {
+        name: data.name.trim(),
+        country: data.country,
+        currency,
+        active: true,
+        items
+      });
+      saveState();
+      closeModal();
+      render();
+      showToast(updated ? "Moradia atualizada." : "Moradia salva.");
+    } catch (error) {
+      showToast(error.message || "Nao consegui salvar a moradia.");
+    }
+  }
+
   function saveVehicle(form) {
     const data = formData(form);
     state.vehicle = {
@@ -3288,9 +3581,10 @@
       insuranceDay: data.insuranceDay ? clamp(Math.round(number(data.insuranceDay)), 1, 31) : "",
       insuranceCompany: data.insuranceCompany.trim(),
       insurancePaymentMethod: data.insurancePaymentMethod.trim(),
-      currency: "JPY"
+      currency: "JPY",
+      updatedAt: new Date().toISOString()
     };
-    saveState();
+    saveState({ remoteNow: true });
     closeModal();
     render();
     showToast("Veiculo salvo.");
@@ -3306,10 +3600,11 @@
       date: data.date,
       paymentMethod: data.paymentMethod.trim(),
       location: data.location.trim(),
-      note: data.note.trim()
+      note: data.note.trim(),
+      updatedAt: new Date().toISOString()
     }, true);
     state.ui.selectedMonth = data.date.slice(0, 7);
-    saveState();
+    saveState({ remoteNow: true });
     closeModal();
     render();
     showToast(updated ? "Manutencao atualizada." : "Manutencao salva.");
@@ -3362,7 +3657,9 @@
   function saveSettings(form) {
     const data = formData(form);
     state.settings.familyName = data.familyName.trim() || "Familia";
-    state.settings.baseCurrency = PRIMARY_CURRENCY;
+    const baseCurrency = sanitizeCurrency(data.baseCurrency, PRIMARY_CURRENCY);
+    state.settings.baseCurrency = baseCurrency;
+    state.settings.secondaryCurrency = sanitizeSecondaryCurrency(data.secondaryCurrency, baseCurrency);
     saveState();
     updateRemoteHouseholdName(state.settings.familyName).catch((error) => {
       remoteSession.error = error.message || "Falha ao atualizar familia.";
@@ -3395,6 +3692,67 @@
     saveState();
     render();
     showToast("Conta lancada no mes.");
+  }
+
+  function payHousingItem(housingId, itemKey) {
+    const card = findItem("housingCards", housingId);
+    if (!card) return;
+    const item = housingItemByKey(card, itemKey);
+    if (!item || item.active === false) return;
+    const month = state.ui.selectedMonth;
+    const key = housingPaymentKey(housingId, itemKey, month);
+    if (state.paidCommitments[key]) {
+      showToast("Item ja pago neste mes.");
+      return;
+    }
+    if (!number(item.amount)) {
+      showToast("Informe um valor antes de pagar.");
+      return;
+    }
+
+    const dueDate = housingItemDateForMonth(item, month);
+    state.paidCommitments[key] = true;
+
+    if (item.paymentMethod === "card") {
+      const creditCard = creditCardById(item.cardId);
+      if (!creditCard) {
+        delete state.paidCommitments[key];
+        showToast("Cartao nao encontrado para este pagamento.");
+        return;
+      }
+      state.cardPurchases.unshift({
+        id: uid("cp"),
+        cardId: creditCard.id,
+        country: creditCard.country,
+        title: `${item.label} - ${card.name || "Moradia"}`,
+        category: "Moradia",
+        totalAmount: number(item.amount),
+        currency: item.currency,
+        installments: 1,
+        firstBillMonth: month,
+        purchaseDate: dueDate,
+        note: "Criado a partir do card de moradia"
+      });
+      saveState();
+      render();
+      showToast("Pagamento enviado para a fatura do cartao.");
+      return;
+    }
+
+    state.transactions.unshift({
+      id: uid("tx"),
+      date: dueDate,
+      country: card.country,
+      type: "expense",
+      title: `${item.label} - ${card.name || "Moradia"}`,
+      category: "Moradia",
+      amount: number(item.amount),
+      currency: item.currency,
+      note: `Pago via ${housingPaymentMethodLabel(item.paymentMethod)}`
+    });
+    saveState();
+    render();
+    showToast("Pagamento lancado no saldo.");
   }
 
   function payCardBill(id) {
@@ -3591,7 +3949,8 @@
     const br = summarizeMonth(month, "brasil");
     const jp = summarizeMonth(month, "japao");
     const rate = latestRate(month);
-    const brOut = convert(br.expenses + br.investments, "BRL", "JPY", rate);
+    const targetCurrency = primaryCurrency();
+    const brOut = convert(br.expenses + br.investments, "BRL", targetCurrency, rate);
     const jpOut = jp.expenses + jp.investments + jp.wiseOut;
     const total = Math.max(1, brOut + jpOut);
     const centerX = width / 2;
@@ -3619,8 +3978,8 @@
     ctx.font = "750 12px system-ui";
     ctx.fillText("saidas convertidas", centerX, centerY + 26);
     drawLegend(ctx, [
-      [`Brasil ${formatCompact(brOut, "JPY")}`, "#42a67a"],
-      [`Japao ${formatCompact(jpOut, "JPY")}`, "#f5c84c"]
+      [`Brasil ${formatCompact(brOut, targetCurrency)}`, "#42a67a"],
+      [`Japao ${formatCompact(jpOut, targetCurrency)}`, "#f5c84c"]
     ], 12, 14);
   }
 
@@ -3777,6 +4136,9 @@
         usdBrl: quotes.usdBrl,
         jpyBrl: quotes.jpyBrl,
         usdJpy: quotes.usdJpy,
+        usdEur: quotes.usdEur,
+        eurBrl: quotes.eurBrl,
+        eurJpy: quotes.eurJpy,
         btcUsd: quotes.btcUsd || state.fxQuotes?.btcUsd || 0,
         source: quotes.source,
         ratesDate: quotes.date || "",
@@ -3792,7 +4154,7 @@
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       render();
-      showToast("Nao consegui atualizar dolar/iene agora.");
+      showToast("Nao consegui atualizar as cotacoes agora.");
     } finally {
       fxFetchInFlight = false;
     }
@@ -3816,19 +4178,25 @@
   }
 
   async function fetchAwesomeFxQuotes() {
-    const response = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL,JPY-BRL,USD-JPY", { cache: "no-store" });
+    const response = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL,JPY-BRL,USD-JPY,EUR-BRL,EUR-JPY,USD-EUR", { cache: "no-store" });
     if (!response.ok) throw new Error("Falha na cotacao BR");
     const data = await response.json();
     const usdBrl = Number(data.USDBRL?.bid || data.USDBRL?.ask || 0);
     const jpyBrl = Number(data.JPYBRL?.bid || data.JPYBRL?.ask || 0);
     const usdJpy = Number(data.USDJPY?.bid || data.USDJPY?.ask || 0) || (jpyBrl ? usdBrl / jpyBrl : 0);
-    if (!usdBrl || !jpyBrl || !Number.isFinite(usdJpy) || !usdJpy) throw new Error("Cotacao BR vazia");
+    const eurBrl = Number(data.EURBRL?.bid || data.EURBRL?.ask || 0);
+    const eurJpy = Number(data.EURJPY?.bid || data.EURJPY?.ask || 0) || (jpyBrl && eurBrl ? eurBrl / jpyBrl : 0);
+    const usdEur = Number(data.USDEUR?.bid || data.USDEUR?.ask || 0) || (eurBrl ? usdBrl / eurBrl : 0);
+    if (!usdBrl || !jpyBrl || !Number.isFinite(usdJpy) || !usdJpy || !eurBrl || !usdEur) throw new Error("Cotacao BR vazia");
     return {
       usdBrl,
       jpyBrl,
       usdJpy,
+      usdEur,
+      eurBrl,
+      eurJpy,
       source: "AwesomeAPI",
-      date: data.USDBRL?.create_date || data.USDJPY?.create_date || data.JPYBRL?.create_date || ""
+      date: data.USDBRL?.create_date || data.USDJPY?.create_date || data.JPYBRL?.create_date || data.EURBRL?.create_date || ""
     };
   }
 
@@ -3838,11 +4206,15 @@
     const data = await response.json();
     const brl = Number(data.rates?.BRL || 0);
     const jpy = Number(data.rates?.JPY || 0);
-    if (!brl || !jpy) throw new Error("Cotacao global vazia");
+    const eur = Number(data.rates?.EUR || 0);
+    if (!brl || !jpy || !eur) throw new Error("Cotacao global vazia");
     return {
       usdBrl: brl,
       jpyBrl: brl / jpy,
       usdJpy: jpy,
+      usdEur: eur,
+      eurBrl: brl / eur,
+      eurJpy: jpy / eur,
       source: "Open ER",
       date: data.time_last_update_utc || data.time_last_update_unix || ""
     };
@@ -3866,7 +4238,7 @@
   }
 
   function cryptoSummary() {
-    const currency = PRIMARY_CURRENCY;
+    const currency = primaryCurrency();
     const rows = cryptoAssetRows(currency);
     const totalValue = sum(rows, "value");
     const totalCost = sum(rows, "cost");
@@ -3895,7 +4267,7 @@
     };
   }
 
-  function cryptoAssetRows(currency = PRIMARY_CURRENCY) {
+  function cryptoAssetRows(currency = primaryCurrency()) {
     const rate = latestRate(state.ui.selectedMonth);
     return (state.cryptoAssets || []).map((item) => {
       const symbol = String(item.symbol || "BTC").toUpperCase();
@@ -4003,7 +4375,7 @@
   }
 
   function summarizeMonth(month, country) {
-    const targetCurrency = country === "brasil" ? "BRL" : state.settings.baseCurrency || "JPY";
+    const targetCurrency = country === "brasil" ? "BRL" : primaryCurrency();
     const rate = latestRate(month);
     const txs = monthTransactions(month, country);
     const transfers = monthTransfers(month);
@@ -4061,6 +4433,12 @@
       plannedExpenses += converted;
     });
 
+    plannedHousingEntries(month, country).forEach((item) => {
+      const converted = convert(item.amount, item.currency, targetCurrency, rate);
+      expenses += converted;
+      plannedExpenses += converted;
+    });
+
     if (country === "global" || country === "japao") {
       vehicleMonthlyCosts(month).forEach((item) => {
         const converted = convert(item.amount, item.currency, targetCurrency, rate);
@@ -4069,7 +4447,7 @@
         else actualExpenses += converted;
       });
       monthWorkIncomes(month).forEach((item) => {
-        const converted = convert(item.amount, item.currency || "JPY", targetCurrency, rate);
+        const converted = convert(item.amount, item.currency || primaryCurrency(), targetCurrency, rate);
         income += converted;
         actualIncome += converted;
       });
@@ -4245,6 +4623,86 @@
     return dateInMonth(month, dueDay);
   }
 
+  function plannedHousingEntries(month, country) {
+    return housingCalendarEntries(month, country).filter((item) => !item.paid);
+  }
+
+  function housingCalendarEntries(month, country) {
+    return (state.housingCards || [])
+      .filter((card) => card.active !== false)
+      .filter((card) => country === "global" || card.country === country)
+      .map((card) => {
+        const summary = housingCardMonthSummary(card, month);
+        if (!summary.rows.length || !summary.total) return null;
+        const dueState = dueStateForDate(summary.date, summary.paid);
+        return {
+          id: `housing:${card.id}`,
+          housingId: card.id,
+          country: card.country,
+          type: "expense",
+          title: `Aluguel - ${card.name || "Moradia"}`,
+          category: "Moradia",
+          amount: summary.paid ? summary.total : summary.totalOpen,
+          currency: summary.currency,
+          date: summary.date,
+          paid: summary.paid,
+          status: summary.paid ? "Pago" : dueState.label,
+          tone: summary.paid ? "green" : dueState.tone,
+          meta: `Moradia - ${summary.openCount} aberto${summary.openCount === 1 ? "" : "s"} de ${summary.rows.length}`,
+          kind: "expense"
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function housingCardMonthSummary(card, month) {
+    const rows = housingCardMonthRows(card, month);
+    const currency = card.currency || primaryCurrency();
+    const rate = latestRate(month);
+    const total = rows.reduce((sumValue, item) => sumValue + convert(item.amount, item.currency, currency, rate), 0);
+    const totalOpen = rows
+      .filter((item) => !item.paid)
+      .reduce((sumValue, item) => sumValue + convert(item.amount, item.currency, currency, rate), 0);
+    const openRows = rows.filter((item) => !item.paid);
+    const rent = rows.find((item) => item.key === "rent");
+    const firstOpen = openRows.slice().sort((a, b) => a.date.localeCompare(b.date))[0];
+    const firstRow = rows.slice().sort((a, b) => a.date.localeCompare(b.date))[0];
+    return {
+      rows,
+      currency,
+      total,
+      totalOpen,
+      openCount: openRows.length,
+      paid: Boolean(rows.length) && openRows.length === 0,
+      date: rent?.date || firstOpen?.date || firstRow?.date || dateInMonth(month, 1)
+    };
+  }
+
+  function housingCardMonthRows(card, month) {
+    return normalizeHousingItems(card.items, card.currency || primaryCurrency())
+      .filter((item) => item.active !== false)
+      .filter((item) => number(item.amount) > 0)
+      .map((item) => ({
+        ...item,
+        icon: housingItemTemplates.find((template) => template.key === item.key)?.icon || "M",
+        date: housingItemDateForMonth(item, month),
+        paid: isHousingItemPaid(card.id, item.key, month)
+      }));
+  }
+
+  function housingItemByKey(card, key) {
+    return normalizeHousingItems(card?.items, card?.currency || primaryCurrency())
+      .find((item) => item.key === key);
+  }
+
+  function housingItemDateForMonth(item, month) {
+    return dateInMonth(month, item?.dueDay || 1);
+  }
+
+  function housingPaymentMethodLabel(method) {
+    return housingPaymentMethodMeta[method] || "Conta/debito";
+  }
+
   function plannedCardBillEntries(month, country) {
     return cardBillCalendarEntries(month, country).filter((item) => !item.paid && item.amount > 0);
   }
@@ -4309,6 +4767,7 @@
   function financialCalendarItems(month, country) {
     const items = [
       ...commitmentCalendarEntries(month, country),
+      ...housingCalendarEntries(month, country),
       ...cardBillCalendarEntries(month, country),
       ...subscriptionCalendarEntries(month, country),
       ...vehicleCalendarEntries(month, country),
@@ -4732,7 +5191,7 @@
   }
 
   function categoryTotals(month, country) {
-    const currency = country === "brasil" ? "BRL" : state.settings.baseCurrency || "JPY";
+    const currency = country === "brasil" ? "BRL" : primaryCurrency();
     const rate = latestRate(month);
     const totals = new Map();
     monthTransactions(month, country).forEach((item) => {
@@ -4754,6 +5213,10 @@
     plannedSubscriptionEntries(month, country).forEach((item) => {
       const current = totals.get("Subscricao") || 0;
       totals.set("Subscricao", current + convert(item.amount, item.currency, currency, rate));
+    });
+    plannedHousingEntries(month, country).forEach((item) => {
+      const current = totals.get("Moradia") || 0;
+      totals.set("Moradia", current + convert(item.amount, item.currency, currency, rate));
     });
     if (country === "global" || country === "japao") {
       vehicleMonthlyCosts(month).forEach((item) => {
@@ -4778,11 +5241,17 @@
   function currentFxQuoteInfo() {
     const liveRate = Number(state.fxQuotes?.jpyBrl || 0);
     const rate = liveRate || latestRate(state.ui.selectedMonth);
+    const usdBrl = Number(state.fxQuotes?.usdBrl || 0);
+    const eurBrl = Number(state.fxQuotes?.eurBrl || 0);
     const source = liveRate ? state.fxQuotes?.source || "Mercado" : "Ultima Wise cadastrada";
     const updated = liveRate && state.fxQuotes?.updatedAt ? `Atualizada ${formatTime(state.fxQuotes.updatedAt)}` : "Sem cotacao online recente";
     return {
       jpyBrl: rate,
       brlJpy: rate ? 1 / rate : 0,
+      usdBrl,
+      brlUsd: usdBrl ? 1 / usdBrl : 0,
+      eurBrl,
+      brlEur: eurBrl ? 1 / eurBrl : 0,
       status: liveRate ? "Online" : "Fallback",
       tone: liveRate ? "green" : "gold",
       meta: `${source} - ${updated}. Transferencias Wise continuam salvando a cotacao real usada.`
@@ -4815,6 +5284,14 @@
     return `${month}:card:${id}`;
   }
 
+  function isHousingItemPaid(housingId, itemKey, month) {
+    return Boolean(state.paidCommitments[housingPaymentKey(housingId, itemKey, month)]);
+  }
+
+  function housingPaymentKey(housingId, itemKey, month) {
+    return `${month}:housing:${housingId}:${itemKey}`;
+  }
+
   function dueStateForDate(dateValue, paid) {
     if (paid) return { label: "Pago", tone: "green" };
     const today = startOfDay(new Date());
@@ -4826,31 +5303,75 @@
     return { label: "Aberto", tone: "blue" };
   }
 
+  function primaryCurrency() {
+    return sanitizeCurrency(state?.settings?.baseCurrency, PRIMARY_CURRENCY);
+  }
+
+  function secondaryCurrency() {
+    return sanitizeSecondaryCurrency(state?.settings?.secondaryCurrency, primaryCurrency());
+  }
+
+  function sanitizeCurrency(currency, fallback = PRIMARY_CURRENCY) {
+    return supportedCurrencies[currency] ? currency : fallback;
+  }
+
+  function sanitizeSecondaryCurrency(currency, primary) {
+    const safe = sanitizeCurrency(currency, primary === DEFAULT_SECONDARY_CURRENCY ? "USD" : DEFAULT_SECONDARY_CURRENCY);
+    if (safe !== primary) return safe;
+    return Object.keys(supportedCurrencies).find((item) => item !== primary) || DEFAULT_SECONDARY_CURRENCY;
+  }
+
+  function currencyOptions(selected) {
+    const safeSelected = sanitizeCurrency(selected, PRIMARY_CURRENCY);
+    return Object.entries(supportedCurrencies)
+      .map(([code, meta]) => `<option value="${code}" ${selectedAttr(code, safeSelected)}>${meta.label}</option>`)
+      .join("");
+  }
+
   function convert(amount, from, to, rate) {
     const value = Number(amount || 0);
-    if (from === to) return value;
-    if (from === "BRL" && to === "JPY") return value / rate;
-    if (from === "JPY" && to === "BRL") return value * rate;
+    const source = sanitizeCurrency(from, primaryCurrency());
+    const target = sanitizeCurrency(to, primaryCurrency());
+    if (source === target) return value;
+
+    const sourcePerUsd = currencyPerUsd(source, rate);
+    const targetPerUsd = currencyPerUsd(target, rate);
+    if (sourcePerUsd && targetPerUsd) return (value / sourcePerUsd) * targetPerUsd;
+
+    if (source === "BRL" && target === "JPY") return value / rate;
+    if (source === "JPY" && target === "BRL") return value * rate;
     return value;
   }
 
+  function currencyPerUsd(currency, rate = latestRate()) {
+    const quotes = state.fxQuotes || {};
+    const usdBrl = Number(quotes.usdBrl || 0);
+    const usdJpy = Number(quotes.usdJpy || (usdBrl && rate ? usdBrl / rate : 0));
+    const usdEur = Number(quotes.usdEur || 0);
+    if (currency === "USD") return 1;
+    if (currency === "BRL") return usdBrl || 5.5;
+    if (currency === "JPY") return usdJpy || ((usdBrl || 5.5) / (rate || 0.035));
+    if (currency === "EUR") return usdEur || 0.92;
+    return 0;
+  }
+
   function formatMoneyWithPrimary(value, currency, month = state.ui.selectedMonth) {
-    const originalCurrency = currency || PRIMARY_CURRENCY;
+    const originalCurrency = sanitizeCurrency(currency, primaryCurrency());
     const original = formatMoney(value, originalCurrency);
-    if (originalCurrency === PRIMARY_CURRENCY) return original;
-    const converted = convert(value, originalCurrency, PRIMARY_CURRENCY, latestRate(month));
-    return `${original} <small class="money-converted">(${formatMoney(converted, PRIMARY_CURRENCY)})</small>`;
+    const comparisonCurrency = originalCurrency === primaryCurrency() ? secondaryCurrency() : primaryCurrency();
+    if (!comparisonCurrency || comparisonCurrency === originalCurrency) return original;
+    const converted = convert(value, originalCurrency, comparisonCurrency, latestRate(month));
+    return `${original} <small class="money-converted">(${formatMoney(converted, comparisonCurrency)})</small>`;
   }
 
   function formatMoney(value, currency) {
+    const meta = supportedCurrencies[sanitizeCurrency(currency, primaryCurrency())] || supportedCurrencies.JPY;
     const amount = Number(value || 0);
-    const locale = currency === "JPY" ? "ja-JP" : "pt-BR";
-    const fraction = currency === "JPY" ? 0 : 2;
-    return new Intl.NumberFormat(locale, {
+    return new Intl.NumberFormat(meta.locale, {
       style: "currency",
-      currency,
-      maximumFractionDigits: fraction,
-      minimumFractionDigits: fraction
+      currency: sanitizeCurrency(currency, primaryCurrency()),
+      maximumFractionDigits: meta.fraction,
+      minimumFractionDigits: meta.fraction
     }).format(amount);
   }
 
@@ -4862,20 +5383,21 @@
 
   function formatCryptoInvestedSummary(summary) {
     const totals = summary.originalCosts || [];
-    const nonPrimary = totals.filter((item) => item.currency !== PRIMARY_CURRENCY && item.amount > 0);
-    const primary = totals.find((item) => item.currency === PRIMARY_CURRENCY);
+    const currentPrimary = primaryCurrency();
+    const nonPrimary = totals.filter((item) => item.currency !== currentPrimary && item.amount > 0);
+    const primary = totals.find((item) => item.currency === currentPrimary);
 
     if (nonPrimary.length === 1 && (!primary || !primary.amount)) {
       const item = nonPrimary[0];
-      return `${formatMoney(item.amount, item.currency)} <small class="money-converted">(${formatMoney(summary.totalCost, PRIMARY_CURRENCY)})</small>`;
+      return `${formatMoney(item.amount, item.currency)} <small class="money-converted">(${formatMoney(summary.totalCost, currentPrimary)})</small>`;
     }
 
-    if (!nonPrimary.length) return formatMoney(summary.totalCost, PRIMARY_CURRENCY);
+    if (!nonPrimary.length) return formatMoneyWithPrimary(summary.totalCost, currentPrimary);
 
     const detail = nonPrimary
       .map((item) => formatMoney(item.amount, item.currency))
       .join(" + ");
-    return `${formatMoney(summary.totalCost, PRIMARY_CURRENCY)} <small class="money-converted">${detail}</small>`;
+    return `${formatMoney(summary.totalCost, currentPrimary)} <small class="money-converted">${detail}</small>`;
   }
 
   function formatCryptoAmount(value) {
@@ -4915,10 +5437,11 @@
 
   function formatCompact(value, currency) {
     const amount = Number(value || 0);
-    const locale = currency === "JPY" ? "ja-JP" : "pt-BR";
-    return new Intl.NumberFormat(locale, {
+    const safeCurrency = sanitizeCurrency(currency, primaryCurrency());
+    const meta = supportedCurrencies[safeCurrency] || supportedCurrencies.JPY;
+    return new Intl.NumberFormat(meta.locale, {
       notation: "compact",
-      maximumFractionDigits: currency === "JPY" ? 0 : 1
+      maximumFractionDigits: meta.fraction ? 1 : 0
     }).format(amount);
   }
 
@@ -4941,6 +5464,14 @@
 
   function formatYenPerReal(value) {
     return `${formatYenRate(value)} / R$1`;
+  }
+
+  function formatUsdPerReal(value) {
+    return `R$ ${Number(value || 0).toFixed(4)} / US$1`;
+  }
+
+  function formatEuroPerReal(value) {
+    return `R$ ${Number(value || 0).toFixed(4)} / €1`;
   }
 
   function formatUsdRate(value) {
@@ -5085,6 +5616,7 @@
       cardPurchase: "cardPurchases",
       subscription: "subscriptions",
       crypto: "cryptoAssets",
+      housingCard: "housingCards",
       vehicleMaintenance: "vehicleMaintenance",
       incomeSource: "incomeSources",
       workIncome: "workIncomes"
