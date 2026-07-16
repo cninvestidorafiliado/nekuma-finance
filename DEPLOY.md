@@ -1,9 +1,9 @@
-# Deploy do Ponte Financeira
+# Deploy do Nekuma Finance
 
 O app online oficial e:
 
 ```text
-https://pontefinanceira.netlify.app/
+https://nekuma-finance.pages.dev/
 ```
 
 ## Fluxo recomendado
@@ -47,9 +47,9 @@ Nao envie `outputs/finance-pwa`, porque essa pasta contem arquivos de desenvolvi
 No Supabase, mantenha:
 
 ```text
-Site URL: https://pontefinanceira.netlify.app
-Redirect URL: https://pontefinanceira.netlify.app
-Redirect URL: https://pontefinanceira.netlify.app/**
+Site URL: https://nekuma-finance.pages.dev
+Redirect URL: https://nekuma-finance.pages.dev
+Redirect URL: https://nekuma-finance.pages.dev/**
 ```
 
 Se voce trocar o dominio no futuro, atualize esses campos antes de ativar confirmacao de e-mail, recuperacao de senha ou magic link.

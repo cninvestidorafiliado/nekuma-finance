@@ -6,6 +6,7 @@
   const LEGACY_STORAGE_KEYS = ["ponte-financeira-state-v1", "ponte-financeira-state-v2"];
   const PRIMARY_CURRENCY = "JPY";
   const DEFAULT_SECONDARY_CURRENCY = "BRL";
+  const urlParams = new URLSearchParams(window.location.search);
   const supportedCurrencies = {
     JPY: { label: "JPY - Ienes", locale: "ja-JP", fraction: 0 },
     BRL: { label: "BRL - Real", locale: "pt-BR", fraction: 2 },
@@ -75,29 +76,56 @@
     other: "Outros"
   };
   const subscriptionCatalog = {
-    spotify: { name: "Spotify", icon: "SP", color: "#1DB954" },
-    youtube: { name: "YouTube", icon: "YT", color: "#FF0033" },
-    netflix: { name: "Netflix", icon: "N", color: "#E50914" },
-    prime: { name: "Amazon Prime", icon: "A", color: "#00A8E1" },
-    disney: { name: "Disney+", icon: "D+", color: "#2B58C8" },
-    apple: { name: "Apple", icon: "AP", color: "#111111" },
-    icloud: { name: "iCloud", icon: "IC", color: "#5AC8FA" },
-    google: { name: "Google One", icon: "G", color: "#4285F4" },
-    chatgpt: { name: "ChatGPT", icon: "AI", color: "#10A37F" },
+    spotify: { name: "Spotify", icon: "SP", color: "#1DB954", asset: "spotify.png" },
+    youtube: { name: "YouTube", icon: "YT", color: "#FF0033", asset: "youtube.png" },
+    netflix: { name: "Netflix", icon: "N", color: "#E50914", asset: "netflix.png" },
+    prime: { name: "Amazon Prime", icon: "A", color: "#00A8E1", asset: "amazon-prime.png" },
+    amazonMusic: { name: "Amazon Music", icon: "AM", color: "#00A8E1", asset: "amazon-music-dark.png" },
+    disney: { name: "Disney+", icon: "D+", color: "#2B58C8", asset: "disney-plus.png" },
+    apple: { name: "Apple", icon: "AP", color: "#111111", asset: "app-store.png" },
+    appleMusic: { name: "Apple Music", icon: "AM", color: "#FA2D48", asset: "apple-music.png" },
+    appleTv: { name: "Apple TV+", icon: "TV", color: "#111111", asset: "apple-tv.png" },
+    icloud: { name: "iCloud", icon: "IC", color: "#5AC8FA", asset: "icloud.png" },
+    google: { name: "Google One", icon: "G", color: "#4285F4", asset: "google-one.png" },
+    chatgpt: { name: "ChatGPT", icon: "AI", color: "#10A37F", asset: "chat-gpt.png" },
     canva: { name: "Canva", icon: "CV", color: "#7D2AE8" },
-    microsoft: { name: "Microsoft 365", icon: "MS", color: "#F25022" },
+    microsoft: { name: "Microsoft 365", icon: "MS", color: "#F25022", asset: "microsoft-365.png" },
     adobe: { name: "Adobe", icon: "AD", color: "#FA0F00" },
     discord: { name: "Discord", icon: "DC", color: "#5865F2" },
     telegram: { name: "Telegram", icon: "TG", color: "#2AABEE" },
-    crunchyroll: { name: "Crunchyroll", icon: "CR", color: "#F47521" },
+    crunchyroll: { name: "Crunchyroll", icon: "CR", color: "#F47521", asset: "crunchyroll.png" },
     dazn: { name: "DAZN", icon: "DZ", color: "#101820" },
-    nintendo: { name: "Nintendo", icon: "NS", color: "#E60012" },
-    playstation: { name: "PlayStation", icon: "PS", color: "#003791" },
-    xbox: { name: "Xbox Game Pass", icon: "XB", color: "#107C10" },
+    nintendo: { name: "Nintendo", icon: "NS", color: "#E60012", asset: "nintendo-switch.png" },
+    playstation: { name: "PlayStation", icon: "PS", color: "#003791", asset: "playstation-plus.png" },
+    xbox: { name: "Xbox Game Pass", icon: "XB", color: "#107C10", asset: "xbox-game-pass.png" },
     hulu: { name: "Hulu", icon: "HU", color: "#1CE783" },
     unext: { name: "U-NEXT", icon: "UN", color: "#171717" },
+    nordvpn: { name: "NordVPN", icon: "NV", color: "#4687FF", asset: "nordvpn.png" },
     other: { name: "Outro", icon: "+", color: "#48426D" }
   };
+  const subscriptionLogoAliases = [
+    ["spotify", "spotify.png"],
+    ["youtube premium", "youtube.png"],
+    ["youtube", "youtube.png"],
+    ["netflix", "netflix.png"],
+    ["amazon prime", "amazon-prime.png"],
+    ["prime video", "amazon-prime.png"],
+    ["amazon music", "amazon-music-dark.png"],
+    ["disney", "disney-plus.png"],
+    ["apple music", "apple-music.png"],
+    ["apple tv", "apple-tv.png"],
+    ["icloud", "icloud.png"],
+    ["google one", "google-one.png"],
+    ["chatgpt", "chat-gpt.png"],
+    ["chat gpt", "chat-gpt.png"],
+    ["microsoft 365", "microsoft-365.png"],
+    ["office 365", "microsoft-365.png"],
+    ["crunchyroll", "crunchyroll.png"],
+    ["nintendo", "nintendo-switch.png"],
+    ["playstation", "playstation-plus.png"],
+    ["xbox", "xbox-game-pass.png"],
+    ["nordvpn", "nordvpn.png"]
+  ];
   const cryptoCatalog = {
     BTC: { id: "bitcoin", name: "Bitcoin", color: "#f7931a" },
     ETH: { id: "ethereum", name: "Ethereum", color: "#627eea" },
@@ -141,7 +169,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=36")
+      navigator.serviceWorker.register("./service-worker.js?v=52")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -243,6 +271,7 @@
     if (event.target.id === "commitmentType") updateCommitmentProviderField();
     if (event.target.id === "subscriptionPaymentMethod") updateSubscriptionCardField();
     if (event.target.id === "subscriptionServiceKey") updateSubscriptionCustomField();
+    if (event.target.id === "vehicleInsurancePaymentType") updateVehicleInsuranceCardField();
   });
 
   window.addEventListener("resize", debounce(drawVisibleCharts, 120));
@@ -660,21 +689,43 @@
       housingCards: normalizeHousingCards(raw.housingCards, settings.baseCurrency),
       cryptoQuotes,
       fxQuotes: raw.fxQuotes || base.fxQuotes,
-      vehicle: { ...base.vehicle, ...(raw.vehicle || {}) },
+      vehicle: normalizeVehicle(raw.vehicle, base.vehicle),
       vehicleMaintenance: Array.isArray(raw.vehicleMaintenance) ? raw.vehicleMaintenance : base.vehicleMaintenance,
       incomeSources: Array.isArray(raw.incomeSources) ? raw.incomeSources : base.incomeSources,
       workIncomes: Array.isArray(raw.workIncomes) ? raw.workIncomes : base.workIncomes,
       paidCommitments: raw.paidCommitments || {}
     };
     normalized.ui.activeCountry = "global";
+    if (urlParams.get("tab") === "dashboard" || urlParams.get("home") === "1") {
+      normalized.ui.activeTab = "dashboard";
+    }
     return normalized;
+  }
+
+  function normalizeVehicle(rawVehicle, baseVehicle) {
+    const vehicle = { ...baseVehicle, ...(rawVehicle || {}) };
+    const paymentType = normalizeVehicleInsurancePaymentType(vehicle);
+    return {
+      ...vehicle,
+      insurancePaymentType: paymentType,
+      insuranceCardId: paymentType === "card" ? String(vehicle.insuranceCardId || "") : ""
+    };
+  }
+
+  function normalizeCryptoSymbol(value) {
+    return String(value || "BTC")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 16) || "BTC";
   }
 
   function normalizeCryptoAssets(items, fallback = [], quotes = state?.cryptoQuotes, fallbackCurrency = primaryCurrency()) {
     if (!Array.isArray(items)) return fallback;
     return items.map((item) => ({
       ...item,
-      symbol: String(item.symbol || "BTC").toUpperCase(),
+      symbol: normalizeCryptoSymbol(item.symbol || "BTC"),
+      customName: String(item.customName || "").trim(),
       quantity: normalizeCryptoQuantityText(item, quotes),
       costAmount: number(item.costAmount),
       costCurrency: sanitizeCurrency(item.costCurrency, fallbackCurrency),
@@ -822,6 +873,8 @@
         insuranceDay: "",
         insuranceCompany: "",
         insurancePaymentMethod: "",
+        insurancePaymentType: "bank",
+        insuranceCardId: "",
         currency: "JPY"
       },
       vehicleMaintenance: [],
@@ -897,11 +950,12 @@
       return;
     }
 
-    app.innerHTML = [
-      renderToolbar(),
-      renderFxCards(),
-      renderCurrentTab()
-    ].join("");
+    app.innerHTML = state.ui.activeTab === "dashboard"
+      ? renderCurrentTab()
+      : [
+        renderToolbar(),
+        renderCurrentTab()
+      ].join("");
 
     document.querySelectorAll(".nav-item").forEach((item) => {
       item.classList.toggle("is-active", item.dataset.tab === state.ui.activeTab);
@@ -916,7 +970,7 @@
     const family = remoteSession.household?.name || state.settings.familyName || "familia";
     if (appGreeting) {
       appGreeting.textContent = remoteStore.enabled && remoteSession.status !== "ready"
-        ? "Ponte Financeira"
+        ? "Nekuma Finance"
         : `Hey, ${family}`;
     }
     if (countryContext) countryContext.textContent = countryContextLabel();
@@ -933,9 +987,9 @@
     return `
       <section class="auth-panel">
         <article class="auth-visual" aria-hidden="true">
-          <div class="auth-brand-mark">PF</div>
+          <img class="auth-brand-mark" src="./assets/nekuma-logo-192.png" alt="" />
           <div>
-            <p class="auth-kicker">Ponte Financeira</p>
+            <p class="auth-kicker">Nekuma Finance</p>
             <h2>Um aplicativo financeiro completo. Dois paises em um so lugar.</h2>
           </div>
           <div class="auth-preview-card">
@@ -1024,6 +1078,13 @@
   }
 
   function renderFxCards() {
+    return `
+      <section class="fx-strip tv-fx-strip" aria-label="Cotacoes TradingView">
+        ${renderTradingViewQuoteCard("Dolar / Real", "FX_IDC:USDBRL", "USD")}
+        ${renderTradingViewQuoteCard("Dolar / Iene", "FX:USDJPY", "JPY")}
+        ${renderTradingViewQuoteCard("BTC / Dolar", "BITSTAMP:BTCUSD", "BTC")}
+      </section>
+    `;
     const quotes = state.fxQuotes || {};
     const usdJpy = Number(quotes.usdJpy || (quotes.usdBrl && quotes.jpyBrl ? quotes.usdBrl / quotes.jpyBrl : 0));
     const btcUsd = Number(quotes.btcUsd || cryptoPrice("BTC", "USD") || 0);
@@ -1063,9 +1124,23 @@
     `;
   }
 
+  function renderTradingViewQuoteCard(label, symbol, badge) {
+    const chipClass = badge === "BTC" ? "blue" : badge === "JPY" ? "gold" : "green";
+    return `
+      <article class="fx-card tv-fx-card">
+        <div class="tv-fx-head">
+          <p class="mini-label">${escapeHtml(label)}</p>
+          <span class="chip ${chipClass}">${escapeHtml(badge)}</span>
+        </div>
+        <tv-mini-chart symbol="${escapeAttr(symbol)}" line-chart-type="Baseline"></tv-mini-chart>
+      </article>
+    `;
+  }
+
   function renderCurrentTab() {
     const tab = state.ui.activeTab;
     if (tab === "accounts") return renderAccounts();
+    if (tab === "crypto") return renderCryptoTab();
     if (tab === "wise") return renderWise();
     if (tab === "reports") return renderReports();
     if (tab === "settings") return renderSettings();
@@ -1074,37 +1149,20 @@
 
   function renderDashboard() {
     const summary = summarizeMonth(state.ui.selectedMonth, "global");
-    const breathClass = summary.coverage > 20 ? "good" : "warn";
 
     return `
-      <section class="dashboard-grid">
-        <div class="hero-panel balance-hero">
-          <p class="hero-title">Saldo atual</p>
-          <p class="hero-value">${formatMoneyWithPrimary(summary.remaining, summary.currency)}</p>
-        </div>
+      ${renderFxCards()}
 
-        <div class="kpi-grid">
-          <article class="metric-card good">
-            <p class="metric-label">Entradas</p>
-            <p class="metric-value">${formatMoneyWithPrimary(summary.income + summary.bridgeIn, summary.currency)}</p>
-            <p class="metric-foot">${summary.bridgeIn ? "Inclui Wise recebido" : "Receitas do mes"}</p>
-          </article>
-          <article class="metric-card warn">
-            <p class="metric-label">Saidas</p>
-            <p class="metric-value">${formatMoneyWithPrimary(summary.expenses + summary.investments + summary.wiseOut + summary.fees, summary.currency)}</p>
-            <p class="metric-foot">Pagas e abertas no mes</p>
-          </article>
-          <article class="metric-card">
-            <p class="metric-label">Wise</p>
-            <p class="metric-value">${formatMoneyWithPrimary(summary.wiseDisplay, summary.currency)}</p>
-            <p class="metric-foot">${summary.wiseLabel}</p>
-          </article>
-          <article class="metric-card ${breathClass}">
-            <p class="metric-label">Folego</p>
-            <p class="metric-value">${summary.coverage}%</p>
-            <p class="metric-foot">Saldo livre das entradas</p>
-          </article>
+      <section class="content-panel overview-card">
+        ${renderBalanceOverview(summary)}
+      </section>
+
+      <section class="content-panel subscriptions-panel">
+        <div class="panel-head">
+          <h2>Subscricoes atuais</h2>
+          <button class="small-action icon-action" type="button" data-action="open-modal" data-modal="subscription" aria-label="Nova subscricao">+</button>
         </div>
+        ${renderSubscriptionsHomePanel()}
       </section>
 
       <section class="content-panel">
@@ -1112,7 +1170,26 @@
           <h2>Calendario financeiro</h2>
           <span class="chip gold">${formatMonthLabel(state.ui.selectedMonth)}</span>
         </div>
-        ${renderFinancialCalendar(8)}
+        ${renderFinancialCalendar(8, "upcoming")}
+      </section>
+
+      <section class="content-panel crypto-panel is-compact">
+        <div class="panel-head">
+          <h2>Carteira cripto</h2>
+          <div class="chips">
+            <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
+            <button class="small-action" type="button" data-action="open-modal" data-modal="crypto">Nova cripto</button>
+          </div>
+        </div>
+        ${renderCryptoPanel(true)}
+      </section>
+
+      <section class="content-panel">
+        <div class="panel-head">
+          <h2>Meus Cartoes</h2>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="creditCard">Novo</button>
+        </div>
+        ${renderCreditCardsPanel(3)}
       </section>
 
       <section class="content-panel housing-panel">
@@ -1123,66 +1200,20 @@
         ${renderHousingPanel(2)}
       </section>
 
-      <section class="split-grid">
-        <article class="content-panel">
-          <div class="panel-head">
-            <h2>Meus Cartoes</h2>
-            <button class="small-action" type="button" data-action="open-modal" data-modal="creditCard">Novo</button>
-          </div>
-          ${renderCreditCardsPanel(3)}
-        </article>
-
-        <article class="content-panel subscriptions-panel">
-          <div class="panel-head">
-            <h2>Subscricoes</h2>
-            <button class="small-action" type="button" data-action="open-modal" data-modal="subscription">Nova</button>
-          </div>
-          ${renderSubscriptionsPanel(6)}
-        </article>
-      </section>
-
-      <section class="split-grid">
-        <article class="content-panel">
-          <div class="panel-head">
-            <h2>Empresas e Rendas</h2>
-            <button class="small-action" type="button" data-action="open-modal" data-modal="workIncome">Receber</button>
-          </div>
-          ${renderIncomePanel(3)}
-        </article>
-
-        <article class="content-panel crypto-panel">
-          <div class="panel-head">
-            <h2>Saldo cripto</h2>
-            <button class="small-action" type="button" data-action="open-modal" data-modal="crypto">Nova</button>
-          </div>
-          ${renderCryptoPanel()}
-        </article>
-      </section>
-
-      <section class="split-grid">
-        <article class="content-panel vehicle-panel">
-          <div class="panel-head">
-            <h2>Veiculo Japao</h2>
-            <button class="small-action" type="button" data-action="open-modal" data-modal="vehicleMaintenance">Manutencao</button>
-          </div>
-          ${renderVehiclePanel(3)}
-        </article>
-
-        <article class="content-panel">
-          <div class="panel-head">
-            <h2>Comparativo</h2>
-            <span class="chip blue">6 meses</span>
-          </div>
-          <div class="chart-wrap"><canvas id="trend-chart" aria-label="Grafico mensal"></canvas></div>
-        </article>
+      <section class="content-panel vehicle-panel">
+        <div class="panel-head">
+          <h2>Veiculo Japao</h2>
+          <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicle">Editar</button>
+        </div>
+        ${renderVehiclePanel(3)}
       </section>
 
       <section class="content-panel">
         <div class="panel-head">
-          <h2>Proximas contas</h2>
-          <button class="small-action" type="button" data-action="open-modal" data-modal="commitment">Nova</button>
+          <h2>Comparativo do mes</h2>
+          <span class="chip blue">6 meses</span>
         </div>
-        ${renderCommitmentList(6)}
+        <div class="chart-wrap"><canvas id="trend-chart" aria-label="Grafico mensal"></canvas></div>
       </section>
 
       <section class="content-panel">
@@ -1195,18 +1226,75 @@
     `;
   }
 
+  function renderBalanceOverview(summary) {
+    const breakdown = dashboardBalanceBreakdown(summary);
+    const payableLabel = breakdown.payables ? formatMoneyWithPrimary(breakdown.payables, breakdown.currency) : formatMoney(0, breakdown.currency);
+    return `
+      <div class="balance-overview">
+        <div class="balance-copy">
+          <p class="hero-title">Saldo atual</p>
+          <p class="hero-value">${formatMoneyWithPrimary(summary.remaining, summary.currency)}</p>
+          <div class="overview-mini-grid">
+            <div>
+              <span>Recebido ate agora</span>
+              <strong>${formatMoneyWithPrimary(breakdown.received, breakdown.currency)}</strong>
+            </div>
+            <div>
+              <span>Contas a pagar</span>
+              <strong>${payableLabel}</strong>
+            </div>
+          </div>
+        </div>
+        <div class="balance-pie-wrap">
+          <canvas id="balance-pie-chart" aria-label="Recebido contra contas a pagar"></canvas>
+          <div class="balance-pie-center">
+            <span>Folego</span>
+            <strong>${summary.coverage}%</strong>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function dashboardBalanceBreakdown(summary = summarizeMonth(state.ui.selectedMonth, "global")) {
+    const currency = summary.currency;
+    const rate = latestRate(state.ui.selectedMonth);
+    const payables = dashboardUpcomingFinancialItems(99).reduce((total, item) => {
+      return total + convert(item.amount, item.currency, currency, rate);
+    }, 0);
+    return {
+      currency,
+      received: Math.max(0, summary.actualInflow),
+      payables: Math.max(0, payables)
+    };
+  }
+
+  function dashboardUpcomingFinancialItems(limit = 8) {
+    const selectedMonth = state.ui.selectedMonth;
+    const current = currentMonth();
+    const today = startOfDay(new Date());
+    const minDate = selectedMonth === current ? today : parseLocalDate(dateInMonth(selectedMonth, 1));
+    if (selectedMonth < current) return [];
+    return financialCalendarItems(selectedMonth, "global")
+      .filter((item) => item.kind !== "income")
+      .filter((item) => item.amount > 0)
+      .filter((item) => !item.paid)
+      .filter((item) => parseLocalDate(item.date) >= minDate)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title))
+      .slice(0, limit);
+  }
+
   function renderAccounts() {
     return `
       <section class="split-grid">
         <article class="content-panel">
           <div class="panel-head">
-            <h2>Empresas e Rendas</h2>
+            <h2>Pagamentos do mes</h2>
             <div class="chips">
-              <button class="small-action ghost" type="button" data-action="open-modal" data-modal="incomeSource">Empresa</button>
               <button class="small-action" type="button" data-action="open-modal" data-modal="workIncome">Recebimento</button>
             </div>
           </div>
-          ${renderIncomePanel(null)}
+          ${renderIncomePaymentsPanel(null)}
         </article>
 
         <article class="content-panel vehicle-panel">
@@ -1218,6 +1306,7 @@
             </div>
           </div>
           ${renderVehiclePanel(null)}
+          ${renderVehicleMaintenancePanel(null)}
         </article>
       </section>
 
@@ -1233,16 +1322,6 @@
           ${renderCreditCardsPanel(null)}
         </article>
 
-        <article class="content-panel crypto-panel">
-          <div class="panel-head">
-            <h2>Carteira cripto</h2>
-            <div class="chips">
-              <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
-              <button class="small-action" type="button" data-action="open-modal" data-modal="crypto">Nova cripto</button>
-            </div>
-          </div>
-          ${renderCryptoPanel()}
-        </article>
       </section>
 
       <section class="content-panel housing-panel">
@@ -1516,6 +1595,14 @@
             <button class="primary-button" type="submit">Salvar ajustes</button>
           </div>
         </form>
+      </section>
+
+      <section class="content-panel">
+        <div class="panel-head">
+          <h2>Empresas e Rendas</h2>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="incomeSource">Empresa</button>
+        </div>
+        ${renderIncomeSourcesSettingsPanel()}
       </section>
 
       ${renderCloudSettings()}
@@ -1852,10 +1939,9 @@
       ${limit ? `
         <div class="subscription-grid">
           ${visible.map((item) => {
-            const meta = subscriptionMeta(item);
             return `
               <button class="subscription-badge" type="button" data-action="open-modal" data-modal="subscription" data-id="${item.id}">
-                <span class="subscription-icon" style="background:${escapeAttr(meta.color)}">${escapeHtml(meta.icon)}</span>
+                ${renderSubscriptionLogo(item, "subscription-logo subscription-icon")}
                 <strong>${escapeHtml(subscriptionName(item))}</strong>
                 <span class="subscription-value">${formatMoneyWithPrimary(item.amount, item.currency, month)}</span>
               </button>
@@ -1866,14 +1952,13 @@
       ${limit || !visible.length ? "" : `
         <div class="subscription-list">
           ${visible.map((item) => {
-            const meta = subscriptionMeta(item);
             const card = item.cardId ? creditCardById(item.cardId) : null;
             const payment = item.paymentMethod === "card"
               ? `Cartao ${card ? card.nickname || card.issuer : ""}`.trim()
               : "Pix";
             return `
               <div class="list-row subscription-detail-row">
-                <span class="row-icon subscription-row-icon" style="background:${escapeAttr(meta.color)}">${escapeHtml(meta.icon)}</span>
+                ${renderSubscriptionLogo(item, "row-icon subscription-logo subscription-row-icon")}
                 <div class="row-main">
                   <p class="row-title">${escapeHtml(subscriptionName(item))}</p>
                   <p class="row-meta">${countryMeta[item.country]?.label || ""} - vence dia ${item.dueDay || "--"} - ${escapeHtml(payment)}</p>
@@ -1890,6 +1975,58 @@
           }).join("")}
         </div>
       `}
+    `;
+  }
+
+  function renderCryptoTab() {
+    return `
+      <section class="content-panel crypto-panel crypto-page">
+        <div class="panel-head">
+          <h2>Criptomoedas</h2>
+          <div class="chips">
+            <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
+            <button class="small-action" type="button" data-action="open-modal" data-modal="crypto">Nova cripto</button>
+          </div>
+        </div>
+        ${renderCryptoPanel(false)}
+      </section>
+    `;
+  }
+
+  function renderSubscriptionsHomePanel(limit = null) {
+    const month = state.ui.selectedMonth;
+    const subscriptions = monthSubscriptions(month, "global");
+    if (!subscriptions.length) {
+      return `<p class="empty-state">Nenhuma subscricao ativa neste mes.</p>`;
+    }
+
+    const visible = limit ? subscriptions.slice(0, limit) : subscriptions;
+    const pages = [];
+    for (let index = 0; index < visible.length; index += 3) {
+      pages.push(visible.slice(index, index + 3));
+    }
+
+    return `
+      <div class="subscription-home-carousel" aria-label="Subscricoes atuais">
+        <div class="subscription-home-track">
+          ${pages.map((page) => `
+            <div class="subscription-home-page">
+              ${page.map((item) => {
+                const dueDate = subscriptionDateForMonth(item, month);
+                return `
+                  <button class="subscription-home-card" type="button" data-action="open-modal" data-modal="subscription" data-id="${item.id}">
+                    ${renderSubscriptionLogo(item, "subscription-logo subscription-home-logo")}
+                    <strong>${escapeHtml(subscriptionName(item))}</strong>
+                    <em>${formatMoneyWithPrimary(item.amount, item.currency, month)}</em>
+                    <small>Vence ${formatShortDate(dueDate)}</small>
+                  </button>
+                `;
+              }).join("")}
+            </div>
+          `).join("")}
+        </div>
+        ${visible.length > 3 ? `<p class="carousel-hint">Arraste para ver mais</p>` : ""}
+      </div>
     `;
   }
 
@@ -1976,7 +2113,7 @@
           const rowIcon = row.generated ? row.icon || "S" : `${row.installment}/${row.installments}`;
           const iconStyle = row.color ? ` style="background:${escapeAttr(row.color)}"` : "";
           const editModal = row.editModal || "cardPurchase";
-          const deleteAction = row.deleteAction || "delete-card-purchase";
+          const deleteAction = row.deleteAction || (row.generated ? "" : "delete-card-purchase");
           return `
           <div class="list-row">
             <span class="row-icon blue"${iconStyle}>${escapeHtml(rowIcon)}</span>
@@ -1989,7 +2126,7 @@
               ${limit ? "" : `
                 <div class="row-actions">
                   <button class="small-action ghost" type="button" data-action="open-modal" data-modal="${editModal}" data-id="${row.id}">Editar</button>
-                  <button class="small-action ghost" type="button" data-action="${deleteAction}" data-id="${row.id}">Excluir</button>
+                  ${deleteAction ? `<button class="small-action ghost" type="button" data-action="${deleteAction}" data-id="${row.id}">Excluir</button>` : ""}
                 </div>
               `}
             </div>
@@ -2000,10 +2137,12 @@
     `;
   }
 
-  function renderFinancialCalendar(limit) {
-    const items = financialCalendarItems(state.ui.selectedMonth, "global");
+  function renderFinancialCalendar(limit, mode = "all") {
+    const items = mode === "upcoming"
+      ? dashboardUpcomingFinancialItems(limit || 99)
+      : financialCalendarItems(state.ui.selectedMonth, "global");
     if (!items.length) return `<p class="empty-state">Nenhum evento financeiro neste mes.</p>`;
-    const visible = limit ? items.slice(0, limit) : items;
+    const visible = mode === "upcoming" ? items : (limit ? items.slice(0, limit) : items);
     return `
       <div class="calendar-list">
         ${visible.map((item) => {
@@ -2029,10 +2168,11 @@
     `;
   }
 
-  function renderCryptoPanel() {
+  function renderCryptoPanel(compact = false) {
     const assets = state.cryptoAssets || [];
     const summary = cryptoSummary();
     const status = cryptoStatusText();
+    const rows = cryptoAssetRows();
     if (!assets.length) {
       return `
         <div class="crypto-empty">
@@ -2043,93 +2183,159 @@
     }
 
     return `
-      <div class="crypto-layout">
-        <div class="crypto-donut-wrap">
-          <canvas id="crypto-donut-chart" aria-label="Distribuicao da carteira cripto"></canvas>
-          <div class="crypto-center">
-            <span>BTC total</span>
-            <strong>${formatCryptoAmount(summary.totalBtcQuantity)}</strong>
-            <small>${formatPercent(summary.btcProgressPct)} de 1 BTC</small>
+      <div class="crypto-wallet">
+        <div class="crypto-wallet-hero">
+          <div>
+            <p class="mini-label">Valor atual</p>
+            <strong>${formatMoneyWithPrimary(summary.totalValue, summary.currency)}</strong>
+            <p class="row-meta">Investido ${formatCryptoInvestedSummary(summary)}</p>
           </div>
+          <span class="chip ${summary.pnl >= 0 ? "green" : "red"}">${summary.pnl >= 0 ? "Valorizado" : "Desvalorizado"}</span>
         </div>
 
-        <div class="stat-strip crypto-stats">
-          <div class="stat-box">
-            <p class="mini-label">Investido</p>
-            <strong>${formatCryptoInvestedSummary(summary)}</strong>
-          </div>
-          <div class="stat-box">
-            <p class="mini-label">Resultado</p>
-            <strong>${formatPercent(summary.btcProgressPct)}</strong>
-            <p class="row-meta">${formatCryptoAmount(summary.totalBtcQuantity)} BTC</p>
-          </div>
-        </div>
-
-        <div class="crypto-value-card">
-          <div class="panel-head compact">
-            <h3>Investido x valor atual</h3>
-            <span class="chip ${summary.pnl >= 0 ? "green" : "red"}">${summary.pnl >= 0 ? "Valorizado" : "Desvalorizado"}</span>
-          </div>
-          <canvas id="crypto-value-chart" aria-label="Comparativo entre investimento e valor atual"></canvas>
-          <p class="row-meta ${summary.pnl >= 0 ? "income" : "expense"}">${formatSignedMoney(summary.pnl, summary.currency)} (${formatPercent(summary.pnlPct)})</p>
-        </div>
+        ${renderCryptoAllocationBar(rows, summary)}
 
         <div class="chips crypto-status">
           <span class="chip ${status.tone}">${status.label}</span>
-          <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
+          ${compact ? "" : `<button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>`}
         </div>
 
-        ${renderCryptoAssetsList()}
+        ${renderCryptoTokenCards(rows, compact)}
       </div>
     `;
   }
 
-  function renderCryptoAssetsList() {
-    const rows = cryptoAssetRows();
-    if (!rows.length) return `<p class="empty-state">Nenhuma cripto cadastrada.</p>`;
+  function renderCryptoAllocationBar(rows, summary) {
+    const allocations = cryptoAllocationRows(rows, summary);
+    if (!allocations.length) return `<p class="empty-state">Sem valor atual para montar a alocacao.</p>`;
     return `
-      <div class="list crypto-list">
-        ${rows.map((item) => `
-          <div class="crypto-entry-card">
-            <div class="crypto-entry-head">
-              <span class="row-icon" style="background:${item.color}">${escapeHtml(item.symbol.slice(0, 1))}</span>
-              <div>
-                <p class="row-title">${escapeHtml(item.name)}</p>
-                <p class="row-meta">${escapeHtml(item.provider)}</p>
-              </div>
-              <span class="chip ${item.pnl >= 0 ? "green" : "red"}">${item.pnl >= 0 ? "Valorizou" : "Desvalorizou"}</span>
-            </div>
+      <div class="crypto-allocation">
+        <div class="crypto-allocation-head">
+          <span>Alocacao da carteira</span>
+          <strong>100%</strong>
+        </div>
+        <div class="crypto-allocation-bar" aria-label="Alocacao da carteira cripto">
+          ${allocations.map((item) => `
+            <span
+              title="${escapeAttr(`${item.symbol} ${formatPercent(item.pct)}`)}"
+              style="--segment-color:${escapeAttr(item.color)};--segment-width:${Math.max(2, item.pct)}%;"
+            ></span>
+          `).join("")}
+        </div>
+        <div class="crypto-allocation-legend">
+          ${allocations.map((item) => `
+            <span><i style="background:${escapeAttr(item.color)}"></i>${escapeHtml(item.symbol)} ${formatPercent(item.pct)}</span>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
 
-            <div class="crypto-entry-grid">
-              <div>
-                <span>Quantidade</span>
-                <strong>${formatCryptoAmount(item.quantity)} ${escapeHtml(item.symbol)}</strong>
+  function renderCryptoTokenCards(rows, compact = false) {
+    if (!rows.length) return `<p class="empty-state">Nenhuma cripto cadastrada.</p>`;
+    const displayRows = compact ? cryptoGroupedRows(rows) : rows;
+    const visible = compact ? displayRows.slice(0, 4) : displayRows;
+    return `
+      <div class="crypto-token-list">
+        ${visible.map((item) => `
+          <div class="crypto-token-card">
+            <span class="crypto-token-icon" style="background:${escapeAttr(item.color)}">${escapeHtml(item.symbol.slice(0, 1))}</span>
+            <div class="crypto-token-main">
+              <div class="crypto-token-head">
+                <div>
+                  <p class="row-title">${escapeHtml(item.name)}</p>
+                  <p class="row-meta">${formatCryptoAmount(item.quantity)} ${escapeHtml(item.symbol)} - ${escapeHtml(item.provider)}</p>
+                </div>
+                <span class="chip ${item.pnl >= 0 ? "green" : "red"}">${item.pnl >= 0 ? "Valorizou" : "Desvalorizou"}</span>
               </div>
-              <div>
-                <span>Comprado</span>
-                <strong>${formatMoneyWithPrimary(item.rawCost, item.costCurrency, item.purchaseDate?.slice(0, 7) || state.ui.selectedMonth)}</strong>
+              <div class="crypto-token-grid">
+                <div>
+                  <span>Investido</span>
+                  <strong>${formatMoneyWithPrimary(item.rawCost, item.costCurrency, item.purchaseDate?.slice(0, 7) || state.ui.selectedMonth)}</strong>
+                </div>
+                <div>
+                  <span>Valor atual</span>
+                  <strong>${formatMoneyWithPrimary(item.value, item.currency)}</strong>
+                </div>
+                <div>
+                  <span>Resultado</span>
+                  <strong class="${item.pnl >= 0 ? "income" : "expense"}">${formatSignedMoney(item.pnl, item.currency)}</strong>
+                  <small>${formatPercent(item.pnlPct)}</small>
+                </div>
               </div>
-              <div>
-                <span>Valor atual</span>
-                <strong>${formatMoney(item.value, item.currency)}</strong>
-              </div>
-              <div>
-                <span>Desde a compra</span>
-                <strong class="${item.pnl >= 0 ? "income" : "expense"}">${formatSignedMoney(item.pnl, item.currency)} (${formatPercent(item.pnlPct)})</strong>
-              </div>
-            </div>
-
-            <div class="crypto-entry-actions">
-              <p class="row-meta">Comprado em ${formatShortDate(item.purchaseDate)}</p>
-              <div class="row-actions">
-                <button class="small-action ghost" type="button" data-action="open-modal" data-modal="crypto" data-id="${item.id}">Editar</button>
-                <button class="small-action ghost" type="button" data-action="delete-crypto" data-id="${item.id}">Excluir</button>
-              </div>
+              ${compact ? "" : `
+                <div class="crypto-token-actions">
+                  <p class="row-meta">Comprado em ${formatShortDate(item.purchaseDate)}</p>
+                  <div class="row-actions">
+                    <button class="small-action ghost" type="button" data-action="open-modal" data-modal="crypto" data-id="${item.id}">Editar</button>
+                    <button class="small-action ghost" type="button" data-action="delete-crypto" data-id="${item.id}">Excluir</button>
+                  </div>
+                </div>
+              `}
             </div>
           </div>
         `).join("")}
       </div>
+      ${compact && displayRows.length > visible.length ? `<p class="empty-state subtle">Mostrando ${visible.length} de ${displayRows.length} criptos na carteira.</p>` : ""}
     `;
+  }
+
+  function cryptoGroupedRows(rows) {
+    const grouped = rows.reduce((map, row) => {
+      const current = map.get(row.symbol) || {
+        id: row.symbol,
+        symbol: row.symbol,
+        name: row.name,
+        color: row.color,
+        quantity: 0,
+        rawCost: 0,
+        costCurrency: row.currency,
+        cost: 0,
+        price: row.price,
+        value: 0,
+        pnl: 0,
+        pnlPct: 0,
+        provider: "Total acumulado",
+        purchaseDate: row.purchaseDate,
+        currency: row.currency
+      };
+      current.quantity += row.quantity;
+      current.cost += row.cost;
+      current.value += row.value;
+      current.pnl += row.pnl;
+      current.rawCost += convert(row.rawCost, row.costCurrency, row.currency, latestRate(row.purchaseDate?.slice(0, 7) || state.ui.selectedMonth));
+      current.purchaseDate = current.purchaseDate && current.purchaseDate < row.purchaseDate ? current.purchaseDate : row.purchaseDate;
+      map.set(row.symbol, current);
+      return map;
+    }, new Map());
+
+    return Array.from(grouped.values())
+      .map((item) => ({
+        ...item,
+        rawCost: item.cost,
+        costCurrency: item.currency,
+        pnlPct: item.cost ? round((item.pnl / item.cost) * 100, 2) : 0
+      }))
+      .sort((a, b) => b.value - a.value);
+  }
+
+  function cryptoAllocationRows(rows, summary) {
+    const total = Math.max(0, summary?.totalValue || sum(rows, "value"));
+    if (!total) return [];
+    const grouped = rows.reduce((map, row) => {
+      const current = map.get(row.symbol) || {
+        symbol: row.symbol,
+        name: row.name,
+        color: row.color,
+        value: 0
+      };
+      current.value += row.value;
+      map.set(row.symbol, current);
+      return map;
+    }, new Map());
+    return Array.from(grouped.values())
+      .map((item) => ({ ...item, pct: round((item.value / total) * 100, 2) }))
+      .sort((a, b) => b.value - a.value);
   }
 
   function renderIncomePanel(limit) {
@@ -2195,6 +2401,58 @@
     `;
   }
 
+  function renderIncomeSourcesSettingsPanel() {
+    const sources = state.incomeSources || [];
+    if (!sources.length) {
+      return `
+        <div class="empty-action">
+          <p class="empty-state">Nenhuma empresa cadastrada.</p>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="incomeSource">Adicionar empresa</button>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="list source-list">
+        ${sources.map((source) => `
+          <div class="list-row compact source-row">
+            <div>
+              <p class="row-title"><span class="source-dot" style="background:${escapeAttr(source.color)}"></span>${escapeHtml(source.name)}</p>
+              <p class="row-meta">${escapeHtml(sourceTypeLabel(source))} - ${source.currency || "JPY"}</p>
+              <p class="row-meta">Pagamento: ${escapeHtml(source.payRule || "agenda nao informada")}</p>
+            </div>
+            <div class="row-actions">
+              <button class="small-action ghost" type="button" data-action="open-modal" data-modal="incomeSource" data-id="${source.id}">Editar</button>
+              <button class="small-action ghost" type="button" data-action="delete-income-source" data-id="${source.id}">Excluir</button>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function renderIncomePaymentsPanel(limit) {
+    const rows = monthWorkIncomes(state.ui.selectedMonth);
+    const sources = state.incomeSources || [];
+    if (!sources.length) {
+      return `
+        <div class="empty-action">
+          <p class="empty-state">Cadastre uma empresa em Ajustes antes de adicionar recebimentos.</p>
+          <button class="small-action" type="button" data-action="set-tab" data-tab="settings">Ir para ajustes</button>
+        </div>
+      `;
+    }
+    if (!rows.length) {
+      return `
+        <div class="empty-action">
+          <p class="empty-state">Nenhum pagamento recebido neste mes.</p>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="workIncome">Adicionar recebimento</button>
+        </div>
+      `;
+    }
+    return renderIncomePaymentsList(limit ? rows.slice(0, limit) : rows);
+  }
+
   function renderIncomeReport() {
     const rows = monthWorkIncomes(state.ui.selectedMonth);
     if (!rows.length) return `<p class="empty-state">Nenhum recebimento neste mes.</p>`;
@@ -2229,11 +2487,8 @@
 
   function renderVehiclePanel(limit) {
     const vehicle = state.vehicle || {};
-    const costs = vehicleMonthlyCosts(state.ui.selectedMonth);
-    const maintenance = (state.vehicleMaintenance || [])
-      .filter((item) => item.date && item.date.slice(0, 7) === state.ui.selectedMonth)
-      .sort((a, b) => b.date.localeCompare(a.date));
-    const visible = limit ? maintenance.slice(0, limit) : maintenance;
+    const hasInsurance = vehicleHasInsurance(vehicle);
+    const insuranceCard = vehicle.insurancePaymentType === "card" ? creditCardById(vehicle.insuranceCardId) : null;
 
     if (!vehicle.model && !vehicle.plate) {
       return `
@@ -2246,24 +2501,47 @@
 
     return `
       <div class="vehicle-card">
-        <div>
-          <p class="mini-label">Modelo</p>
+        <div class="vehicle-visual" aria-hidden="true">
+          <div class="vehicle-image">
+            <span class="vehicle-car-body"></span>
+            <span class="vehicle-car-window"></span>
+            <span class="vehicle-wheel left"></span>
+            <span class="vehicle-wheel right"></span>
+          </div>
+        </div>
+        <div class="vehicle-main">
+          <p class="mini-label">Meu carro</p>
           <strong>${escapeHtml(vehicle.model || "Veiculo")}</strong>
           <p class="row-meta">${escapeHtml(vehicle.plate || "sem placa")}</p>
         </div>
-        <span class="chip blue">JP</span>
-      </div>
-      <div class="stat-strip">
-        <div class="stat-box">
-          <p class="mini-label">Custo no mes</p>
-          <strong>${formatMoneyWithPrimary(sum(costs, "amount"), "JPY")}</strong>
+        <div class="vehicle-info-card">
+          <span class="row-icon gold">C</span>
+          <div>
+            <p class="mini-label">Shaken</p>
+            <strong>${vehicle.shakenDueDate ? formatShortDate(vehicle.shakenDueDate) : "--"}</strong>
+            ${vehicle.shakenAmount ? `<small>${formatMoneyWithPrimary(vehicle.shakenAmount, "JPY", state.ui.selectedMonth)}</small>` : ""}
+          </div>
         </div>
-        <div class="stat-box">
-          <p class="mini-label">Shaken</p>
-          <strong>${vehicle.shakenDueDate ? formatShortDate(vehicle.shakenDueDate) : "--"}</strong>
-        </div>
+        <label class="vehicle-insurance-check">
+          <input type="checkbox" disabled ${hasInsurance ? "checked" : ""} />
+          <span>${hasInsurance ? "Possui seguro" : "Sem seguro"}</span>
+          ${insuranceCard ? `<small>${escapeHtml(insuranceCard.nickname || insuranceCard.issuer)}</small>` : ""}
+        </label>
       </div>
-      ${visible.length ? `
+    `;
+  }
+
+  function renderVehicleMaintenancePanel(limit) {
+    const maintenance = (state.vehicleMaintenance || [])
+      .filter((item) => item.date && item.date.slice(0, 7) === state.ui.selectedMonth)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    const visible = limit ? maintenance.slice(0, limit) : maintenance;
+
+    if (!visible.length) return `<p class="empty-state vehicle-maintenance-empty">Nenhuma manutencao registrada neste mes.</p>`;
+
+    return `
+      <div class="vehicle-maintenance-list">
+        <p class="mini-label">Manutencoes do mes</p>
         <div class="list">
           ${visible.map((item) => `
             <div class="list-row compact">
@@ -2283,7 +2561,7 @@
             </div>
           `).join("")}
         </div>
-      ` : `<p class="empty-state">Nenhuma manutencao neste mes.</p>`}
+      </div>
     `;
   }
 
@@ -2398,6 +2676,7 @@
     updateCommitmentProviderField();
     updateSubscriptionCardField();
     updateSubscriptionCustomField();
+    updateVehicleInsuranceCardField();
   }
 
   function closeModal() {
@@ -2980,6 +3259,7 @@
 
   function renderCryptoModal(item = null) {
     const symbol = String(item?.symbol || "BTC").toUpperCase();
+    const cryptoName = item?.customName || "";
     return `
       <div class="modal-head">
         <h2>${item ? "Editar cripto" : "Nova cripto"}</h2>
@@ -2987,12 +3267,17 @@
       </div>
       <form class="form-grid" data-form="crypto">
         ${editHidden(item)}
-        <div class="two-cols">
+        <div class="three-cols">
           <div class="field">
             <label for="cryptoSymbol">Cripto</label>
-            <select id="cryptoSymbol" name="symbol">
-              ${Object.entries(cryptoCatalog).map(([key, meta]) => `<option value="${key}" ${selectedAttr(key, symbol)}>${key} - ${meta.name}</option>`).join("")}
-            </select>
+            <input id="cryptoSymbol" name="symbol" required list="cryptoSymbolOptions" maxlength="16" placeholder="Ex: BTC, SOL, PEPE" value="${escapeAttr(symbol)}" />
+            <datalist id="cryptoSymbolOptions">
+              ${Object.entries(cryptoCatalog).map(([key, meta]) => `<option value="${key}">${escapeHtml(meta.name)}</option>`).join("")}
+            </datalist>
+          </div>
+          <div class="field">
+            <label for="cryptoCustomName">Nome</label>
+            <input id="cryptoCustomName" name="customName" placeholder="Opcional" value="${escapeAttr(cryptoName)}" />
           </div>
           <div class="field">
             <label for="cryptoQuantity">Quantidade</label>
@@ -3103,6 +3388,8 @@
 
   function renderVehicleModal() {
     const vehicle = state.vehicle || {};
+    const cards = state.creditCards || [];
+    const insurancePaymentType = normalizeVehicleInsurancePaymentType(vehicle);
     return `
       <div class="modal-head">
         <h2>Veiculo Japao</h2>
@@ -3139,14 +3426,28 @@
             <input id="insuranceDay" name="insuranceDay" type="number" min="1" max="31" value="${vehicle.insuranceDay || ""}" />
           </div>
           <div class="field">
-            <label for="insurancePaymentMethod">Como paga</label>
-            <input id="insurancePaymentMethod" name="insurancePaymentMethod" value="${escapeAttr(vehicle.insurancePaymentMethod || "")}" placeholder="Cartao, debito..." />
+            <label for="vehicleInsurancePaymentType">Como paga</label>
+            <select id="vehicleInsurancePaymentType" name="insurancePaymentType">
+              <option value="bank" ${selectedAttr("bank", insurancePaymentType)}>Conta/debito</option>
+              <option value="card" ${selectedAttr("card", insurancePaymentType)}>Cartao de credito</option>
+              <option value="cash" ${selectedAttr("cash", insurancePaymentType)}>Dinheiro</option>
+            </select>
           </div>
         </div>
-        <div class="field">
-          <label for="insuranceCompany">Empresa do seguro</label>
-          <input id="insuranceCompany" name="insuranceCompany" value="${escapeAttr(vehicle.insuranceCompany || "")}" placeholder="Ex: Sompo, Tokio Marine" />
+        <div class="two-cols">
+          <div class="field">
+            <label for="insuranceCompany">Empresa do seguro</label>
+            <input id="insuranceCompany" name="insuranceCompany" value="${escapeAttr(vehicle.insuranceCompany || "")}" placeholder="Ex: Sompo, Tokio Marine" />
+          </div>
+          <div class="field vehicle-insurance-card-field ${insurancePaymentType === "card" ? "" : "is-hidden"}">
+            <label for="vehicleInsuranceCardId">Cartao do seguro</label>
+            <select id="vehicleInsuranceCardId" name="insuranceCardId">
+              <option value="">Selecione</option>
+              ${cards.map((card) => `<option value="${card.id}" ${selectedAttr(card.id, vehicle.insuranceCardId)}>${escapeHtml(card.nickname || card.issuer)} - ${countryMeta[card.country]?.short || "JP"} - ${card.currency}</option>`).join("")}
+            </select>
+          </div>
         </div>
+        ${!cards.length ? `<p class="empty-state vehicle-card-hint">Cadastre um cartao para conectar o seguro mensal na fatura.</p>` : ""}
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
           <button class="primary-button" type="submit">Salvar veiculo</button>
@@ -3243,6 +3544,10 @@
               ${currencyOptions(item?.currency || primaryCurrency())}
             </select>
           </div>
+        </div>
+        <div class="field">
+          <label for="sourcePayRule">Agenda de pagamento</label>
+          <input id="sourcePayRule" name="payRule" placeholder="Ex: toda quarta, toda terca, dia 25" value="${escapeAttr(item?.payRule || "")}" />
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -3513,9 +3818,10 @@
 
   function saveCryptoAsset(form) {
     const data = formData(form);
-    const symbol = String(data.symbol || "BTC").toUpperCase();
+    const symbol = normalizeCryptoSymbol(data.symbol || "BTC");
     const updated = upsertItem("cryptoAssets", data.id, {
       symbol,
+      customName: data.customName.trim(),
       quantity: cryptoQuantityText(data.quantity),
       costAmount: number(data.costAmount),
       costCurrency: data.costCurrency,
@@ -3572,6 +3878,11 @@
 
   function saveVehicle(form) {
     const data = formData(form);
+    const insurancePaymentType = normalizeVehicleInsurancePaymentType({ insurancePaymentType: data.insurancePaymentType });
+    if (number(data.insuranceAmount) > 0 && insurancePaymentType === "card" && !data.insuranceCardId) {
+      showToast("Selecione o cartao do seguro.");
+      return;
+    }
     state.vehicle = {
       model: data.model.trim(),
       plate: data.plate.trim(),
@@ -3580,7 +3891,9 @@
       insuranceAmount: number(data.insuranceAmount),
       insuranceDay: data.insuranceDay ? clamp(Math.round(number(data.insuranceDay)), 1, 31) : "",
       insuranceCompany: data.insuranceCompany.trim(),
-      insurancePaymentMethod: data.insurancePaymentMethod.trim(),
+      insurancePaymentMethod: vehicleInsurancePaymentLabel(insurancePaymentType),
+      insurancePaymentType,
+      insuranceCardId: insurancePaymentType === "card" ? data.insuranceCardId : "",
       currency: "JPY",
       updatedAt: new Date().toISOString()
     };
@@ -3620,7 +3933,7 @@
       hourlyRate: 0,
       color: data.color || sourceColors[state.incomeSources.length % sourceColors.length],
       currency: data.currency || "JPY",
-      payRule: ""
+      payRule: String(data.payRule || "").trim()
     });
     saveState();
     closeModal();
@@ -3825,7 +4138,7 @@
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `ponte-financeira-${state.ui.selectedMonth}.json`;
+    link.download = `nekuma-finance-${state.ui.selectedMonth}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -3850,6 +4163,8 @@
   }
 
   function drawVisibleCharts() {
+    const balancePie = document.getElementById("balance-pie-chart");
+    if (balancePie) drawBalancePieChart(balancePie);
     const trend = document.getElementById("trend-chart");
     if (trend) drawTrendChart(trend);
     const category = document.getElementById("category-chart");
@@ -3860,6 +4175,157 @@
     if (crypto) drawCryptoDonutChart(crypto);
     const cryptoValue = document.getElementById("crypto-value-chart");
     if (cryptoValue) drawCryptoValueChart(cryptoValue);
+  }
+
+  function drawBalancePieChart(canvas) {
+    const ctx = prepCanvas(canvas);
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const data = dashboardBalanceBreakdown();
+    const received = Math.max(0, data.received);
+    const payables = Math.max(0, data.payables);
+    const total = Math.max(1, received + payables);
+    const receivedAngle = (received / total) * Math.PI * 2;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radius = Math.min(width, height) * 0.34;
+
+    ctx.clearRect(0, 0, width, height);
+    ctx.lineWidth = Math.max(18, radius * 0.26);
+    ctx.lineCap = "round";
+    const lineWidth = ctx.lineWidth;
+
+    ctx.beginPath();
+    ctx.strokeStyle = "#ded4c4";
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (!received && !payables) {
+      drawLightLegend(ctx, [["Sem dados", "#ded4c4"]], 12, 14);
+      bindCanvasTooltip(canvas, () => null);
+      return;
+    }
+
+    if (received) {
+      ctx.beginPath();
+      ctx.strokeStyle = "#42a67a";
+      ctx.arc(centerX, centerY, radius, -Math.PI / 2, -Math.PI / 2 + receivedAngle);
+      ctx.stroke();
+    }
+
+    if (payables) {
+      ctx.beginPath();
+      ctx.strokeStyle = "#d95d4e";
+      ctx.arc(centerX, centerY, radius, -Math.PI / 2 + receivedAngle + 0.08, Math.PI * 1.5 - 0.04);
+      ctx.stroke();
+    }
+
+    drawLightLegend(ctx, [
+      ["Recebido", "#42a67a"],
+      ["A pagar", "#d95d4e"]
+    ], 12, 14);
+
+    const segments = [
+      { label: "Recebido no mes", value: received, color: "#42a67a", start: -Math.PI / 2, end: -Math.PI / 2 + receivedAngle },
+      { label: "Contas a pagar", value: payables, color: "#d95d4e", start: -Math.PI / 2 + receivedAngle + 0.08, end: Math.PI * 1.5 - 0.04 }
+    ].filter((item) => item.value > 0);
+
+    bindCanvasTooltip(canvas, (event) => {
+      const point = canvasPointerPoint(canvas, event);
+      const dx = point.x - centerX;
+      const dy = point.y - centerY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < radius - lineWidth || distance > radius + lineWidth) return null;
+      const angle = normalizeAngle(Math.atan2(dy, dx));
+      const hit = segments.find((segment) => angleInRange(angle, segment.start, segment.end));
+      if (!hit) return null;
+      return {
+        title: hit.label,
+        lines: [formatMoneyWithPrimary(hit.value, data.currency)],
+        color: hit.color
+      };
+    });
+  }
+
+  function drawLightLegend(ctx, items, x, y) {
+    let cursor = x;
+    items.forEach(([label, color]) => {
+      roundRect(ctx, cursor, y - 8, 10, 10, 4, color);
+      ctx.fillStyle = "rgba(255, 250, 240, 0.78)";
+      ctx.font = "750 11px system-ui";
+      ctx.textAlign = "left";
+      ctx.fillText(label, cursor + 15, y + 1);
+      cursor += ctx.measureText(label).width + 42;
+    });
+  }
+
+  function bindCanvasTooltip(canvas, hitTest) {
+    canvas.onpointermove = (event) => {
+      const hit = hitTest(event);
+      if (hit) showChartTooltip(event, hit);
+      else hideChartTooltip();
+    };
+    canvas.onpointerleave = hideChartTooltip;
+    canvas.onpointerdown = (event) => {
+      const hit = hitTest(event);
+      if (!hit) return;
+      showChartTooltip(event, hit);
+      clearTimeout(canvas.__tooltipTimer);
+      canvas.__tooltipTimer = setTimeout(hideChartTooltip, 2600);
+    };
+  }
+
+  function canvasPointerPoint(canvas, event) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    };
+  }
+
+  function normalizeAngle(angle) {
+    return (angle + Math.PI * 2) % (Math.PI * 2);
+  }
+
+  function angleInRange(angle, start, end) {
+    const normalizedStart = normalizeAngle(start);
+    const normalizedEnd = normalizeAngle(end);
+    if (normalizedStart <= normalizedEnd) return angle >= normalizedStart && angle <= normalizedEnd;
+    return angle >= normalizedStart || angle <= normalizedEnd;
+  }
+
+  function showChartTooltip(event, hit) {
+    const tooltip = chartTooltipElement();
+    tooltip.innerHTML = `
+      <span style="background:${escapeAttr(hit.color || "#312c51")}"></span>
+      <div>
+        <strong>${escapeHtml(hit.title)}</strong>
+        ${hit.lines.map((line) => `<small>${line}</small>`).join("")}
+      </div>
+    `;
+    const offset = 14;
+    tooltip.style.left = "0px";
+    tooltip.style.top = "0px";
+    const maxLeft = Math.max(12, window.innerWidth - tooltip.offsetWidth - 12);
+    const maxTop = Math.max(12, window.innerHeight - tooltip.offsetHeight - 12);
+    tooltip.style.left = `${Math.max(12, Math.min(maxLeft, event.clientX + offset))}px`;
+    tooltip.style.top = `${Math.max(12, Math.min(maxTop, event.clientY + offset))}px`;
+    tooltip.classList.add("is-visible");
+  }
+
+  function hideChartTooltip() {
+    document.getElementById("chart-tooltip")?.classList.remove("is-visible");
+  }
+
+  function chartTooltipElement() {
+    let tooltip = document.getElementById("chart-tooltip");
+    if (!tooltip) {
+      tooltip = document.createElement("div");
+      tooltip.id = "chart-tooltip";
+      tooltip.className = "chart-tooltip";
+      document.body.appendChild(tooltip);
+    }
+    return tooltip;
   }
 
   function drawTrendChart(canvas) {
@@ -3887,6 +4353,7 @@
 
     ctx.clearRect(0, 0, width, height);
     drawGrid(ctx, padding, chartW, chartH, width);
+    const hitAreas = [];
 
     series.forEach((entry, index) => {
       const x = padding.left + index * slot + slot / 2;
@@ -3895,6 +4362,26 @@
       const yBase = padding.top + chartH;
       roundRect(ctx, x - barW - 2, yBase - incomeH, barW, incomeH, 5, "#42a67a");
       roundRect(ctx, x + 2, yBase - outH, barW, outH, 5, "#d95d4e");
+      hitAreas.push({
+        x: x - barW - 8,
+        y: yBase - Math.max(4, incomeH) - 6,
+        w: barW + 12,
+        h: Math.max(8, incomeH) + 12,
+        color: "#42a67a",
+        title: `${entry.label} - entradas`,
+        value: entry.income,
+        currency: entry.currency
+      });
+      hitAreas.push({
+        x: x - 4,
+        y: yBase - Math.max(4, outH) - 6,
+        w: barW + 12,
+        h: Math.max(8, outH) + 12,
+        color: "#d95d4e",
+        title: `${entry.label} - saidas`,
+        value: entry.outflow,
+        currency: entry.currency
+      });
       ctx.fillStyle = "#766f62";
       ctx.font = "700 11px system-ui";
       ctx.textAlign = "center";
@@ -3905,6 +4392,19 @@
       ["Entradas", "#42a67a"],
       ["Saidas", "#d95d4e"]
     ], 12, 14);
+
+    bindCanvasTooltip(canvas, (event) => {
+      const point = canvasPointerPoint(canvas, event);
+      const hit = hitAreas.find((area) => (
+        point.x >= area.x && point.x <= area.x + area.w && point.y >= area.y && point.y <= area.y + area.h
+      ));
+      if (!hit) return null;
+      return {
+        title: hit.title,
+        lines: [formatMoneyWithPrimary(hit.value, hit.currency)],
+        color: hit.color
+      };
+    });
   }
 
   function drawCategoryChart(canvas) {
@@ -4270,7 +4770,7 @@
   function cryptoAssetRows(currency = primaryCurrency()) {
     const rate = latestRate(state.ui.selectedMonth);
     return (state.cryptoAssets || []).map((item) => {
-      const symbol = String(item.symbol || "BTC").toUpperCase();
+      const symbol = normalizeCryptoSymbol(item.symbol || "BTC");
       const meta = cryptoCatalog[symbol] || { name: symbol, color: "#f5c84c" };
       const quantity = cryptoQuantityNumber(item.quantity);
       const rawCost = number(item.costAmount);
@@ -4284,7 +4784,7 @@
       return {
         id: item.id,
         symbol,
-        name: meta.name,
+        name: item.customName || meta.name,
         color: meta.color,
         quantity,
         rawCost,
@@ -4779,7 +5279,9 @@
 
   function vehicleCalendarEntries(month, country) {
     if (country !== "global" && country !== "japao") return [];
-    return vehicleMonthlyCosts(month).map((item) => ({
+    return vehicleMonthlyCosts(month)
+      .filter((item) => item.id === "vehicle-insurance" || item.id === "vehicle-shaken")
+      .map((item) => ({
       id: item.id,
       country: "japao",
       type: "vehicle",
@@ -4886,7 +5388,7 @@
         return cardPurchaseInstallmentRow(purchase, card, month);
       })
       .filter(Boolean);
-    return [...purchases, ...subscriptionCardRows(month, country)]
+    return [...purchases, ...subscriptionCardRows(month, country), ...vehicleInsuranceCardRows(month, country)]
       .sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
   }
 
@@ -4898,7 +5400,7 @@
         return card ? cardPurchaseInstallmentRow(purchase, card, month) : null;
       })
       .filter(Boolean);
-    return [...purchases, ...subscriptionCardRowsForCard(cardId, month)];
+    return [...purchases, ...subscriptionCardRowsForCard(cardId, month), ...vehicleInsuranceCardRowsForCard(cardId, month)];
   }
 
   function cardPurchaseInstallmentRow(purchase, card, month) {
@@ -4970,6 +5472,48 @@
     };
   }
 
+  function vehicleInsuranceCardRows(month, country) {
+    const vehicle = state.vehicle || {};
+    const card = creditCardById(vehicle.insuranceCardId);
+    if (!card || country !== "global" && card.country !== country) return [];
+    const row = vehicleInsuranceCardRow(vehicle, card, month);
+    return row ? [row] : [];
+  }
+
+  function vehicleInsuranceCardRowsForCard(cardId, month) {
+    const vehicle = state.vehicle || {};
+    const card = creditCardById(cardId);
+    if (!card || vehicle.insuranceCardId !== cardId) return [];
+    const row = vehicleInsuranceCardRow(vehicle, card, month);
+    return row ? [row] : [];
+  }
+
+  function vehicleInsuranceCardRow(vehicle, card, month) {
+    const paymentType = normalizeVehicleInsurancePaymentType(vehicle);
+    const rawAmount = number(vehicle.insuranceAmount);
+    if (paymentType !== "card" || !rawAmount || !vehicle.insuranceCardId) return null;
+    const rawCurrency = vehicle.currency || "JPY";
+    return {
+      id: `vehicle-insurance-${month}`,
+      generated: true,
+      editModal: "vehicle",
+      cardId: card.id,
+      cardName: card.nickname || card.issuer,
+      country: card.country,
+      title: `Seguro ${vehicle.insuranceCompany || vehicle.model || "veiculo"}`,
+      category: "Veiculo",
+      purchaseDate: dateInMonth(month, vehicle.insuranceDay || 1),
+      installment: 1,
+      installments: 1,
+      rawAmount,
+      rawCurrency,
+      amount: convert(rawAmount, rawCurrency, card.currency, latestRate(month)),
+      currency: card.currency,
+      icon: "C",
+      color: "#f0c38e"
+    };
+  }
+
   function installmentAmount(totalAmount, installments, index) {
     const total = number(totalAmount);
     const base = round(total / installments, 2);
@@ -4997,6 +5541,28 @@
 
   function subscriptionMeta(item) {
     return subscriptionCatalog[item?.serviceKey] || subscriptionCatalog.other;
+  }
+
+  function subscriptionLogoFile(item) {
+    const meta = subscriptionMeta(item);
+    if (meta.asset) return meta.asset;
+    const lookup = normalizeLookupText(subscriptionName(item));
+    const match = subscriptionLogoAliases.find(([alias]) => lookup.includes(normalizeLookupText(alias)));
+    return match ? match[1] : "";
+  }
+
+  function renderSubscriptionLogo(item, className = "subscription-logo") {
+    const meta = subscriptionMeta(item);
+    const asset = subscriptionLogoFile(item);
+    const image = asset
+      ? `<img src="./assets/subscriptions/${escapeAttr(asset)}" alt="" loading="lazy" onerror="this.closest('.subscription-logo')?.classList.remove('has-image');this.remove();" />`
+      : "";
+    return `
+      <span class="${escapeAttr(className)}${asset ? " has-image" : ""}" style="--subscription-color:${escapeAttr(meta.color)}">
+        <span class="subscription-fallback">${escapeHtml(meta.icon)}</span>
+        ${image}
+      </span>
+    `;
   }
 
   function subscriptionName(item) {
@@ -5091,6 +5657,17 @@
     if (!show) cardSelect.value = "";
   }
 
+  function updateVehicleInsuranceCardField() {
+    const select = modalRoot.querySelector("#vehicleInsurancePaymentType");
+    const field = modalRoot.querySelector(".vehicle-insurance-card-field");
+    const cardSelect = modalRoot.querySelector("#vehicleInsuranceCardId");
+    if (!select || !field || !cardSelect) return;
+    const show = select.value === "card";
+    field.classList.toggle("is-hidden", !show);
+    cardSelect.required = show;
+    if (!show) cardSelect.value = "";
+  }
+
   function updateSubscriptionCustomField() {
     const select = modalRoot.querySelector("#subscriptionServiceKey");
     const field = modalRoot.querySelector(".subscription-custom-field");
@@ -5102,13 +5679,35 @@
     if (!show) input.value = "";
   }
 
+  function normalizeVehicleInsurancePaymentType(vehicle = {}) {
+    const explicit = String(vehicle.insurancePaymentType || "").toLowerCase();
+    if (["bank", "card", "cash"].includes(explicit)) return explicit;
+    const legacy = String(vehicle.insurancePaymentMethod || "").toLowerCase();
+    if (legacy.includes("cart") || legacy.includes("credit")) return "card";
+    if (legacy.includes("dinheiro") || legacy.includes("cash")) return "cash";
+    return "bank";
+  }
+
+  function vehicleInsurancePaymentLabel(type) {
+    return {
+      bank: "Conta/debito",
+      card: "Cartao de credito",
+      cash: "Dinheiro"
+    }[type] || "Conta/debito";
+  }
+
+  function vehicleHasInsurance(vehicle = state.vehicle || {}) {
+    return number(vehicle.insuranceAmount) > 0 || Boolean(String(vehicle.insuranceCompany || "").trim());
+  }
+
   function vehicleMonthlyCosts(month) {
     const vehicle = state.vehicle || {};
     const items = [];
     const insuranceAmount = number(vehicle.insuranceAmount);
     const shakenAmount = number(vehicle.shakenAmount);
+    const insurancePaymentType = normalizeVehicleInsurancePaymentType(vehicle);
 
-    if (insuranceAmount) {
+    if (insuranceAmount && insurancePaymentType !== "card") {
       items.push({
         id: "vehicle-insurance",
         generated: true,
@@ -5119,7 +5718,7 @@
         amount: insuranceAmount,
         currency: "JPY",
         date: dateInMonth(month, vehicle.insuranceDay || 1),
-        note: vehicle.insurancePaymentMethod || "seguro mensal",
+        note: vehicle.insurancePaymentMethod || vehicleInsurancePaymentLabel(insurancePaymentType),
         icon: "V"
       });
     }

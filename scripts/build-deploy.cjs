@@ -8,6 +8,7 @@ const version = process.env.DEPLOY_VERSION || buildVersion();
 
 const publicFiles = [
   "index.html",
+  "clean.html",
   "app.js",
   "styles.css",
   "service-worker.js",
@@ -68,7 +69,7 @@ function withVersion(fileName, content) {
 
   if (fileName === "service-worker.js") {
     return content
-      .replace(/ponte-financeira-v\d+/g, `ponte-financeira-v${version}`)
+      .replace(/nekuma-finance-v\d+/g, `nekuma-finance-v${version}`)
       .replace(/styles\.css\?v=\d+/g, `styles.css?v=${version}`)
       .replace(/supabase-config\.js\?v=\d+/g, `supabase-config.js?v=${version}`)
       .replace(/app\.js\?v=\d+/g, `app.js?v=${version}`);
@@ -79,10 +80,10 @@ function withVersion(fileName, content) {
 
 function writeDeployInfo() {
   const info = {
-    app: "Ponte Financeira",
+    app: "Nekuma Finance",
     version,
     generatedAt: new Date().toISOString(),
-    site: "https://pontefinanceira.netlify.app/"
+    site: "https://nekuma-finance.pages.dev/"
   };
   fs.writeFileSync(path.join(outputDir, "deploy-info.json"), `${JSON.stringify(info, null, 2)}\n`, "utf8");
 }

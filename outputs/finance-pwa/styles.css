@@ -83,17 +83,14 @@ textarea:focus-visible {
 }
 
 .avatar {
-  display: grid;
+  display: block;
   width: 42px;
   height: 42px;
   flex: 0 0 auto;
-  place-items: center;
   border: 2px solid var(--ink);
   border-radius: 50%;
-  color: var(--ink);
-  background: var(--gold);
-  font-weight: 900;
-  letter-spacing: 0;
+  background: #fffaf4;
+  object-fit: cover;
 }
 
 .eyebrow,
@@ -297,14 +294,12 @@ h3 {
 }
 
 .auth-brand-mark {
-  display: grid;
+  display: block;
   width: 52px;
   height: 52px;
-  place-items: center;
   border-radius: 50%;
-  color: #312c51;
-  background: #f0c38e;
-  font-weight: 950;
+  background: #fffaf4;
+  object-fit: cover;
 }
 
 .auth-preview-card {
@@ -445,6 +440,48 @@ h3 {
   flex: 0 0 auto;
 }
 
+.tv-fx-strip {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tv-fx-card {
+  display: grid;
+  align-items: stretch;
+  gap: 6px;
+  min-height: 146px;
+  padding: 8px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.tv-fx-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.tv-fx-head .mini-label {
+  margin: 0;
+  font-size: 0.66rem;
+  line-height: 1.1;
+}
+
+.tv-fx-head .chip {
+  padding: 7px 8px;
+  font-size: 0.68rem;
+}
+
+.tv-fx-card tv-mini-chart {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  border-radius: calc(var(--radius) - 2px);
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .hero-panel {
   display: flex;
   flex-direction: column;
@@ -480,6 +517,105 @@ h3 {
   letter-spacing: 0;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.content-panel.overview-card {
+  padding: 0;
+  overflow: hidden;
+  color: var(--paper);
+  border-color: rgba(255, 250, 240, 0.1);
+  background:
+    radial-gradient(circle at 80% 16%, rgba(240, 195, 142, 0.24), transparent 28%),
+    linear-gradient(145deg, #312c51 0%, #48426d 54%, #2f4157 100%);
+  box-shadow: var(--shadow);
+}
+
+.balance-overview {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  color: var(--paper);
+}
+
+.balance-copy {
+  display: grid;
+  align-content: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.balance-copy .hero-title {
+  color: rgba(255, 250, 240, 0.72);
+}
+
+.balance-copy .hero-value {
+  color: #9bc8a3;
+  font-size: clamp(2.8rem, 11vw, 5.1rem);
+}
+
+.overview-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.overview-mini-grid div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 250, 240, 0.12);
+  border-radius: var(--radius);
+  background: rgba(255, 250, 240, 0.09);
+}
+
+.overview-mini-grid span {
+  display: block;
+  color: rgba(255, 250, 240, 0.66);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.overview-mini-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--paper);
+  font-size: clamp(0.95rem, 4vw, 1.22rem);
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+
+.balance-pie-wrap {
+  position: relative;
+  min-height: 230px;
+}
+
+.balance-pie-wrap canvas {
+  width: 100%;
+  height: 230px;
+}
+
+.balance-pie-center {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  display: grid;
+  width: 94px;
+  transform: translate(-50%, -50%);
+  place-items: center;
+  text-align: center;
+}
+
+.balance-pie-center span {
+  color: rgba(255, 250, 240, 0.66);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.balance-pie-center strong {
+  color: var(--paper);
+  font-size: 1.5rem;
+  line-height: 1;
+  font-weight: 950;
 }
 
 .kpi-grid {
@@ -590,6 +726,13 @@ h3 {
   background: var(--paper);
 }
 
+.small-action.icon-action {
+  min-width: 38px;
+  padding: 0 12px;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
 .chart-wrap {
   position: relative;
   width: 100%;
@@ -600,6 +743,58 @@ canvas {
   display: block;
   width: 100%;
   height: 240px;
+}
+
+.chart-tooltip {
+  position: fixed;
+  z-index: 90;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  max-width: min(260px, calc(100vw - 24px));
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 250, 244, 0.18);
+  border-radius: var(--radius);
+  color: var(--paper);
+  background: rgba(49, 44, 81, 0.96);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.chart-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.chart-tooltip > span {
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border-radius: 999px;
+}
+
+.chart-tooltip strong,
+.chart-tooltip small {
+  display: block;
+}
+
+.chart-tooltip strong {
+  margin-bottom: 3px;
+  font-size: 0.82rem;
+}
+
+.chart-tooltip small {
+  color: rgba(255, 250, 244, 0.78);
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.chart-tooltip .money-converted {
+  display: inline;
+  color: rgba(255, 250, 244, 0.6);
 }
 
 .split-grid,
@@ -905,9 +1100,9 @@ canvas {
 }
 
 .vehicle-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(150px, auto) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
   padding: 12px;
@@ -918,6 +1113,69 @@ canvas {
     var(--paper);
 }
 
+.vehicle-visual {
+  display: grid;
+  width: 78px;
+  height: 58px;
+  place-items: center;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #fff4d8, #f0c38e);
+}
+
+.vehicle-image {
+  position: relative;
+  width: 64px;
+  height: 36px;
+}
+
+.vehicle-car-body,
+.vehicle-car-window,
+.vehicle-wheel {
+  position: absolute;
+  display: block;
+}
+
+.vehicle-car-body {
+  right: 0;
+  bottom: 8px;
+  width: 60px;
+  height: 19px;
+  border-radius: 14px 18px 8px 8px;
+  background: linear-gradient(135deg, #fffaf4 0%, #dfe9ef 55%, #9cb0bd 100%);
+  box-shadow: inset 0 -2px 0 rgba(49, 44, 81, 0.12);
+}
+
+.vehicle-car-window {
+  left: 18px;
+  top: 3px;
+  width: 28px;
+  height: 17px;
+  border-radius: 14px 14px 3px 3px;
+  background: linear-gradient(135deg, #567c9b, #dfe9ef);
+  clip-path: polygon(12% 100%, 36% 0, 78% 0, 100% 100%);
+}
+
+.vehicle-wheel {
+  bottom: 3px;
+  width: 12px;
+  height: 12px;
+  border: 3px solid #312c51;
+  border-radius: 50%;
+  background: #fffaf4;
+}
+
+.vehicle-wheel.left {
+  left: 12px;
+}
+
+.vehicle-wheel.right {
+  right: 9px;
+}
+
+.vehicle-main {
+  min-width: 0;
+}
+
 .vehicle-card strong {
   display: block;
   max-width: 100%;
@@ -925,6 +1183,62 @@ canvas {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.vehicle-info-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(49, 44, 81, 0.1);
+  border-radius: var(--radius);
+  background: rgba(255, 250, 244, 0.78);
+}
+
+.vehicle-info-card small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.vehicle-insurance-check {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 132px;
+  padding: 10px;
+  border: 1px solid rgba(66, 166, 122, 0.22);
+  border-radius: var(--radius);
+  background: rgba(232, 248, 237, 0.66);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.vehicle-insurance-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: #42a67a;
+}
+
+.vehicle-insurance-check small {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.vehicle-maintenance-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.vehicle-maintenance-empty {
+  margin-top: 10px;
 }
 
 .progress-track {
@@ -1398,20 +1712,45 @@ canvas {
   text-align: center;
 }
 
-.subscription-icon,
-.subscription-row-icon {
-  color: #fffaf0;
-}
-
-.subscription-icon {
+.subscription-logo {
   display: grid;
   width: 38px;
   height: 38px;
   place-items: center;
   border-radius: 14px;
+  color: #fffaf0;
+  background: var(--subscription-color, #48426d);
   font-size: 0.72rem;
   font-weight: 950;
   box-shadow: 0 10px 20px rgba(49, 44, 81, 0.16);
+  overflow: hidden;
+}
+
+.subscription-logo.has-image {
+  color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.subscription-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.subscription-logo.has-image .subscription-fallback {
+  display: none;
+}
+
+.subscription-row-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+}
+
+.subscription-icon {
+  width: 38px;
+  height: 38px;
 }
 
 .subscription-badge strong {
@@ -1438,6 +1777,94 @@ canvas {
   display: grid;
   gap: 8px;
   margin-top: 12px;
+}
+
+.subscription-home-carousel {
+  display: grid;
+  gap: 8px;
+}
+
+.subscription-home-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 100%;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+}
+
+.subscription-home-page {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 100%;
+  scroll-snap-align: start;
+}
+
+.subscription-home-card {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 132px;
+  padding: 12px 8px;
+  border: 1px solid rgba(49, 44, 81, 0.1);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: rgba(255, 250, 240, 0.72);
+  cursor: pointer;
+  text-align: center;
+}
+
+.subscription-home-logo {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+}
+
+.subscription-home-card strong,
+.subscription-home-card small,
+.subscription-home-card em {
+  display: block;
+}
+
+.subscription-home-card strong {
+  width: 100%;
+  overflow: hidden;
+  font-size: 0.8rem;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subscription-home-card small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 780;
+}
+
+.subscription-home-card em {
+  color: #aa3d31;
+  font-size: 0.82rem;
+  font-style: normal;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.subscription-home-card em .money-converted {
+  margin-top: 1px;
+  font-size: 0.66rem;
+}
+
+.carousel-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: right;
 }
 
 .subscription-detail-row {
@@ -1544,6 +1971,240 @@ canvas {
   overflow: hidden;
 }
 
+.crypto-wallet {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+
+.crypto-wallet-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius);
+  color: var(--paper);
+  background:
+    radial-gradient(circle at 88% 0%, rgba(245, 200, 76, 0.24), transparent 28%),
+    linear-gradient(145deg, #312c51 0%, #48426d 55%, #2f4157 100%);
+}
+
+.crypto-wallet-hero .mini-label {
+  color: rgba(255, 250, 244, 0.72);
+}
+
+.crypto-wallet-hero strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--paper);
+  font-size: clamp(1.55rem, 7vw, 2.65rem);
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.crypto-wallet-hero .row-meta {
+  margin-top: 6px;
+  color: rgba(255, 250, 244, 0.72);
+}
+
+.crypto-wallet-hero .money-converted {
+  color: rgba(255, 250, 244, 0.62);
+}
+
+.crypto-wallet-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.crypto-wallet-kpis div {
+  min-width: 0;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: rgba(49, 44, 81, 0.045);
+}
+
+.crypto-wallet-kpis span,
+.crypto-token-grid span,
+.crypto-allocation-head span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.crypto-wallet-kpis strong,
+.crypto-wallet-kpis small {
+  display: block;
+}
+
+.crypto-wallet-kpis strong {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.crypto-wallet-kpis small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.crypto-wallet .income,
+.crypto-token-card .income {
+  color: #247653;
+}
+
+.crypto-wallet .expense,
+.crypto-token-card .expense {
+  color: #aa3d31;
+}
+
+.crypto-allocation {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(49, 44, 81, 0.1);
+  border-radius: var(--radius);
+  background: rgba(255, 250, 240, 0.68);
+}
+
+.crypto-allocation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.crypto-allocation-head strong {
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+
+.crypto-allocation-bar {
+  display: flex;
+  width: 100%;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(49, 44, 81, 0.09);
+}
+
+.crypto-allocation-bar span {
+  flex: 0 0 var(--segment-width);
+  min-width: 4px;
+  background: var(--segment-color);
+}
+
+.crypto-allocation-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.crypto-allocation-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.crypto-allocation-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.crypto-token-list {
+  display: grid;
+  gap: 10px;
+}
+
+.crypto-token-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(49, 44, 81, 0.1);
+  border-radius: var(--radius);
+  background: rgba(255, 250, 240, 0.78);
+}
+
+.crypto-token-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 15px;
+  color: var(--paper);
+  font-size: 1rem;
+  font-weight: 950;
+  box-shadow: 0 10px 20px rgba(49, 44, 81, 0.14);
+}
+
+.crypto-token-main {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+}
+
+.crypto-token-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.crypto-token-head > div {
+  min-width: 0;
+}
+
+.crypto-token-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.crypto-token-grid div {
+  min-width: 0;
+  padding: 8px;
+  border-radius: var(--radius);
+  background: rgba(49, 44, 81, 0.045);
+}
+
+.crypto-token-grid strong,
+.crypto-token-grid small {
+  display: block;
+}
+
+.crypto-token-grid strong {
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 0.84rem;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+
+.crypto-token-grid small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.crypto-token-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .crypto-layout {
   display: grid;
   gap: 14px;
@@ -1636,6 +2297,18 @@ canvas {
   width: min(100%, 430px);
   align-items: center;
   justify-content: space-between;
+}
+
+.crypto-panel.is-compact .crypto-layout {
+  gap: 12px;
+}
+
+.crypto-panel.is-compact .crypto-donut-wrap {
+  min-height: 218px;
+}
+
+.crypto-panel.is-compact .crypto-donut-wrap canvas {
+  height: 218px;
 }
 
 .crypto-list {
@@ -1861,7 +2534,7 @@ canvas {
   left: 12px;
   z-index: 10;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 4px;
   max-width: 760px;
   height: var(--nav-h);
@@ -2046,6 +2719,18 @@ canvas {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
+  .tv-fx-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tv-fx-card {
+    min-height: 218px;
+  }
+
+  .tv-fx-card tv-mini-chart {
+    min-height: 172px;
+  }
+
   .fx-status-card {
     grid-column: auto;
   }
@@ -2053,6 +2738,13 @@ canvas {
   .dashboard-grid {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .balance-overview {
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 0.52fr);
+    align-items: center;
+    min-height: 300px;
+    padding: 24px;
   }
 
   .kpi-grid {
@@ -2065,6 +2757,16 @@ canvas {
 
   .reports-grid {
     grid-template-columns: 1.2fr 0.8fr;
+  }
+
+  .crypto-panel.is-compact .crypto-layout {
+    grid-template-columns: minmax(250px, 0.8fr) minmax(280px, 1fr);
+    align-items: center;
+  }
+
+  .crypto-panel.is-compact .crypto-value-card,
+  .crypto-panel.is-compact .crypto-status {
+    grid-column: 2;
   }
 
   .modal-backdrop {
@@ -2102,6 +2804,65 @@ canvas {
 }
 
 @media (max-width: 420px) {
+  .balance-overview {
+    grid-template-columns: minmax(0, 1fr) 128px;
+    align-items: center;
+    gap: 10px;
+    min-height: 236px;
+    padding: 16px;
+  }
+
+  .overview-mini-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .balance-copy {
+    gap: 8px;
+  }
+
+  .balance-copy .hero-value {
+    font-size: clamp(2.25rem, 16vw, 3.55rem);
+  }
+
+  .overview-mini-grid div {
+    padding: 8px;
+  }
+
+  .balance-pie-wrap {
+    min-height: 156px;
+  }
+
+  .balance-pie-wrap canvas {
+    height: 156px;
+  }
+
+  .balance-pie-center {
+    width: 76px;
+  }
+
+  .balance-pie-center strong {
+    font-size: 1.14rem;
+  }
+
+  .subscription-home-page {
+    gap: 8px;
+  }
+
+  .subscription-home-card {
+    min-height: 122px;
+    padding: 10px 6px;
+  }
+
+  .subscription-home-logo {
+    width: 46px;
+    height: 46px;
+    border-radius: 16px;
+  }
+
+  .subscription-home-card strong {
+    font-size: 0.72rem;
+  }
+
   .three-cols,
   .two-cols {
     grid-template-columns: 1fr;
@@ -2109,6 +2870,22 @@ canvas {
 
   .crypto-layout {
     grid-template-columns: 1fr;
+  }
+
+  .crypto-wallet-hero,
+  .crypto-token-head,
+  .crypto-token-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .crypto-wallet-kpis,
+  .crypto-token-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .crypto-token-card {
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
   .crypto-entry-grid {
@@ -2188,6 +2965,17 @@ canvas {
 
   .housing-form-row {
     grid-template-columns: 1fr;
+  }
+
+  .vehicle-card {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .vehicle-info-card,
+  .vehicle-insurance-check {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .row-amount {

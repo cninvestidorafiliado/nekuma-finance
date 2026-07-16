@@ -1,12 +1,14 @@
-const CACHE_NAME = "ponte-financeira-v32";
+const CACHE_NAME = "nekuma-finance-v52";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=32",
-  "./app.js?v=32",
+  "./clean.html",
+  "./styles.css?v=52",
+  "./app.js?v=52",
   "./supabase-config.js?v=26",
   "./manifest.webmanifest",
-  "./assets/icon.svg"
+  "./assets/nekuma-logo-192.png",
+  "./assets/nekuma-logo-512.png"
 ];
 
 self.addEventListener("install", (event) => {

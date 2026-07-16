@@ -1,11 +1,11 @@
-# Ponte Financeira
+# Nekuma Finance
 
 PWA financeiro familiar para controlar Brasil, Japao, Wise, cripto, veiculo, cartoes, contas e rendas extras.
 
 Site oficial:
 
 ```text
-https://pontefinanceira.netlify.app/
+https://nekuma-finance.pages.dev/
 ```
 
 ## Desenvolvimento
