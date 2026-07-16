@@ -30,7 +30,7 @@ function isAuthorized(request) {
 
 function requestAuth(response) {
   response.writeHead(401, {
-    "WWW-Authenticate": 'Basic realm="Ponte Financeira"',
+    "WWW-Authenticate": 'Basic realm="Nekuma Finance"',
     "Content-Type": "text/plain; charset=utf-8",
     "Cache-Control": "no-store"
   });
@@ -70,7 +70,7 @@ const server = http.createServer((request, response) => {
 
 server.listen(port, host, () => {
   if (process.stdout.isTTY) {
-    console.log(`Ponte Financeira running at http://${host}:${port}`);
+    console.log(`Nekuma Finance running at http://${host}:${port}`);
     console.log(`Login: ${authUser}`);
     if (!authPassword) console.log("Defina FINANCE_PASSWORD para acessar o servidor local.");
   }

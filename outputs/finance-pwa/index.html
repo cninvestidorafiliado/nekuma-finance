@@ -9,7 +9,10 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./assets/nekuma-logo-192.png" type="image/png" />
     <link rel="apple-touch-icon" href="./assets/nekuma-logo-512.png" />
-    <link rel="stylesheet" href="./styles.css?v=52" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;650;750;850&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css?v=53" />
   </head>
   <body>
     <div class="app-shell">
@@ -24,13 +27,14 @@
         </div>
         <div class="top-actions">
           <button class="icon-button logout-button" type="button" data-action="remote-signout" aria-label="Sair da conta" title="Sair">
+            <span data-lucide="log-out" aria-hidden="true"></span>
             Sair
           </button>
           <button class="icon-button" type="button" data-action="open-modal" data-modal="addHub" aria-label="Adicionar no app" title="Adicionar">
-            <span aria-hidden="true">+</span>
+            <span data-lucide="plus" aria-hidden="true">+</span>
           </button>
           <button class="icon-button soft" type="button" data-action="open-modal" data-modal="transfer" aria-label="Adicionar Wise" title="Adicionar Wise">
-            <span aria-hidden="true">W</span>
+            <span data-lucide="repeat-2" aria-hidden="true">W</span>
           </button>
         </div>
       </header>
@@ -39,27 +43,27 @@
 
       <nav class="bottom-nav" aria-label="Navegacao principal">
         <button class="nav-item is-active" type="button" data-action="set-tab" data-tab="dashboard">
-          <span aria-hidden="true">H</span>
+          <span data-lucide="home" aria-hidden="true">H</span>
           Inicio
         </button>
         <button class="nav-item" type="button" data-action="set-tab" data-tab="accounts">
-          <span aria-hidden="true">C</span>
+          <span data-lucide="wallet" aria-hidden="true">C</span>
           Contas
         </button>
         <button class="nav-item" type="button" data-action="set-tab" data-tab="crypto">
-          <span aria-hidden="true">B</span>
+          <span data-lucide="bitcoin" aria-hidden="true">B</span>
           Cripto
         </button>
         <button class="nav-item" type="button" data-action="set-tab" data-tab="wise">
-          <span aria-hidden="true">W</span>
+          <span data-lucide="repeat-2" aria-hidden="true">W</span>
           Wise
         </button>
         <button class="nav-item" type="button" data-action="set-tab" data-tab="reports">
-          <span aria-hidden="true">R</span>
+          <span data-lucide="bar-chart-3" aria-hidden="true">R</span>
           Relatorios
         </button>
         <button class="nav-item" type="button" data-action="set-tab" data-tab="settings">
-          <span aria-hidden="true">S</span>
+          <span data-lucide="settings" aria-hidden="true">S</span>
           Ajustes
         </button>
       </nav>
@@ -69,8 +73,9 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
     <script type="module" src="https://widgets.tradingview-widget.com/w/br/tv-mini-chart.js"></script>
     <script src="./supabase-config.js?v=26"></script>
-    <script src="./app.js?v=52"></script>
+    <script src="./app.js?v=53"></script>
   </body>
 </html>

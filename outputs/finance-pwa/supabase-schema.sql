@@ -328,9 +328,39 @@ as $$
   order by hm.created_at asc;
 $$;
 
+create or replace function public.save_app_state(target_household_id uuid, app_state jsonb)
+returns timestamptz
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  saved_at timestamptz := now();
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+
+  if not public.is_household_member(target_household_id) then
+    raise exception 'usuario nao pertence a esta familia';
+  end if;
+
+  insert into public.app_states (household_id, state, updated_by, updated_at)
+  values (target_household_id, coalesce(app_state, '{}'::jsonb), auth.uid(), saved_at)
+  on conflict (household_id) do update
+    set state = excluded.state,
+        updated_by = excluded.updated_by,
+        updated_at = excluded.updated_at;
+
+  return saved_at;
+end;
+$$;
+
 grant execute on function public.ensure_default_household(text) to authenticated;
 grant execute on function public.join_household_by_code(text) to authenticated;
 grant execute on function public.list_household_members(uuid) to authenticated;
+grant execute on function public.save_app_state(uuid, jsonb) to authenticated;
+grant select, insert, update, delete on public.app_states to authenticated;
 
 create policy "members can read households"
 on public.households for select

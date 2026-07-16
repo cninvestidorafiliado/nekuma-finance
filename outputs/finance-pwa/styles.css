@@ -2704,6 +2704,448 @@ canvas {
   display: none;
 }
 
+/* Nekuma UI Premium v1 */
+:root {
+  --ink: #10231f;
+  --ink-2: #1f4a3e;
+  --muted: #748179;
+  --line: rgba(16, 35, 31, 0.1);
+  --paper: #fffdf7;
+  --paper-2: #edf3ed;
+  --paper-3: #dfe9df;
+  --gold: #d8ff72;
+  --gold-2: #efffb6;
+  --coral: #f1aa9b;
+  --green: #0f7d50;
+  --red: #dc5b50;
+  --blue: #4f72d8;
+  --deep: #071f19;
+  --deep-2: #0e3329;
+  --lime: #c5ff67;
+  --glass: rgba(255, 253, 247, 0.78);
+  --shadow: 0 24px 70px rgba(7, 31, 25, 0.14);
+  --radius: 20px;
+  font-family: Manrope, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body {
+  font-variant-numeric: tabular-nums;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(197, 255, 103, 0.18), transparent 30%),
+    radial-gradient(circle at 88% 0%, rgba(15, 125, 80, 0.14), transparent 28%),
+    linear-gradient(180deg, #f5f7f0 0%, #edf3ed 44%, #f8f1e8 100%);
+}
+
+.app-shell {
+  padding-top: 18px;
+}
+
+.topbar {
+  padding: 10px 2px 0;
+}
+
+.avatar,
+.auth-brand-mark {
+  border-color: rgba(16, 35, 31, 0.16);
+  box-shadow:
+    0 10px 28px rgba(7, 31, 25, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.72);
+}
+
+h1 {
+  color: var(--deep);
+  font-weight: 850;
+}
+
+.eyebrow,
+.mini-label,
+.metric-label {
+  color: rgba(16, 35, 31, 0.56);
+  font-weight: 850;
+}
+
+.context-label {
+  color: var(--green);
+}
+
+.content-panel,
+.metric-card,
+.list-card,
+.month-current,
+.month-button,
+.form-grid input,
+.form-grid select,
+.form-grid textarea {
+  border-color: rgba(16, 35, 31, 0.1);
+  background: var(--glass);
+  box-shadow: 0 18px 54px rgba(7, 31, 25, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.content-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.content-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.5), transparent 38%),
+    radial-gradient(circle at 92% 8%, rgba(197, 255, 103, 0.12), transparent 22%);
+  pointer-events: none;
+}
+
+.content-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+.panel-head h2 {
+  color: var(--deep);
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.small-action,
+.primary-button {
+  border: 1px solid rgba(16, 35, 31, 0.08);
+  color: var(--deep);
+  background: linear-gradient(135deg, #d8ff72, #f0c38e);
+  box-shadow: 0 12px 28px rgba(7, 31, 25, 0.1);
+}
+
+.small-action.ghost,
+.secondary-button,
+.month-button {
+  color: var(--deep);
+  background: rgba(255, 253, 247, 0.68);
+}
+
+.icon-button {
+  border-radius: 16px;
+  color: #effff4;
+  background:
+    radial-gradient(circle at 30% 18%, rgba(197, 255, 103, 0.28), transparent 32%),
+    linear-gradient(135deg, var(--deep), #17473a);
+  box-shadow: 0 16px 36px rgba(7, 31, 25, 0.18);
+}
+
+.icon-button.soft {
+  color: var(--deep);
+  background: linear-gradient(135deg, #d8ff72, #f0c38e);
+}
+
+.icon-button svg,
+.nav-item svg {
+  width: 18px;
+  height: 18px;
+}
+
+.logout-button {
+  grid-auto-flow: column;
+  gap: 7px;
+}
+
+.fx-strip.tv-fx-strip {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fx-card.tv-fx-card {
+  min-height: 142px;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 247, 0.9), rgba(255, 253, 247, 0.7)),
+    radial-gradient(circle at 82% 18%, rgba(197, 255, 103, 0.22), transparent 36%);
+}
+
+.tv-fx-card tv-mini-chart {
+  min-height: 94px;
+}
+
+.chip {
+  border-radius: 999px;
+  font-weight: 900;
+}
+
+.chip.green {
+  color: #093126;
+  background: #bff3ce;
+}
+
+.chip.gold {
+  color: #1f2611;
+  background: #e7ff92;
+}
+
+.chip.blue {
+  color: #122346;
+  background: #d8e5ff;
+}
+
+.content-panel.overview-card {
+  border: 1px solid rgba(216, 255, 114, 0.16);
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at 78% 14%, rgba(216, 255, 114, 0.26), transparent 24%),
+    radial-gradient(circle at 12% 84%, rgba(67, 168, 111, 0.24), transparent 26%),
+    linear-gradient(145deg, #08221b 0%, #123d31 58%, #071a16 100%);
+  box-shadow: 0 34px 90px rgba(7, 31, 25, 0.28);
+}
+
+.content-panel.overview-card::before {
+  opacity: 0.8;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent 42%),
+    repeating-linear-gradient(125deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 16px);
+}
+
+.balance-overview {
+  gap: 22px;
+  padding: 22px;
+}
+
+.balance-copy .hero-title,
+.balance-pie-center span {
+  color: rgba(239, 255, 244, 0.64);
+}
+
+.balance-copy .hero-value {
+  color: #d8ff72;
+  text-shadow: 0 18px 40px rgba(216, 255, 114, 0.18);
+}
+
+.overview-mini-grid div {
+  border-color: rgba(239, 255, 244, 0.13);
+  background: rgba(239, 255, 244, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.overview-mini-grid strong,
+.balance-pie-center strong {
+  color: #fffdf7;
+}
+
+.bottom-nav {
+  border-radius: 26px;
+  background:
+    linear-gradient(180deg, rgba(8, 34, 27, 0.94), rgba(7, 26, 22, 0.96));
+  box-shadow: 0 22px 54px rgba(7, 31, 25, 0.36);
+}
+
+.nav-item {
+  border-radius: 18px;
+  color: rgba(239, 255, 244, 0.58);
+}
+
+.nav-item span {
+  width: 28px;
+  height: 28px;
+  background: rgba(239, 255, 244, 0.08);
+}
+
+.nav-item.is-active {
+  color: #d8ff72;
+  background: rgba(216, 255, 114, 0.08);
+}
+
+.nav-item.is-active span {
+  color: var(--deep);
+  background: linear-gradient(135deg, #d8ff72, #f0c38e);
+  box-shadow: 0 8px 18px rgba(216, 255, 114, 0.24);
+}
+
+.calendar-item,
+.list-row,
+.subscription-home-card,
+.crypto-token-card,
+.vehicle-info-card {
+  border-radius: 20px;
+  background: rgba(255, 253, 247, 0.76);
+  box-shadow: 0 12px 32px rgba(7, 31, 25, 0.06);
+}
+
+.calendar-date {
+  border-radius: 15px;
+}
+
+.chart-wrap canvas {
+  filter: drop-shadow(0 20px 28px rgba(7, 31, 25, 0.08));
+}
+
+.credit-card-tile {
+  min-height: 214px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 26px;
+  box-shadow:
+    0 24px 56px rgba(7, 31, 25, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transform-style: preserve-3d;
+}
+
+.credit-card-tile::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 24% 18%, rgba(255, 255, 255, 0.2), transparent 18%),
+    radial-gradient(circle at 90% 82%, rgba(255, 255, 255, 0.16), transparent 24%),
+    repeating-linear-gradient(130deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 16px);
+  pointer-events: none;
+}
+
+.credit-card-tile::after {
+  content: "";
+  position: absolute;
+  top: -44%;
+  right: -20%;
+  width: 65%;
+  height: 115%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  transform: rotate(24deg);
+  pointer-events: none;
+}
+
+.credit-card-tile > * {
+  position: relative;
+  z-index: 1;
+}
+
+.card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.card-chip {
+  position: relative;
+  display: block;
+  width: 38px;
+  height: 28px;
+  border: 1px solid rgba(28, 20, 8, 0.18);
+  border-radius: 9px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.32), transparent 46%),
+    linear-gradient(135deg, #e7c36d, #fff2b8 48%, #c8943d);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+}
+
+.card-chip::before,
+.card-chip::after {
+  content: "";
+  position: absolute;
+  inset: 6px 0 auto;
+  height: 1px;
+  background: rgba(28, 20, 8, 0.22);
+}
+
+.card-chip::after {
+  inset: auto 8px 0;
+  width: 1px;
+  height: 100%;
+}
+
+.card-network-mark {
+  color: rgba(255, 253, 247, 0.86);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+
+.card-brand {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 72%;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+}
+
+.card-name {
+  margin-top: 20px;
+  font-size: 1.08rem;
+  font-weight: 850;
+}
+
+.card-number {
+  margin: 8px 0 20px;
+  color: rgba(255, 253, 247, 0.88);
+  font-size: 0.96rem;
+  letter-spacing: 0.08em;
+}
+
+.card-foot,
+.card-meta-row {
+  color: rgba(255, 253, 247, 0.88);
+}
+
+.card-progress {
+  height: 7px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.card-progress .progress-fill {
+  background: linear-gradient(90deg, #d8ff72, #45d68c);
+}
+
+.flag-badge {
+  border-radius: 999px;
+  box-shadow: 0 10px 24px rgba(7, 31, 25, 0.16);
+}
+
+.credit-card-tile.style-nubank {
+  background:
+    radial-gradient(circle at 78% 20%, rgba(255, 255, 255, 0.2), transparent 22%),
+    linear-gradient(135deg, #6b21d8 0%, #a244ff 45%, #16112c 100%);
+}
+
+.credit-card-tile.style-mastercard {
+  background:
+    radial-gradient(circle at 78% 24%, rgba(255, 255, 255, 0.18), transparent 24%),
+    linear-gradient(135deg, #111827 0%, #43315f 42%, #ef8f30 100%);
+}
+
+.credit-card-tile.style-visa {
+  background:
+    radial-gradient(circle at 80% 18%, rgba(216, 255, 114, 0.24), transparent 24%),
+    linear-gradient(135deg, #071f4d 0%, #315cc8 52%, #061a38 100%);
+}
+
+.credit-card-tile.style-wise,
+.credit-card-tile.jp-card {
+  background:
+    radial-gradient(circle at 82% 20%, rgba(216, 255, 114, 0.28), transparent 25%),
+    linear-gradient(135deg, #06241d 0%, #0f7d50 50%, #071a16 100%);
+}
+
+.credit-card-tile.br-card {
+  background:
+    radial-gradient(circle at 82% 20%, rgba(255, 235, 109, 0.26), transparent 25%),
+    linear-gradient(135deg, #08221b 0%, #15694a 48%, #0a3155 100%);
+}
+
+@media (min-width: 760px) {
+  .fx-strip.tv-fx-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .fx-card.tv-fx-card {
+    min-height: 196px;
+  }
+
+  .tv-fx-card tv-mini-chart {
+    min-height: 148px;
+  }
+}
+
 @media (min-width: 760px) {
   .app-shell {
     padding-right: 20px;

@@ -947,6 +947,7 @@
     updateAppGreeting();
     if (remoteStore.enabled && remoteSession.status !== "ready") {
       app.innerHTML = renderAuthGate();
+      refreshIcons();
       return;
     }
 
@@ -961,9 +962,20 @@
       item.classList.toggle("is-active", item.dataset.tab === state.ui.activeTab);
     });
 
+    refreshIcons();
     requestAnimationFrame(drawVisibleCharts);
     scheduleFxRefresh(false);
     scheduleCryptoRefresh(false);
+  }
+
+  function refreshIcons() {
+    if (window.lucide?.createIcons) {
+      window.lucide.createIcons({
+        attrs: {
+          "stroke-width": 2.25
+        }
+      });
+    }
   }
 
   function updateAppGreeting() {
@@ -1832,9 +1844,13 @@
           return `
             <div class="credit-card-tile ${item.country === "brasil" ? "br-card" : "jp-card"} ${cardVisualStyle(item)}">
               <div class="flag-badge ${item.country === "brasil" ? "br" : "jp"}">${country.short}</div>
-              <div class="card-brand">${escapeHtml(item.brand || "Credito")}</div>
+              <div class="card-topline">
+                <span class="card-chip" aria-hidden="true"></span>
+                <span class="card-network-mark">${escapeHtml(cardNetworkLabel(item))}</span>
+              </div>
+              <div class="card-brand">${escapeHtml(item.issuer || item.brand || "Credito")}</div>
               <p class="card-name">${escapeHtml(item.nickname || item.issuer)}</p>
-              <p class="card-number">**** ${escapeHtml(item.last4 || "0000")}</p>
+              <p class="card-number">****  ****  ****  ${escapeHtml(item.last4 || "0000")}</p>
               <div class="card-foot">
                 <span>A pagar ${formatMoneyWithPrimary(bill.total, item.currency)}</span>
                 <span>${usage}%</span>
@@ -1916,6 +1932,13 @@
     if (text.includes("visa")) return "style-visa";
     if (text.includes("mastercard")) return "style-mastercard";
     return card?.country === "brasil" ? "style-brasil" : "style-japao";
+  }
+
+  function cardNetworkLabel(card) {
+    const brand = String(card?.brand || "").trim();
+    if (!brand) return "Card";
+    if (normalizeLookupText(brand).includes("master")) return "Mastercard";
+    return brand;
   }
 
   function renderSubscriptionsPanel(limit) {

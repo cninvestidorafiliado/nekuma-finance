@@ -1,4 +1,4 @@
-# Ponte Financeira
+# Nekuma Finance
 
 PWA inicial para controle financeiro familiar entre Brasil e Japao.
 
@@ -44,7 +44,7 @@ Esse servidor local e a senha basica sao apenas para teste no computador. Para f
 O Supabase ja esta configurado em `supabase-config.js`. O site oficial esta em:
 
 ```text
-https://pontefinanceira.netlify.app/
+https://nekuma-finance.pages.dev/
 ```
 
 Para gerar a pasta publica limpa:
