@@ -53,3 +53,27 @@ Redirect URL: https://nekuma-finance.pages.dev/**
 ```
 
 Se voce trocar o dominio no futuro, atualize esses campos antes de ativar confirmacao de e-mail, recuperacao de senha ou magic link.
+
+## PayPal no Cloudflare
+
+O card PayPal usa uma Cloudflare Pages Function em `functions/api/paypal/balance.js`.
+Nunca coloque o `client_secret` dentro do `app.js`.
+
+No Cloudflare Pages, configure as variaveis de ambiente:
+
+```text
+PAYPAL_CLIENT_ID=seu_client_id
+PAYPAL_CLIENT_SECRET=seu_secret
+PAYPAL_ENV=sandbox
+SUPABASE_URL=https://seu-projeto.supabase.co
+SUPABASE_ANON_KEY=sua_anon_key
+PAYPAL_ALLOWED_EMAILS=seu-email@exemplo.com
+```
+
+Use `PAYPAL_ENV=sandbox` para testes. Troque para `live` somente depois de regenerar o secret e revisar as permissoes do app no PayPal.
+
+Se publicar manualmente com Wrangler, rode o comando a partir da raiz do projeto. A pasta `functions/` precisa estar na raiz; Direct Upload pelo painel da Cloudflare nao publica Functions.
+
+```bash
+npx wrangler pages deploy outputs/finance-pwa-online --project-name=nekuma-finance --branch=main
+```

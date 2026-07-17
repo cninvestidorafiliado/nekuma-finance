@@ -78,6 +78,22 @@ Publique somente essa pasta. Nao publique `outputs/finance-pwa`, porque ela cont
 
 Tambem existe um guia completo em `DEPLOY.md`.
 
+### PayPal
+
+O card PayPal da Home consulta `/api/paypal/balance`, que deve rodar como Cloudflare Pages Function.
+Configure as variaveis no Cloudflare, nunca no frontend:
+
+```text
+PAYPAL_CLIENT_ID
+PAYPAL_CLIENT_SECRET
+PAYPAL_ENV=sandbox
+SUPABASE_URL
+SUPABASE_ANON_KEY
+PAYPAL_ALLOWED_EMAILS
+```
+
+O endpoint exige login Supabase e, quando `PAYPAL_ALLOWED_EMAILS` estiver preenchido, apenas esses emails podem consultar o saldo.
+
 ## Supabase
 
 Exemplo de `supabase-config.js`:

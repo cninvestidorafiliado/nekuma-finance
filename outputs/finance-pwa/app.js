@@ -127,18 +127,24 @@
     ["nordvpn", "nordvpn.png"]
   ];
   const cryptoCatalog = {
-    BTC: { id: "bitcoin", name: "Bitcoin", color: "#f7931a" },
-    ETH: { id: "ethereum", name: "Ethereum", color: "#627eea" },
-    SOL: { id: "solana", name: "Solana", color: "#48d1cc" },
+    BTC: { id: "bitcoin", name: "Bitcoin", color: "#f7931a", asset: "bitcoin.png" },
+    ETH: { id: "ethereum", name: "Ethereum", color: "#627eea", asset: "ethereum.png" },
+    SOL: { id: "solana", name: "Solana", color: "#48d1cc", asset: "solana.png" },
     ADA: { id: "cardano", name: "Cardano", color: "#d6e85d" },
-    XRP: { id: "ripple", name: "XRP", color: "#9aa0a6" },
-    USDT: { id: "tether", name: "Tether", color: "#26a17b" },
-    BNB: { id: "binancecoin", name: "BNB", color: "#f3ba2f" },
+    XRP: { id: "ripple", name: "XRP", color: "#9aa0a6", asset: "xrp.png" },
+    USDT: { id: "tether", name: "Tether", color: "#26a17b", asset: "tether.png" },
+    USDC: { id: "usd-coin", name: "USDC", color: "#2775ca", asset: "usdc.png" },
+    BNB: { id: "binancecoin", name: "BNB", color: "#f3ba2f", asset: "binance.png" },
     DOGE: { id: "dogecoin", name: "Dogecoin", color: "#c2a633" },
     DOT: { id: "polkadot", name: "Polkadot", color: "#e6007a" },
-    AVAX: { id: "avalanche-2", name: "Avalanche", color: "#e84142" },
+    AVAX: { id: "avalanche-2", name: "Avalanche", color: "#e84142", asset: "avalanche.png" },
     LINK: { id: "chainlink", name: "Chainlink", color: "#2a5ada" },
-    LTC: { id: "litecoin", name: "Litecoin", color: "#345d9d" }
+    LTC: { id: "litecoin", name: "Litecoin", color: "#345d9d" },
+    MATIC: { id: "matic-network", name: "Polygon", color: "#8247e5", asset: "polygon.png" },
+    POL: { id: "polygon-ecosystem-token", name: "Polygon", color: "#8247e5", asset: "polygon.png" },
+    SHIB: { id: "shiba-inu", name: "Shiba Inu", color: "#f00500", asset: "shiba-inu.png" },
+    XMR: { id: "monero", name: "Monero", color: "#ff6600", asset: "monero.png" },
+    TRX: { id: "tron", name: "TRON", color: "#ff0013", asset: "trx.png" }
   };
 
   const app = document.getElementById("app");
@@ -151,6 +157,10 @@
   let cryptoRefreshTimer = null;
   let fxFetchInFlight = false;
   let fxRefreshTimer = null;
+  let paypalFetchInFlight = false;
+  let remotePullTimer = null;
+  let remotePullInFlight = false;
+  let lastLocalChangeAt = 0;
   cleanupLegacyStorage();
   let state = loadState();
   const remoteStore = createRemoteStore();
@@ -169,13 +179,24 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=52")
+      navigator.serviceWorker.register("./service-worker.js?v=61")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
   }
 
   initApp();
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && hasPendingLocalChanges()) flushRemoteState().catch(() => {});
+    if (document.visibilityState === "visible") requestRemotePull("visible");
+  });
+
+  window.addEventListener("focus", () => requestRemotePull("focus"));
+  window.addEventListener("online", () => requestRemotePull("online"));
+  window.addEventListener("pagehide", () => {
+    if (hasPendingLocalChanges()) flushRemoteState().catch(() => {});
+  });
 
   document.addEventListener("click", (event) => {
     if (event.target.classList && event.target.classList.contains("modal-backdrop")) {
@@ -227,6 +248,7 @@
     if (action === "delete-work-income") deleteItem("workIncomes", button.dataset.id, "Recebimento removido.");
     if (action === "refresh-crypto") refreshCryptoQuotes(true);
     if (action === "refresh-fx") refreshFxQuotes(true);
+    if (action === "refresh-paypal") refreshPaypalBalance(true);
     if (action === "remote-signout") signOutRemote();
     if (action === "remote-sync-now") syncRemoteNow();
     if (action === "export-data") exportData();
@@ -309,6 +331,7 @@
       remoteSession.user = session.user;
       await loadRemoteState();
       remoteSession.status = "ready";
+      startRemoteAutoSync();
       render();
     } catch (error) {
       remoteSession.status = "error";
@@ -333,6 +356,7 @@
       if (inviteCode) await joinRemoteHouseholdByCode(inviteCode);
       else await loadRemoteState(remoteSession.user?.user_metadata?.family_name);
       remoteSession.status = "ready";
+      startRemoteAutoSync();
       render();
       showToast(inviteCode ? "Familia conectada." : "Login realizado.");
     } catch (error) {
@@ -369,6 +393,7 @@
       if (inviteCode) await joinRemoteHouseholdByCode(inviteCode);
       else await loadRemoteState(state.settings.familyName);
       remoteSession.status = "ready";
+      startRemoteAutoSync();
       render();
       showToast(inviteCode ? "Conta criada e familia conectada." : "Conta criada.");
     } catch (error) {
@@ -380,7 +405,7 @@
 
   async function signOutRemote() {
     if (!remoteStore.enabled) return;
-    await flushRemoteState();
+    if (hasPendingLocalChanges()) await flushRemoteState();
     await remoteStore.client.auth.signOut();
     remoteSession.status = "signedOut";
     remoteSession.user = null;
@@ -389,6 +414,7 @@
     remoteSession.householdMembers = [];
     remoteSession.membersError = "";
     remoteSession.error = "";
+    stopRemoteAutoSync();
     render();
     showToast("Voce saiu da conta.");
   }
@@ -405,7 +431,7 @@
     remoteSession.error = "";
     render();
     try {
-      if (remoteSession.householdId) await flushRemoteState();
+      if (remoteSession.householdId && hasPendingLocalChanges()) await flushRemoteState();
       await joinRemoteHouseholdByCode(inviteCode);
       remoteSession.saving = false;
       render();
@@ -586,6 +612,7 @@
     if (!remoteStore.enabled || remoteSession.status !== "ready" || !remoteSession.householdId) return;
     clearTimeout(remoteSaveTimer);
     remoteSaveTimer = setTimeout(() => {
+      remoteSaveTimer = null;
       flushRemoteState().catch((error) => {
         remoteSession.error = error.message || "Falha ao sincronizar.";
         render();
@@ -596,6 +623,7 @@
   async function flushRemoteState() {
     if (!remoteStore.enabled || !remoteSession.user || !remoteSession.householdId) return;
     clearTimeout(remoteSaveTimer);
+    remoteSaveTimer = null;
     remoteSession.saving = true;
     const now = new Date().toISOString();
     const nextState = { ...state, settings: { ...state.settings, dataMode: "online" } };
@@ -631,16 +659,73 @@
 
   async function syncRemoteNow() {
     try {
-      if (remoteSession.householdId) {
+      if (hasPendingLocalChanges()) {
+        await flushRemoteState();
+      } else if (remoteSession.householdId) {
         await loadRemoteStateForHousehold(remoteSession.householdId, false);
       }
-      await flushRemoteState();
       await loadRemoteHouseholdMembers();
       render();
       showToast("Sincronizado.");
     } catch (error) {
       remoteSession.error = error.message || "Falha ao sincronizar.";
       render();
+    }
+  }
+
+  function startRemoteAutoSync() {
+    stopRemoteAutoSync();
+    if (!remoteStore.enabled) return;
+    remotePullTimer = setInterval(() => requestRemotePull("timer"), 30000);
+  }
+
+  function stopRemoteAutoSync() {
+    if (remotePullTimer) clearInterval(remotePullTimer);
+    remotePullTimer = null;
+  }
+
+  function requestRemotePull(reason = "auto") {
+    if (!remoteStore.enabled || remoteSession.status !== "ready" || !remoteSession.householdId) return;
+    if (remoteSession.saving || remoteSaveTimer || Date.now() - lastLocalChangeAt < 2500) return;
+    pullRemoteStateIfNewer(reason).catch((error) => {
+      remoteSession.error = error.message || "Falha ao puxar dados da nuvem.";
+      render();
+    });
+  }
+
+  function hasPendingLocalChanges() {
+    const localSyncedAt = Date.parse(remoteSession.lastSyncedAt || "") || 0;
+    return Boolean(remoteStore.enabled && remoteSession.status === "ready" && lastLocalChangeAt && lastLocalChangeAt > localSyncedAt);
+  }
+
+  async function pullRemoteStateIfNewer(reason = "auto") {
+    if (remotePullInFlight || !remoteStore.enabled || !remoteSession.householdId) return;
+    remotePullInFlight = true;
+    try {
+      const { data, error } = await remoteStore.client
+        .from("app_states")
+        .select("state,updated_at")
+        .eq("household_id", remoteSession.householdId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data?.state || !Object.keys(data.state).length) return;
+
+      const remoteUpdatedAt = Date.parse(data.updated_at || "") || 0;
+      const localSyncedAt = Date.parse(remoteSession.lastSyncedAt || "") || 0;
+      if (remoteUpdatedAt && localSyncedAt && remoteUpdatedAt <= localSyncedAt) return;
+      if (localSyncedAt && lastLocalChangeAt > localSyncedAt) return;
+
+      const nextState = normalizeState(data.state);
+      state = nextState;
+      state.settings.dataMode = "online";
+      if (remoteSession.household?.name) state.settings.familyName = remoteSession.household.name;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      remoteSession.lastSyncedAt = data.updated_at || new Date().toISOString();
+      await loadRemoteHouseholdMembers();
+      render();
+      if (reason !== "timer") showToast("Dados atualizados da nuvem.");
+    } finally {
+      remotePullInFlight = false;
     }
   }
 
@@ -689,6 +774,7 @@
       housingCards: normalizeHousingCards(raw.housingCards, settings.baseCurrency),
       cryptoQuotes,
       fxQuotes: raw.fxQuotes || base.fxQuotes,
+      paypal: normalizePaypalState(raw.paypal || base.paypal),
       vehicle: normalizeVehicle(raw.vehicle, base.vehicle),
       vehicleMaintenance: Array.isArray(raw.vehicleMaintenance) ? raw.vehicleMaintenance : base.vehicleMaintenance,
       incomeSources: Array.isArray(raw.incomeSources) ? raw.incomeSources : base.incomeSources,
@@ -705,8 +791,11 @@
   function normalizeVehicle(rawVehicle, baseVehicle) {
     const vehicle = { ...baseVehicle, ...(rawVehicle || {}) };
     const paymentType = normalizeVehicleInsurancePaymentType(vehicle);
+    const parsed = splitVehicleModel(vehicle.model || "");
     return {
       ...vehicle,
+      brand: String(vehicle.brand || parsed.brand || "").trim(),
+      model: String(vehicle.brand ? vehicle.model || "" : parsed.model || vehicle.model || "").trim(),
       insurancePaymentType: paymentType,
       insuranceCardId: paymentType === "card" ? String(vehicle.insuranceCardId || "") : ""
     };
@@ -771,6 +860,56 @@
     });
   }
 
+  function normalizePaypalState(raw = {}) {
+    const balances = Array.isArray(raw.balances) ? raw.balances.map(normalizePaypalBalance).filter(Boolean) : [];
+    return {
+      env: String(raw.env || raw.mode || "sandbox").toLowerCase() === "live" ? "live" : "sandbox",
+      balances,
+      updatedAt: raw.updatedAt || raw.asOfTime || raw.as_of_time || null,
+      status: raw.status || "idle",
+      error: String(raw.error || ""),
+      source: raw.source || "PayPal"
+    };
+  }
+
+  function normalizePaypalBalance(item) {
+    if (!item) return null;
+    const currency = sanitizeCurrency(
+      item.currency || item.currency_code || item.total_balance?.currency_code || item.available_balance?.currency_code,
+      "USD"
+    );
+    const total = number(item.total ?? item.total_balance?.value ?? item.total_balance?.amount ?? 0);
+    const available = number(item.available ?? item.available_balance?.value ?? item.available_balance?.amount ?? total);
+    const withheld = number(item.withheld ?? item.withheld_balance?.value ?? item.withheld_balance?.amount ?? 0);
+    return {
+      currency,
+      total,
+      available,
+      withheld,
+      primary: Boolean(item.primary)
+    };
+  }
+
+  function paypalBalanceTotal(currency = primaryCurrency(), balances = state.paypal?.balances || []) {
+    const rate = latestRate(state.ui.selectedMonth);
+    return (balances || []).reduce((total, item) => {
+      return total + convert(number(item.total), item.currency, currency, rate);
+    }, 0);
+  }
+
+  function paypalStatusText(paypal = state.paypal) {
+    if (paypal.status === "loading") {
+      return { label: "Atualizando saldo", detail: "Consultando a API do PayPal." };
+    }
+    if (paypal.status === "error") {
+      return { label: "Nao conectado", detail: paypal.error || "Configure as variaveis do PayPal no Cloudflare." };
+    }
+    if (!paypal.updatedAt) {
+      return { label: "Conectar PayPal", detail: "Configure o endpoint seguro e clique em atualizar." };
+    }
+    return { label: "Saldo atualizado", detail: "Dados recebidos da API do PayPal." };
+  }
+
   function mergeCryptoAssetsWithLocal(remoteItems, localItems) {
     const localById = new Map((localItems || []).map((item) => [item.id, item]));
     let changed = false;
@@ -804,6 +943,7 @@
   }
 
   function saveState(options = {}) {
+    lastLocalChangeAt = Date.now();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     if (options.remoteNow) {
       flushRemoteState().catch((error) => {
@@ -864,10 +1004,18 @@
         updatedAt: null,
         status: "idle"
       },
+      paypal: {
+        env: "sandbox",
+        balances: [],
+        updatedAt: null,
+        status: "idle",
+        error: "",
+        source: "PayPal"
+      },
       vehicle: {
+        brand: "",
         model: "",
         plate: "",
-        shakenAmount: 0,
         shakenDueDate: "",
         insuranceAmount: 0,
         insuranceDay: "",
@@ -1090,13 +1238,6 @@
   }
 
   function renderFxCards() {
-    return `
-      <section class="fx-strip tv-fx-strip" aria-label="Cotacoes TradingView">
-        ${renderTradingViewQuoteCard("Dolar / Real", "FX_IDC:USDBRL", "USD")}
-        ${renderTradingViewQuoteCard("Dolar / Iene", "FX:USDJPY", "JPY")}
-        ${renderTradingViewQuoteCard("BTC / Dolar", "BITSTAMP:BTCUSD", "BTC")}
-      </section>
-    `;
     const quotes = state.fxQuotes || {};
     const usdJpy = Number(quotes.usdJpy || (quotes.usdBrl && quotes.jpyBrl ? quotes.usdBrl / quotes.jpyBrl : 0));
     const btcUsd = Number(quotes.btcUsd || cryptoPrice("BTC", "USD") || 0);
@@ -1136,19 +1277,6 @@
     `;
   }
 
-  function renderTradingViewQuoteCard(label, symbol, badge) {
-    const chipClass = badge === "BTC" ? "blue" : badge === "JPY" ? "gold" : "green";
-    return `
-      <article class="fx-card tv-fx-card">
-        <div class="tv-fx-head">
-          <p class="mini-label">${escapeHtml(label)}</p>
-          <span class="chip ${chipClass}">${escapeHtml(badge)}</span>
-        </div>
-        <tv-mini-chart symbol="${escapeAttr(symbol)}" line-chart-type="Baseline"></tv-mini-chart>
-      </article>
-    `;
-  }
-
   function renderCurrentTab() {
     const tab = state.ui.activeTab;
     if (tab === "accounts") return renderAccounts();
@@ -1167,6 +1295,10 @@
 
       <section class="content-panel overview-card">
         ${renderBalanceOverview(summary)}
+      </section>
+
+      <section class="content-panel paypal-panel">
+        ${renderPaypalPanel()}
       </section>
 
       <section class="content-panel subscriptions-panel">
@@ -1196,12 +1328,23 @@
         ${renderCryptoPanel(true)}
       </section>
 
-      <section class="content-panel">
-        <div class="panel-head">
-          <h2>Meus Cartoes</h2>
-          <button class="small-action" type="button" data-action="open-modal" data-modal="creditCard">Novo</button>
-        </div>
-        ${renderCreditCardsPanel(3)}
+      <section class="dashboard-card-vehicle-grid">
+        <article class="content-panel dashboard-cards-panel">
+          <div class="panel-head">
+            <h2>Meus Cartoes</h2>
+            <button class="small-action" type="button" data-action="open-modal" data-modal="creditCard">Novo</button>
+          </div>
+          <div class="desktop-card-stack">${renderCreditCardStackPanel()}</div>
+          <div class="mobile-card-list">${renderCreditCardsPanel(3)}</div>
+        </article>
+
+        <article class="content-panel vehicle-panel">
+          <div class="panel-head">
+            <h2>Veiculo Japao</h2>
+            <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicle">Editar</button>
+          </div>
+          ${renderVehiclePanel(3)}
+        </article>
       </section>
 
       <section class="content-panel housing-panel">
@@ -1210,14 +1353,6 @@
           <button class="small-action" type="button" data-action="open-modal" data-modal="housingCard">Nova moradia</button>
         </div>
         ${renderHousingPanel(2)}
-      </section>
-
-      <section class="content-panel vehicle-panel">
-        <div class="panel-head">
-          <h2>Veiculo Japao</h2>
-          <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicle">Editar</button>
-        </div>
-        ${renderVehiclePanel(3)}
       </section>
 
       <section class="content-panel">
@@ -1265,6 +1400,48 @@
           </div>
         </div>
       </div>
+    `;
+  }
+
+  function renderPaypalPanel() {
+    const paypal = normalizePaypalState(state.paypal);
+    const total = paypalBalanceTotal(primaryCurrency(), paypal.balances);
+    const status = paypalStatusText(paypal);
+    const hasBalances = paypal.balances.length > 0;
+    const updated = paypal.updatedAt ? `Atualizado ${formatTime(paypal.updatedAt)}` : "Ainda nao atualizado";
+    return `
+      <div class="panel-head">
+        <div>
+          <h2>PayPal</h2>
+          <p class="row-meta">Saldo da carteira PayPal via API segura</p>
+        </div>
+        <div class="chips">
+          <span class="chip ${paypal.env === "live" ? "green" : "gold"}">${escapeHtml(paypal.env === "live" ? "Live" : "Sandbox")}</span>
+          <button class="small-action ghost" type="button" data-action="refresh-paypal">${paypal.status === "loading" ? "Atualizando" : "Atualizar"}</button>
+        </div>
+      </div>
+      <div class="paypal-card">
+        <div class="paypal-total">
+          <span>Saldo PayPal</span>
+          <strong>${hasBalances ? formatMoneyWithPrimary(total, primaryCurrency()) : "--"}</strong>
+          <small>${escapeHtml(updated)}</small>
+        </div>
+        <div class="paypal-balance-list">
+          ${hasBalances ? paypal.balances.slice(0, 4).map((item) => `
+            <div class="paypal-balance-row">
+              <span>${escapeHtml(item.currency)}</span>
+              <strong>${formatMoney(item.total, item.currency)}</strong>
+              <small>Disponivel ${formatMoney(item.available, item.currency)}</small>
+            </div>
+          `).join("") : `
+            <div class="paypal-empty">
+              <strong>${escapeHtml(status.label)}</strong>
+              <small>${escapeHtml(status.detail)}</small>
+            </div>
+          `}
+        </div>
+      </div>
+      ${paypal.error ? `<p class="row-meta paypal-error">${escapeHtml(paypal.error)}</p>` : `<p class="row-meta">O PayPal pode demorar ate 3 horas para refletir saldo e transacoes recentes.</p>`}
     `;
   }
 
@@ -1878,6 +2055,66 @@
     `;
   }
 
+  function renderCreditCardStackPanel() {
+    const cards = state.creditCards || [];
+    if (!cards.length) {
+      return `
+        <div class="empty-action card-stack-empty">
+          <p class="empty-state">Nenhum cartao cadastrado.</p>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="creditCard">Cadastrar cartao</button>
+        </div>
+      `;
+    }
+
+    const total = cards.length;
+    const activeIndex = normalizeCardCarouselIndex(total);
+    const stackSize = Math.min(total, 3);
+    const stackCards = Array.from({ length: stackSize }, (_, offset) => {
+      const index = (activeIndex + offset) % total;
+      return { card: cards[index], index, offset };
+    }).reverse();
+    return `
+      <div class="card-stack-widget">
+        <div class="card-stack-stage" style="--stack-total:${stackSize}">
+          ${stackCards.map(({ card, index, offset }) => {
+            const bill = creditCardMonthBill(card, state.ui.selectedMonth);
+            const country = countryMeta[card.country] || countryMeta.japao;
+            const isActive = offset === 0;
+            return `
+              <button
+                class="stack-card ${isActive ? "is-front" : "is-back"} ${card.country === "brasil" ? "br-card" : "jp-card"} ${cardVisualStyle(card)}"
+                type="button"
+                data-action="card-carousel-select"
+                data-index="${index}"
+                data-total="${total}"
+                style="--stack-y:${58 - offset * 28}px;--stack-x:${offset * 16}px;--stack-scale:${(1 - offset * 0.045).toFixed(3)};--stack-z:${20 - offset};--stack-opacity:${(1 - offset * 0.08).toFixed(2)}"
+                aria-label="${isActive ? "Cartao atual" : "Trazer cartao para frente"}"
+              >
+                <span class="flag-badge ${card.country === "brasil" ? "br" : "jp"}">${country.short}</span>
+                <span class="stack-card-network">${escapeHtml(cardNetworkLabel(card))}</span>
+                <span class="stack-card-name">${escapeHtml(card.nickname || card.issuer || "Cartao")}</span>
+                <span class="stack-card-number">**** ${escapeHtml(card.last4 || "0000")}</span>
+                <span class="stack-card-footer">
+                  <span>
+                    <small>Fatura atual</small>
+                    <strong>${formatMoneyWithPrimary(bill.total, card.currency, state.ui.selectedMonth)}</strong>
+                  </span>
+                  <span>
+                    <small>Vence</small>
+                    <strong>${card.dueDay ? formatShortDate(dateInMonth(state.ui.selectedMonth, card.dueDay)) : "--"}</strong>
+                  </span>
+                </span>
+              </button>
+            `;
+          }).join("")}
+        </div>
+        <div class="card-stack-summary only-total">
+          <strong>${formatMoney(cardWalletSummary(cards).total, primaryCurrency())}</strong>
+        </div>
+      </div>
+    `;
+  }
+
   function cardWalletSummary(cards) {
     const currency = primaryCurrency();
     const rate = latestRate(state.ui.selectedMonth);
@@ -2262,7 +2499,7 @@
       <div class="crypto-token-list">
         ${visible.map((item) => `
           <div class="crypto-token-card">
-            <span class="crypto-token-icon" style="background:${escapeAttr(item.color)}">${escapeHtml(item.symbol.slice(0, 1))}</span>
+            ${renderCryptoTokenIcon(item)}
             <div class="crypto-token-main">
               <div class="crypto-token-head">
                 <div>
@@ -2340,6 +2577,51 @@
         pnlPct: item.cost ? round((item.pnl / item.cost) * 100, 2) : 0
       }))
       .sort((a, b) => b.value - a.value);
+  }
+
+  function renderCryptoTokenIcon(item) {
+    const asset = cryptoLogoAsset(item);
+    if (asset) {
+      return `
+        <span class="crypto-token-icon has-logo" style="background:${escapeAttr(item.color)}">
+          <img src="./assets/crypto/${escapeAttr(asset)}" alt="" loading="lazy" />
+        </span>
+      `;
+    }
+    return `<span class="crypto-token-icon" style="background:${escapeAttr(item.color)}">${escapeHtml(item.symbol.slice(0, 1))}</span>`;
+  }
+
+  function cryptoLogoAsset(item) {
+    const symbol = String(item?.symbol || "").toUpperCase();
+    const meta = cryptoCatalog[symbol];
+    if (meta?.asset) return meta.asset;
+    const name = normalizeLookupText(item?.name || meta?.name || symbol);
+    const aliases = [
+      ["bitcoin", "bitcoin.png"],
+      ["btc", "bitcoin.png"],
+      ["ethereum", "ethereum.png"],
+      ["eth", "ethereum.png"],
+      ["solana", "solana.png"],
+      ["sol", "solana.png"],
+      ["tether", "tether.png"],
+      ["usdt", "tether.png"],
+      ["usdc", "usdc.png"],
+      ["binance", "binance.png"],
+      ["bnb", "binance.png"],
+      ["avalanche", "avalanche.png"],
+      ["avax", "avalanche.png"],
+      ["polygon", "polygon.png"],
+      ["matic", "polygon.png"],
+      ["shiba", "shiba-inu.png"],
+      ["shib", "shiba-inu.png"],
+      ["monero", "monero.png"],
+      ["xmr", "monero.png"],
+      ["tron", "trx.png"],
+      ["trx", "trx.png"],
+      ["xrp", "xrp.png"]
+    ];
+    const found = aliases.find(([alias]) => name.includes(alias) || normalizeLookupText(symbol).includes(alias));
+    return found?.[1] || "";
   }
 
   function cryptoAllocationRows(rows, summary) {
@@ -2512,8 +2794,10 @@
     const vehicle = state.vehicle || {};
     const hasInsurance = vehicleHasInsurance(vehicle);
     const insuranceCard = vehicle.insurancePaymentType === "card" ? creditCardById(vehicle.insuranceCardId) : null;
+    const brand = vehicleBrand(vehicle);
+    const model = vehicleModelName(vehicle);
 
-    if (!vehicle.model && !vehicle.plate) {
+    if (!brand && !model && !vehicle.plate) {
       return `
         <div class="empty-action">
           <p class="empty-state">Nenhum veiculo cadastrado.</p>
@@ -2533,22 +2817,23 @@
           </div>
         </div>
         <div class="vehicle-main">
-          <p class="mini-label">Meu carro</p>
-          <strong>${escapeHtml(vehicle.model || "Veiculo")}</strong>
-          <p class="row-meta">${escapeHtml(vehicle.plate || "sem placa")}</p>
+          <p class="mini-label">${escapeHtml(brand || "Marca")}</p>
+          <strong>${escapeHtml(model || "Veiculo")}</strong>
+          <span class="vehicle-plate">${escapeHtml(vehicle.plate || "-- --")}</span>
         </div>
         <div class="vehicle-info-card">
           <span class="row-icon gold">C</span>
           <div>
             <p class="mini-label">Shaken</p>
             <strong>${vehicle.shakenDueDate ? formatShortDate(vehicle.shakenDueDate) : "--"}</strong>
-            ${vehicle.shakenAmount ? `<small>${formatMoneyWithPrimary(vehicle.shakenAmount, "JPY", state.ui.selectedMonth)}</small>` : ""}
+            <small>Validade</small>
           </div>
         </div>
         <label class="vehicle-insurance-check">
           <input type="checkbox" disabled ${hasInsurance ? "checked" : ""} />
           <span>${hasInsurance ? "Possui seguro" : "Sem seguro"}</span>
-          ${insuranceCard ? `<small>${escapeHtml(insuranceCard.nickname || insuranceCard.issuer)}</small>` : ""}
+          ${hasInsurance ? `<strong>${formatMoneyWithPrimary(vehicle.insuranceAmount || 0, "JPY", state.ui.selectedMonth)}</strong>` : ""}
+          ${insuranceCard || vehicle.insuranceCompany ? `<small>${escapeHtml(insuranceCard?.nickname || insuranceCard?.issuer || vehicle.insuranceCompany)}</small>` : ""}
         </label>
       </div>
     `;
@@ -3413,6 +3698,8 @@
     const vehicle = state.vehicle || {};
     const cards = state.creditCards || [];
     const insurancePaymentType = normalizeVehicleInsurancePaymentType(vehicle);
+    const brand = vehicleBrand(vehicle);
+    const model = vehicleModelName(vehicle);
     return `
       <div class="modal-head">
         <h2>Veiculo Japao</h2>
@@ -3421,18 +3708,18 @@
       <form class="form-grid" data-form="vehicle">
         <div class="two-cols">
           <div class="field">
-            <label for="vehicleModel">Modelo do carro</label>
-            <input id="vehicleModel" name="model" value="${escapeAttr(vehicle.model || "")}" placeholder="Ex: Toyota Prius" />
+            <label for="vehicleBrand">Marca</label>
+            <input id="vehicleBrand" name="brand" value="${escapeAttr(brand)}" placeholder="Ex: Daihatsu" />
           </div>
           <div class="field">
-            <label for="vehiclePlate">Placa</label>
-            <input id="vehiclePlate" name="plate" value="${escapeAttr(vehicle.plate || "")}" placeholder="Ex: 00-00" />
+            <label for="vehicleModel">Modelo</label>
+            <input id="vehicleModel" name="model" value="${escapeAttr(model)}" placeholder="Ex: Move" />
           </div>
         </div>
         <div class="two-cols">
           <div class="field">
-            <label for="shakenAmount">Valor do Shaken</label>
-            <input id="shakenAmount" name="shakenAmount" type="number" min="0" step="1" value="${vehicle.shakenAmount || 0}" />
+            <label for="vehiclePlate">Placa</label>
+            <input id="vehiclePlate" name="plate" value="${escapeAttr(vehicle.plate || "")}" placeholder="Ex: 11-22" />
           </div>
           <div class="field">
             <label for="shakenDueDate">Vencimento do Shaken</label>
@@ -3907,9 +4194,9 @@
       return;
     }
     state.vehicle = {
+      brand: data.brand.trim(),
       model: data.model.trim(),
       plate: data.plate.trim(),
-      shakenAmount: number(data.shakenAmount),
       shakenDueDate: data.shakenDueDate,
       insuranceAmount: number(data.insuranceAmount),
       insuranceDay: data.insuranceDay ? clamp(Math.round(number(data.insuranceDay)), 1, 31) : "",
@@ -4680,6 +4967,63 @@
       showToast("Nao consegui atualizar as cotacoes agora.");
     } finally {
       fxFetchInFlight = false;
+    }
+  }
+
+  async function refreshPaypalBalance(force) {
+    if (paypalFetchInFlight) return;
+    const updatedAt = state.paypal?.updatedAt ? new Date(state.paypal.updatedAt).getTime() : 0;
+    if (!force && Date.now() - updatedAt < 300000) return;
+
+    paypalFetchInFlight = true;
+    state.paypal = normalizePaypalState({
+      ...(state.paypal || {}),
+      status: "loading",
+      error: ""
+    });
+    render();
+
+    try {
+      const headers = { Accept: "application/json" };
+      const accessToken = await currentSupabaseAccessToken();
+      if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+      const response = await fetch("./api/paypal/balance", {
+        cache: "no-store",
+        headers
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "PayPal indisponivel");
+
+      state.paypal = normalizePaypalState({
+        ...payload,
+        status: "ok",
+        updatedAt: payload.updatedAt || new Date().toISOString()
+      });
+      saveState();
+      render();
+      showToast("Saldo PayPal atualizado.");
+    } catch (error) {
+      state.paypal = normalizePaypalState({
+        ...(state.paypal || {}),
+        status: "error",
+        error: error.message || "Nao foi possivel consultar o PayPal."
+      });
+      saveState();
+      render();
+      showToast("Nao consegui atualizar o PayPal agora.");
+    } finally {
+      paypalFetchInFlight = false;
+    }
+  }
+
+  async function currentSupabaseAccessToken() {
+    if (!remoteStore.enabled || !remoteStore.client) return "";
+    try {
+      const { data } = await remoteStore.client.auth.getSession();
+      return data?.session?.access_token || "";
+    } catch (error) {
+      return "";
     }
   }
 
@@ -5711,6 +6055,23 @@
     return "bank";
   }
 
+  function splitVehicleModel(value) {
+    const text = String(value || "").trim().replace(/\s+/g, " ");
+    if (!text) return { brand: "", model: "" };
+    const parts = text.split(" ");
+    if (parts.length === 1) return { brand: "", model: text };
+    return { brand: parts[0], model: parts.slice(1).join(" ") };
+  }
+
+  function vehicleBrand(vehicle = state.vehicle || {}) {
+    return String(vehicle.brand || splitVehicleModel(vehicle.model).brand || "").trim();
+  }
+
+  function vehicleModelName(vehicle = state.vehicle || {}) {
+    const parsed = splitVehicleModel(vehicle.model);
+    return String(vehicle.brand ? vehicle.model || "" : parsed.model || vehicle.model || "").trim();
+  }
+
   function vehicleInsurancePaymentLabel(type) {
     return {
       bank: "Conta/debito",
@@ -5727,7 +6088,6 @@
     const vehicle = state.vehicle || {};
     const items = [];
     const insuranceAmount = number(vehicle.insuranceAmount);
-    const shakenAmount = number(vehicle.shakenAmount);
     const insurancePaymentType = normalizeVehicleInsurancePaymentType(vehicle);
 
     if (insuranceAmount && insurancePaymentType !== "card") {
@@ -5742,22 +6102,6 @@
         currency: "JPY",
         date: dateInMonth(month, vehicle.insuranceDay || 1),
         note: vehicle.insurancePaymentMethod || vehicleInsurancePaymentLabel(insurancePaymentType),
-        icon: "V"
-      });
-    }
-
-    if (shakenAmount && vehicle.shakenDueDate && vehicle.shakenDueDate.slice(0, 7) === month) {
-      items.push({
-        id: "vehicle-shaken",
-        generated: true,
-        country: "japao",
-        type: "vehicle",
-        title: "Shaken",
-        category: "Veiculo",
-        amount: shakenAmount,
-        currency: "JPY",
-        date: vehicle.shakenDueDate,
-        note: "vencimento shaken",
         icon: "V"
       });
     }
