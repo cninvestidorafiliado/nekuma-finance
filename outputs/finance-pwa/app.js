@@ -4983,6 +4983,7 @@
     });
     render();
 
+    let errorDiagnostics = null;
     try {
       const headers = { Accept: "application/json" };
       const accessToken = await currentSupabaseAccessToken();
@@ -4993,7 +4994,13 @@
         headers
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "PayPal indisponivel");
+      if (!response.ok) {
+        errorDiagnostics = payload.diagnostics || null;
+        const diagnostics = errorDiagnostics
+          ? ` Ambiente ${payload.diagnostics.env || "--"}, Client ID ${payload.diagnostics.clientId || "--"}, Secret ${payload.diagnostics.hasClientSecret ? "presente" : "ausente"}.`
+          : "";
+        throw new Error(`${payload.error || "PayPal indisponivel"}${diagnostics}`);
+      }
 
       state.paypal = normalizePaypalState({
         ...payload,
@@ -5006,6 +5013,7 @@
     } catch (error) {
       state.paypal = normalizePaypalState({
         ...(state.paypal || {}),
+        env: errorDiagnostics?.env || state.paypal?.env,
         status: "error",
         error: error.message || "Nao foi possivel consultar o PayPal."
       });

@@ -11,18 +11,21 @@ export async function onRequestOptions() {
 }
 
 export async function onRequestGet({ request, env }) {
+  let diagnostics = {};
   try {
     const auth = await requireAuthorizedUser(request, env);
     if (auth.response) return auth.response;
 
-    const clientId = env.PAYPAL_CLIENT_ID;
-    const clientSecret = env.PAYPAL_CLIENT_SECRET;
-    const paypalEnv = String(env.PAYPAL_ENV || "sandbox").toLowerCase() === "live" ? "live" : "sandbox";
+    const clientId = String(env.PAYPAL_CLIENT_ID || "").trim();
+    const clientSecret = String(env.PAYPAL_CLIENT_SECRET || "").trim();
+    const paypalEnv = String(env.PAYPAL_ENV || "sandbox").trim().toLowerCase() === "live" ? "live" : "sandbox";
     const baseUrl = PAYPAL_BASE_URLS[paypalEnv];
+    diagnostics = paypalDiagnostics(paypalEnv, clientId, clientSecret);
 
     if (!clientId || !clientSecret) {
       return jsonResponse({
-        error: "Configure PAYPAL_CLIENT_ID e PAYPAL_CLIENT_SECRET no Cloudflare."
+        error: "Configure PAYPAL_CLIENT_ID e PAYPAL_CLIENT_SECRET no Cloudflare.",
+        diagnostics
       }, 500);
     }
 
@@ -38,7 +41,8 @@ export async function onRequestGet({ request, env }) {
     });
   } catch (error) {
     return jsonResponse({
-      error: error.message || "Nao foi possivel consultar o PayPal."
+      error: error.message || "Nao foi possivel consultar o PayPal.",
+      diagnostics
     }, error.status || 500);
   }
 }
@@ -155,6 +159,22 @@ function normalizeBalances(items) {
 function toNumber(value) {
   const parsed = Number(value || 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function paypalDiagnostics(paypalEnv, clientId, clientSecret) {
+  return {
+    env: paypalEnv,
+    clientId: maskCredential(clientId),
+    hasClientSecret: Boolean(clientSecret),
+    clientSecretLength: clientSecret ? String(clientSecret).length : 0
+  };
+}
+
+function maskCredential(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (text.length <= 10) return "***";
+  return `${text.slice(0, 5)}...${text.slice(-5)}`;
 }
 
 function jsonResponse(body, status = 200) {
