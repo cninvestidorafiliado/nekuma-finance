@@ -642,6 +642,15 @@ h3 {
   color: rgba(255, 250, 240, 0.74);
 }
 
+.stack-card-footer .money-converted {
+  display: inline;
+  margin: 0 0 0 5px;
+  color: rgba(255, 253, 247, 0.7);
+  font-size: 0.72em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .readonly-field {
   min-height: 42px;
   padding: 12px 14px;
@@ -909,13 +918,14 @@ canvas {
 
 .debt-card-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.08fr) minmax(104px, 0.68fr) minmax(0, 1.42fr);
   gap: 8px;
 }
 
 .debt-card-stat {
   display: grid;
   gap: 4px;
+  min-width: 0;
   padding: 10px;
   border-radius: 14px;
   background: rgba(242, 238, 229, 0.72);
@@ -930,8 +940,10 @@ canvas {
 
 .debt-card-stat strong {
   color: var(--ink);
-  font-size: clamp(1rem, 2vw, 1.28rem);
+  min-width: 0;
+  font-size: clamp(1rem, 1.7vw, 1.28rem);
   line-height: 1.1;
+  overflow-wrap: anywhere;
 }
 
 .debt-card-stat small {
@@ -4182,12 +4194,12 @@ h1 {
   }
 
   .dashboard-cards-panel .card-stack-stage {
-    min-height: 206px;
+    min-height: 220px;
   }
 
   .dashboard-cards-panel .stack-card {
     width: min(88%, 292px);
-    min-height: 132px;
+    min-height: 146px;
     padding: 12px;
   }
 
@@ -4196,7 +4208,16 @@ h1 {
   }
 
   .dashboard-cards-panel .stack-card-footer {
-    margin-top: 9px;
+    margin-top: 8px;
+    gap: 8px;
+  }
+
+  .dashboard-cards-panel .stack-card-footer strong {
+    font-size: 0.82rem;
+  }
+
+  .dashboard-cards-panel .stack-card-footer .money-converted {
+    font-size: 0.68em;
   }
 
   .dashboard-cards-panel .card-stack-summary.only-total {
