@@ -3497,21 +3497,31 @@
             <input id="originalAmount" name="originalAmount" required type="number" min="0" step="0.01" value="${item ? number(item.originalAmount) : ""}" />
           </div>
           <div class="field">
+            <label for="outstandingAmount">Saldo devedor atual</label>
+            <input id="outstandingAmount" name="outstandingAmount" type="number" min="0" step="0.01" value="${item ? number(item.outstandingAmount) || "" : ""}" />
+          </div>
+          <div class="field">
             <label for="installmentAmount">Valor da parcela</label>
             <input id="installmentAmount" name="installmentAmount" required type="number" min="0" step="0.01" value="${item ? number(item.installmentAmount) : ""}" />
           </div>
+        </div>
+        <div class="three-cols">
           <div class="field">
             <label for="debtCurrency">Moeda</label>
             <select id="debtCurrency" name="currency">
               ${currencyOptions(selectedCurrency)}
             </select>
           </div>
-        </div>
-        <div class="three-cols">
           <div class="field">
             <label for="debtStartDate">Data de inicio do contrato</label>
             <input id="debtStartDate" name="startDate" type="date" value="${escapeAttr(startDate)}" />
           </div>
+          <div class="field">
+            <label for="balanceDate">Data do saldo atual</label>
+            <input id="balanceDate" name="balanceDate" type="date" value="${escapeAttr(item?.balanceDate || dateInMonth(currentMonth(), new Date().getDate()))}" />
+          </div>
+        </div>
+        <div class="three-cols">
           <div class="field">
             <label for="contractedInstallments">Parcelas contratadas</label>
             <input id="contractedInstallments" name="contractedInstallments" type="number" min="1" max="600" step="1" value="${item ? number(item.contractedInstallments) || "" : ""}" />
@@ -3527,11 +3537,21 @@
             <input id="annualInterestRate" name="annualInterestRate" type="number" min="0" step="0.01" placeholder="Ex: 8.99" value="${item ? number(item.annualInterestRate) || "" : ""}" />
           </div>
           <div class="field">
-            <label for="insuranceAmount">Valor do seguro</label>
+            <label for="principalAmortizationAmount">Amortizacao principal</label>
+            <input id="principalAmortizationAmount" name="principalAmortizationAmount" type="number" min="0" step="0.01" value="${item ? number(item.principalAmortizationAmount) || "" : ""}" />
+          </div>
+          <div class="field">
+            <label for="interestAmount">Juros da parcela atual</label>
+            <input id="interestAmount" name="interestAmount" type="number" min="0" step="0.01" value="${item ? number(item.interestAmount) || "" : ""}" />
+          </div>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="insuranceAmount">Valor do seguro embutido</label>
             <input id="insuranceAmount" name="insuranceAmount" type="number" min="0" step="0.01" value="${item ? number(item.insuranceAmount) || "" : ""}" />
           </div>
           <div class="field">
-            <label for="adminFeeAmount">Tarifa administrativa</label>
+            <label for="adminFeeAmount">Tarifa administrativa embutida</label>
             <input id="adminFeeAmount" name="adminFeeAmount" type="number" min="0" step="0.01" value="${item ? number(item.adminFeeAmount) || "" : ""}" />
           </div>
         </div>
@@ -4337,14 +4357,17 @@
       currency: data.currency,
       dueDay: clamp(Math.round(number(data.dueDay)), 1, 31),
       startDate: data.startDate || "",
+      balanceDate: data.balanceDate || "",
       contractedInstallments: clamp(Math.round(number(data.contractedInstallments)), 0, 600),
       paymentMethod: String(data.paymentMethod || "").trim(),
       annualInterestRate: number(data.annualInterestRate),
+      principalAmortizationAmount: number(data.principalAmortizationAmount),
+      interestAmount: number(data.interestAmount),
       insuranceAmount: number(data.insuranceAmount),
       adminFeeAmount: number(data.adminFeeAmount),
       contractLast4
     };
-    draft.outstandingAmount = debtEstimatedOutstanding(draft);
+    draft.outstandingAmount = number(data.outstandingAmount) || debtEstimatedOutstanding(draft);
     const updated = upsertItem("debts", data.id, draft);
     saveState();
     closeModal();
@@ -6468,6 +6491,8 @@
     const original = number(item?.originalAmount);
     const storedOutstanding = number(item?.outstandingAmount);
     const installment = number(item?.installmentAmount);
+    const projected = debtProjectedOutstandingFromCurrentBalance(item);
+    if (projected !== null) return projected;
     if (!progress.total) return round(storedOutstanding || original, 2);
     if (!progress.remaining) return 0;
 
@@ -6484,6 +6509,39 @@
 
     if (original > 0) estimate = Math.min(estimate, original);
     return round(Math.max(0, estimate), 2);
+  }
+
+  function debtProjectedOutstandingFromCurrentBalance(item, targetMonth = state.ui.selectedMonth) {
+    let balance = number(item?.outstandingAmount);
+    if (!balance) return null;
+
+    const balanceDate = item?.balanceDate ? parseLocalDate(item.balanceDate) : startOfDay(new Date());
+    const baseMonth = monthKeyFromDate(balanceDate);
+    const monthsAhead = Math.max(0, monthDiff(baseMonth, targetMonth || currentMonth()));
+    if (!monthsAhead) return round(balance, 2);
+
+    const installment = number(item?.installmentAmount);
+    const fixedFees = number(item?.insuranceAmount) + number(item?.adminFeeAmount);
+    const knownAmortization = number(item?.principalAmortizationAmount);
+    const monthlyRate = debtMonthlyInterestRate(item, balance);
+
+    for (let index = 0; index < monthsAhead; index += 1) {
+      const interest = monthlyRate > 0 ? balance * monthlyRate : 0;
+      let amortization = installment > 0 ? installment - interest - fixedFees : knownAmortization;
+      if (amortization <= 0 && knownAmortization > 0) amortization = knownAmortization;
+      if (amortization <= 0) break;
+      balance = Math.max(0, balance - amortization);
+    }
+
+    return round(balance, 2);
+  }
+
+  function debtMonthlyInterestRate(item, outstandingAmount) {
+    const balance = number(outstandingAmount);
+    const interest = number(item?.interestAmount);
+    if (balance > 0 && interest > 0) return interest / balance;
+    const annualRate = number(item?.annualInterestRate);
+    return annualRate > 0 ? Math.pow(1 + annualRate / 100, 1 / 12) - 1 : 0;
   }
 
   function incomeSourceById(id) {
