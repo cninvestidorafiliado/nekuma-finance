@@ -146,6 +146,16 @@
     XMR: { id: "monero", name: "Monero", color: "#ff6600", asset: "monero.png" },
     TRX: { id: "tron", name: "TRON", color: "#ff0013", asset: "trx.png" }
   };
+  const web3Networks = {
+    "0x1": { name: "Ethereum", symbol: "ETH" },
+    "0x38": { name: "BNB Smart Chain", symbol: "BNB" },
+    "0x89": { name: "Polygon", symbol: "POL" },
+    "0xa": { name: "Optimism", symbol: "ETH" },
+    "0xa4b1": { name: "Arbitrum", symbol: "ETH" },
+    "0xa86a": { name: "Avalanche", symbol: "AVAX" },
+    "0x2105": { name: "Base", symbol: "ETH" },
+    "0xaa36a7": { name: "Sepolia", symbol: "ETH" }
+  };
 
   const app = document.getElementById("app");
   const appGreeting = document.getElementById("app-greeting");
@@ -158,6 +168,8 @@
   let fxFetchInFlight = false;
   let fxRefreshTimer = null;
   let paypalFetchInFlight = false;
+  let web3FetchInFlight = false;
+  let web3ListenersAttached = false;
   let remotePullTimer = null;
   let remotePullInFlight = false;
   let lastLocalChangeAt = 0;
@@ -249,6 +261,9 @@
     if (action === "refresh-crypto") refreshCryptoQuotes(true);
     if (action === "refresh-fx") refreshFxQuotes(true);
     if (action === "refresh-paypal") refreshPaypalBalance(true);
+    if (action === "connect-web3") connectWeb3Wallet();
+    if (action === "refresh-web3") refreshWeb3Wallet();
+    if (action === "disconnect-web3") disconnectWeb3Wallet();
     if (action === "remote-signout") signOutRemote();
     if (action === "remote-sync-now") syncRemoteNow();
     if (action === "export-data") exportData();
@@ -311,6 +326,7 @@
   }
 
   async function initApp() {
+    setupWeb3Listeners();
     persistLocalState();
     if (!remoteStore.enabled) {
       render();
@@ -775,6 +791,7 @@
       cryptoQuotes,
       fxQuotes: raw.fxQuotes || base.fxQuotes,
       paypal: normalizePaypalState(raw.paypal || base.paypal),
+      web3Wallet: normalizeWeb3Wallet(raw.web3Wallet || base.web3Wallet),
       vehicle: normalizeVehicle(raw.vehicle, base.vehicle),
       vehicleMaintenance: Array.isArray(raw.vehicleMaintenance) ? raw.vehicleMaintenance : base.vehicleMaintenance,
       incomeSources: Array.isArray(raw.incomeSources) ? raw.incomeSources : base.incomeSources,
@@ -868,6 +885,8 @@
       updatedAt: raw.updatedAt || raw.asOfTime || raw.as_of_time || null,
       status: raw.status || "idle",
       error: String(raw.error || ""),
+      notice: String(raw.notice || ""),
+      balanceUnavailable: Boolean(raw.balanceUnavailable || raw.balance_unavailable),
       source: raw.source || "PayPal"
     };
   }
@@ -904,10 +923,32 @@
     if (paypal.status === "error") {
       return { label: "Nao conectado", detail: paypal.error || "Configure as variaveis do PayPal no Cloudflare." };
     }
+    if (paypal.balanceUnavailable || paypal.status === "limited") {
+      return { label: "Live conectado", detail: paypal.notice || "A conta autenticou, mas a API de saldo nao retornou dados para este PayPal." };
+    }
     if (!paypal.updatedAt) {
       return { label: "Conectar PayPal", detail: "Configure o endpoint seguro e clique em atualizar." };
     }
+    if (!paypal.balances?.length) {
+      return { label: "Sem saldo retornado", detail: "O PayPal respondeu sem moedas disponiveis nesta consulta." };
+    }
     return { label: "Saldo atualizado", detail: "Dados recebidos da API do PayPal." };
+  }
+
+  function normalizeWeb3Wallet(raw = {}) {
+    const chainId = String(raw.chainId || "").toLowerCase();
+    const meta = web3NetworkMeta(chainId);
+    const address = String(raw.address || "").trim();
+    return {
+      address,
+      chainId,
+      networkName: String(raw.networkName || meta.name || (chainId ? `Rede ${chainId}` : "")).trim(),
+      symbol: String(raw.symbol || meta.symbol || "ETH").trim().toUpperCase(),
+      balance: number(raw.balance),
+      updatedAt: raw.updatedAt || null,
+      status: raw.status || (address ? "connected" : "idle"),
+      error: String(raw.error || "")
+    };
   }
 
   function mergeCryptoAssetsWithLocal(remoteItems, localItems) {
@@ -1011,6 +1052,16 @@
         status: "idle",
         error: "",
         source: "PayPal"
+      },
+      web3Wallet: {
+        address: "",
+        chainId: "",
+        networkName: "",
+        symbol: "ETH",
+        balance: 0,
+        updatedAt: null,
+        status: "idle",
+        error: ""
       },
       vehicle: {
         brand: "",
@@ -1317,6 +1368,14 @@
         ${renderFinancialCalendar(8, "upcoming")}
       </section>
 
+      <section class="content-panel housing-panel">
+        <div class="panel-head">
+          <h2>Moradia</h2>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="housingCard">Nova moradia</button>
+        </div>
+        ${renderHousingPanel(2)}
+      </section>
+
       <section class="content-panel crypto-panel is-compact">
         <div class="panel-head">
           <h2>Carteira cripto</h2>
@@ -1345,14 +1404,6 @@
           </div>
           ${renderVehiclePanel(3)}
         </article>
-      </section>
-
-      <section class="content-panel housing-panel">
-        <div class="panel-head">
-          <h2>Moradia</h2>
-          <button class="small-action" type="button" data-action="open-modal" data-modal="housingCard">Nova moradia</button>
-        </div>
-        ${renderHousingPanel(2)}
       </section>
 
       <section class="content-panel">
@@ -1441,7 +1492,7 @@
           `}
         </div>
       </div>
-      ${paypal.error ? `<p class="row-meta paypal-error">${escapeHtml(paypal.error)}</p>` : `<p class="row-meta">O PayPal pode demorar ate 3 horas para refletir saldo e transacoes recentes.</p>`}
+      ${paypal.error ? `<p class="row-meta paypal-error">${escapeHtml(paypal.error)}</p>` : paypal.notice ? `<p class="row-meta">${escapeHtml(paypal.notice)}</p>` : `<p class="row-meta">O PayPal pode demorar ate 3 horas para refletir saldo e transacoes recentes.</p>`}
     `;
   }
 
@@ -2240,6 +2291,10 @@
 
   function renderCryptoTab() {
     return `
+      <section class="content-panel web3-panel">
+        ${renderWeb3WalletCard()}
+      </section>
+
       <section class="content-panel crypto-panel crypto-page">
         <div class="panel-head">
           <h2>Criptomoedas</h2>
@@ -2250,6 +2305,40 @@
         </div>
         ${renderCryptoPanel(false)}
       </section>
+    `;
+  }
+
+  function renderWeb3WalletCard() {
+    const wallet = normalizeWeb3Wallet(state.web3Wallet);
+    const connected = Boolean(wallet.address);
+    const providerLabel = web3ProviderAvailable() ? "Carteira detectada" : "Carteira nao detectada";
+    const updated = wallet.updatedAt ? `Atualizada ${formatTime(wallet.updatedAt)}` : "Ainda nao atualizada";
+    return `
+      <div class="panel-head">
+        <div>
+          <h2>Carteira Web3</h2>
+          <p class="row-meta">Conecte MetaMask ou carteira EVM para consultar saldo nativo.</p>
+        </div>
+        <div class="chips">
+          <span class="chip ${connected ? "green" : "gold"}">${connected ? "Conectada" : providerLabel}</span>
+          ${connected ? `<button class="small-action ghost" type="button" data-action="refresh-web3">${wallet.status === "loading" ? "Atualizando" : "Atualizar"}</button>` : ""}
+          <button class="small-action" type="button" data-action="${connected ? "disconnect-web3" : "connect-web3"}">${connected ? "Desconectar" : "Conectar"}</button>
+        </div>
+      </div>
+      <div class="web3-wallet-card ${connected ? "is-connected" : ""}">
+        <div class="web3-wallet-orb">W3</div>
+        <div class="web3-wallet-main">
+          <span class="mini-label">${connected ? escapeHtml(wallet.networkName || "Rede Web3") : "Web3 wallet"}</span>
+          <strong>${connected ? escapeHtml(shortAddress(wallet.address)) : "Conecte sua carteira"}</strong>
+          <p class="row-meta">${connected ? `${escapeHtml(updated)} - ${escapeHtml(wallet.chainId || "--")}` : "Use o navegador da MetaMask ou uma carteira compatível com Ethereum Provider."}</p>
+        </div>
+        <div class="web3-wallet-balance">
+          <span>Saldo nativo</span>
+          <strong>${connected ? `${formatCryptoAmount(wallet.balance)} ${escapeHtml(wallet.symbol)}` : "--"}</strong>
+          <small>${connected ? escapeHtml(wallet.networkName || wallet.symbol) : "Somente leitura"}</small>
+        </div>
+      </div>
+      ${wallet.error ? `<p class="row-meta web3-error">${escapeHtml(wallet.error)}</p>` : `<p class="row-meta">O app nunca acessa sua seed phrase ou chave privada. Transacoes futuras sempre exigirao aprovacao na carteira.</p>`}
     `;
   }
 
@@ -2961,6 +3050,7 @@
       creditCard: renderCreditCardModal,
       cardPurchase: renderCardPurchaseModal,
       crypto: renderCryptoModal,
+      web3Wallet: renderWeb3WalletModal,
       housingCard: renderHousingCardModal,
       vehicle: renderVehicleModal,
       vehicleMaintenance: renderVehicleMaintenanceModal,
@@ -3000,6 +3090,7 @@
       { modal: "creditCard", icon: "C", title: "Cadastrar cartao", meta: "Cartao do Brasil ou Japao com bandeira e vencimento" },
       { modal: "subscription", icon: "S", title: "Cadastrar subscricao", meta: "Streaming, apps e servicos recorrentes no Pix ou cartao" },
       { modal: "crypto", icon: "B", title: "Cadastrar cripto", meta: "Quantidade comprada, custo e acompanhamento de cotacao" },
+      { modal: "web3Wallet", icon: "W", title: "Conectar carteira web3", meta: "MetaMask e carteiras EVM para ver endereco, rede e saldo" },
       { modal: "commitment", icon: "F", title: "Cadastrar contas", meta: "Despesas fixas, financiamentos, consorcios e recorrencias" },
       { modal: "investment", icon: "I", title: "Cadastrar investimentos", meta: "Instituicao, saldo atual e aporte mensal" },
       { modal: "transaction", icon: "+", title: "Lancamento avulso", meta: "Entrada ou despesa unica fora dos cadastros acima" }
@@ -3621,6 +3712,47 @@
           <button class="primary-button" type="submit">Salvar cripto</button>
         </div>
       </form>
+    `;
+  }
+
+  function renderWeb3WalletModal() {
+    const wallet = normalizeWeb3Wallet(state.web3Wallet);
+    const connected = Boolean(wallet.address);
+    return `
+      <div class="modal-head">
+        <h2>Conectar carteira Web3</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <div class="web3-connect-modal">
+        <div class="web3-wallet-card ${connected ? "is-connected" : ""}">
+          <div class="web3-wallet-orb">W3</div>
+          <div class="web3-wallet-main">
+            <span class="mini-label">${connected ? "Carteira conectada" : "MetaMask / carteira EVM"}</span>
+            <strong>${connected ? escapeHtml(shortAddress(wallet.address)) : "Conectar Web3"}</strong>
+            <p class="row-meta">${connected ? `${escapeHtml(wallet.networkName || "Rede Web3")} - ${formatCryptoAmount(wallet.balance)} ${escapeHtml(wallet.symbol)}` : "Abra pelo navegador da carteira no celular ou instale a extensao no computador."}</p>
+          </div>
+        </div>
+        <div class="web3-safety-list">
+          <div>
+            <strong>Somente leitura por enquanto</strong>
+            <span>Vamos consultar endereco, rede e saldo nativo.</span>
+          </div>
+          <div>
+            <strong>Sem seed phrase</strong>
+            <span>O app nunca pede nem salva frase secreta ou chave privada.</span>
+          </div>
+          <div>
+            <strong>Binance depois via nuvem</strong>
+            <span>A API secret da Binance deve ficar em variavel segura no Cloudflare.</span>
+          </div>
+        </div>
+        ${wallet.error ? `<p class="row-meta web3-error">${escapeHtml(wallet.error)}</p>` : ""}
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          ${connected ? `<button class="secondary-button" type="button" data-action="disconnect-web3">Desconectar</button>` : ""}
+          <button class="primary-button" type="button" data-action="connect-web3">${connected ? "Atualizar carteira" : "Conectar carteira"}</button>
+        </div>
+      </div>
     `;
   }
 
@@ -4852,6 +4984,194 @@
     });
   }
 
+  function setupWeb3Listeners() {
+    const provider = web3Provider();
+    if (web3ListenersAttached || !provider?.on) return;
+    web3ListenersAttached = true;
+
+    provider.on("accountsChanged", (accounts = []) => {
+      const address = Array.isArray(accounts) ? accounts[0] : "";
+      if (!address) {
+        disconnectWeb3Wallet();
+        return;
+      }
+      state.web3Wallet = normalizeWeb3Wallet({
+        ...(state.web3Wallet || {}),
+        address,
+        status: "connected",
+        error: ""
+      });
+      saveState({ remoteNow: true });
+      refreshWeb3Wallet();
+    });
+
+    provider.on("chainChanged", (chainId) => {
+      const meta = web3NetworkMeta(chainId);
+      state.web3Wallet = normalizeWeb3Wallet({
+        ...(state.web3Wallet || {}),
+        chainId,
+        networkName: meta.name,
+        symbol: meta.symbol,
+        status: state.web3Wallet?.address ? "connected" : "idle",
+        error: ""
+      });
+      saveState({ remoteNow: true });
+      refreshWeb3Wallet();
+    });
+  }
+
+  async function connectWeb3Wallet() {
+    const provider = web3Provider();
+    if (!provider?.request) {
+      state.web3Wallet = normalizeWeb3Wallet({
+        ...(state.web3Wallet || {}),
+        status: "error",
+        error: "Carteira Web3 nao encontrada. No celular, abra o app pelo navegador da MetaMask ou outra carteira compativel."
+      });
+      saveState();
+      render();
+      showToast("Carteira Web3 nao encontrada.");
+      return;
+    }
+    setupWeb3Listeners();
+
+    if (web3FetchInFlight) return;
+    web3FetchInFlight = true;
+    state.web3Wallet = normalizeWeb3Wallet({
+      ...(state.web3Wallet || {}),
+      status: "loading",
+      error: ""
+    });
+    render();
+
+    try {
+      const accounts = await provider.request({ method: "eth_requestAccounts" });
+      const address = Array.isArray(accounts) ? accounts[0] : "";
+      if (!address) throw new Error("Nenhuma conta foi autorizada na carteira.");
+      const wallet = await readWeb3WalletSnapshot(provider, address);
+      state.web3Wallet = normalizeWeb3Wallet(wallet);
+      saveState({ remoteNow: true });
+      closeModal();
+      render();
+      showToast("Carteira Web3 conectada.");
+    } catch (error) {
+      state.web3Wallet = normalizeWeb3Wallet({
+        ...(state.web3Wallet || {}),
+        status: state.web3Wallet?.address ? "connected" : "error",
+        error: web3ErrorMessage(error)
+      });
+      saveState();
+      render();
+      showToast("Nao consegui conectar a carteira.");
+    } finally {
+      web3FetchInFlight = false;
+    }
+  }
+
+  async function refreshWeb3Wallet() {
+    const provider = web3Provider();
+    if (!state.web3Wallet?.address) {
+      await connectWeb3Wallet();
+      return;
+    }
+    if (!provider?.request) {
+      state.web3Wallet = normalizeWeb3Wallet({
+        ...(state.web3Wallet || {}),
+        status: "error",
+        error: "Carteira Web3 nao encontrada neste navegador."
+      });
+      saveState();
+      render();
+      return;
+    }
+    if (web3FetchInFlight) return;
+    web3FetchInFlight = true;
+    state.web3Wallet = normalizeWeb3Wallet({
+      ...(state.web3Wallet || {}),
+      status: "loading",
+      error: ""
+    });
+    render();
+    try {
+      const wallet = await readWeb3WalletSnapshot(provider, state.web3Wallet.address);
+      state.web3Wallet = normalizeWeb3Wallet(wallet);
+      saveState({ remoteNow: true });
+      render();
+      showToast("Carteira Web3 atualizada.");
+    } catch (error) {
+      state.web3Wallet = normalizeWeb3Wallet({
+        ...(state.web3Wallet || {}),
+        status: "connected",
+        error: web3ErrorMessage(error)
+      });
+      saveState();
+      render();
+      showToast("Nao consegui atualizar a carteira.");
+    } finally {
+      web3FetchInFlight = false;
+    }
+  }
+
+  function disconnectWeb3Wallet() {
+    state.web3Wallet = normalizeWeb3Wallet({});
+    saveState({ remoteNow: true });
+    closeModal();
+    render();
+    showToast("Carteira removida do app.");
+  }
+
+  async function readWeb3WalletSnapshot(provider, address) {
+    const chainId = await provider.request({ method: "eth_chainId" }).catch(() => "");
+    const meta = web3NetworkMeta(chainId);
+    const balanceHex = await provider.request({
+      method: "eth_getBalance",
+      params: [address, "latest"]
+    }).catch(() => "0x0");
+
+    return {
+      address,
+      chainId,
+      networkName: meta.name,
+      symbol: meta.symbol,
+      balance: weiHexToNative(balanceHex),
+      updatedAt: new Date().toISOString(),
+      status: "connected",
+      error: ""
+    };
+  }
+
+  function web3Provider() {
+    return window.ethereum || null;
+  }
+
+  function web3ProviderAvailable() {
+    return Boolean(web3Provider()?.request);
+  }
+
+  function web3NetworkMeta(chainId) {
+    const key = String(chainId || "").toLowerCase();
+    return web3Networks[key] || { name: key ? `Rede ${key}` : "Rede Web3", symbol: "ETH" };
+  }
+
+  function weiHexToNative(value) {
+    try {
+      const wei = BigInt(String(value || "0x0"));
+      return Number(wei) / 1e18;
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  function shortAddress(address) {
+    const text = String(address || "");
+    return text.length > 14 ? `${text.slice(0, 6)}...${text.slice(-4)}` : text;
+  }
+
+  function web3ErrorMessage(error) {
+    if (error?.code === 4001) return "Conexao cancelada na carteira.";
+    return error?.message || "Nao foi possivel acessar a carteira Web3.";
+  }
+
   function scheduleCryptoRefresh(force) {
     clearTimeout(cryptoRefreshTimer);
     if (!(state.cryptoAssets || []).length) return;
@@ -4979,7 +5299,8 @@
     state.paypal = normalizePaypalState({
       ...(state.paypal || {}),
       status: "loading",
-      error: ""
+      error: "",
+      notice: ""
     });
     render();
 
@@ -5004,7 +5325,7 @@
 
       state.paypal = normalizePaypalState({
         ...payload,
-        status: "ok",
+        status: payload.status || (payload.balanceUnavailable ? "limited" : "ok"),
         updatedAt: payload.updatedAt || new Date().toISOString()
       });
       saveState();

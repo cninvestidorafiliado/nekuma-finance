@@ -30,13 +30,16 @@ export async function onRequestGet({ request, env }) {
     }
 
     const accessToken = await fetchPaypalAccessToken(baseUrl, clientId, clientSecret);
-    const balances = await fetchPaypalBalances(baseUrl, accessToken);
+    const balances = await fetchPaypalBalances(baseUrl, accessToken, paypalEnv);
 
     return jsonResponse({
       env: paypalEnv,
       source: "PayPal",
+      status: balances.balanceUnavailable ? "limited" : "ok",
       updatedAt: new Date().toISOString(),
       asOfTime: balances.asOfTime || "",
+      balanceUnavailable: Boolean(balances.balanceUnavailable),
+      notice: balances.notice || "",
       balances: balances.items
     });
   } catch (error) {
@@ -116,10 +119,14 @@ async function fetchPaypalAccessToken(baseUrl, clientId, clientSecret) {
   return payload.access_token;
 }
 
-async function fetchPaypalBalances(baseUrl, accessToken) {
-  const response = await fetch(`${baseUrl}/v1/reporting/balances`, {
+async function fetchPaypalBalances(baseUrl, accessToken, paypalEnv) {
+  const url = new URL(`${baseUrl}/v1/reporting/balances`);
+  url.searchParams.set("as_of_time", new Date().toISOString());
+
+  const response = await fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
+      "PayPal-Enforce-ISO8601-Format": "true",
       Accept: "application/json"
     }
   });
@@ -127,6 +134,15 @@ async function fetchPaypalBalances(baseUrl, accessToken) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail = payload.message || payload.error_description || payload.error || "Falha ao consultar saldo PayPal.";
+    if (response.status === 404 && isPaypalBalanceUnavailable(payload, detail)) {
+      return {
+        asOfTime: "",
+        items: [],
+        balanceUnavailable: true,
+        notice: `PayPal autenticado em ${paypalEnv}, mas a API de saldo nao esta disponivel para esta conta/app. Resposta do PayPal: ${detail}`
+      };
+    }
+
     const error = new Error(detail);
     error.status = response.status || 502;
     throw error;
@@ -134,12 +150,13 @@ async function fetchPaypalBalances(baseUrl, accessToken) {
 
   return {
     asOfTime: payload.as_of_time || payload.asOfTime || "",
-    items: normalizeBalances(payload.balances)
+    items: normalizeBalances(payload.balances || payload.balance)
   };
 }
 
 function normalizeBalances(items) {
-  return (Array.isArray(items) ? items : [])
+  const list = Array.isArray(items) ? items : items ? [items] : [];
+  return list
     .map((item) => {
       const currency = item.currency || item.currency_code || item.total_balance?.currency_code || item.available_balance?.currency_code || "USD";
       const total = toNumber(item.total ?? item.total_balance?.value ?? item.total_balance?.amount);
@@ -154,6 +171,12 @@ function normalizeBalances(items) {
       };
     })
     .filter((item) => item.currency && Number.isFinite(item.total));
+}
+
+function isPaypalBalanceUnavailable(payload, detail) {
+  const name = String(payload.name || payload.error || "").toUpperCase();
+  const message = String(detail || payload.message || "").toLowerCase();
+  return name === "RESOURCE_NOT_FOUND" || message.includes("resource requested is not found") || message.includes("specified resource does not exist");
 }
 
 function toNumber(value) {

@@ -1265,6 +1265,14 @@ canvas {
   display: block;
 }
 
+.dashboard-cards-panel .desktop-card-stack {
+  display: block;
+}
+
+.dashboard-cards-panel .mobile-card-list {
+  display: none;
+}
+
 .card-stack-widget {
   display: grid;
   gap: 10px;
@@ -2274,6 +2282,127 @@ canvas {
   display: grid;
   gap: 12px;
   width: 100%;
+}
+
+.web3-panel {
+  overflow: hidden;
+}
+
+.web3-wallet-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(150px, 0.38fr);
+  align-items: center;
+  gap: 14px;
+  padding: 15px;
+  border: 1px solid rgba(16, 35, 31, 0.1);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 86% 8%, rgba(216, 255, 114, 0.34), transparent 26%),
+    linear-gradient(135deg, rgba(255, 253, 247, 0.9), rgba(239, 247, 232, 0.74));
+  box-shadow: 0 16px 42px rgba(7, 31, 25, 0.08);
+}
+
+.web3-wallet-card.is-connected {
+  background:
+    radial-gradient(circle at 88% 10%, rgba(216, 255, 114, 0.32), transparent 28%),
+    linear-gradient(135deg, rgba(8, 52, 41, 0.96), rgba(10, 30, 26, 0.94));
+  color: var(--paper);
+}
+
+.web3-wallet-orb {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border-radius: 18px;
+  color: var(--deep);
+  font-size: 0.88rem;
+  font-weight: 950;
+  background: linear-gradient(135deg, #d8ff72, #f0c38e);
+  box-shadow: 0 16px 34px rgba(216, 255, 114, 0.22);
+}
+
+.web3-wallet-main,
+.web3-wallet-balance {
+  min-width: 0;
+}
+
+.web3-wallet-main strong,
+.web3-wallet-balance strong {
+  display: block;
+  color: inherit;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+
+.web3-wallet-main strong {
+  margin-top: 3px;
+  font-size: clamp(1.1rem, 4vw, 1.55rem);
+}
+
+.web3-wallet-balance {
+  padding: 10px;
+  border-radius: 18px;
+  background: rgba(255, 253, 247, 0.58);
+}
+
+.web3-wallet-card.is-connected .web3-wallet-balance {
+  background: rgba(239, 255, 244, 0.09);
+}
+
+.web3-wallet-balance span,
+.web3-safety-list span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.73rem;
+  font-weight: 850;
+}
+
+.web3-wallet-card.is-connected .web3-wallet-balance span,
+.web3-wallet-card.is-connected .row-meta,
+.web3-wallet-card.is-connected .mini-label,
+.web3-wallet-card.is-connected .web3-wallet-balance small {
+  color: rgba(239, 255, 244, 0.68);
+}
+
+.web3-wallet-balance strong {
+  margin-top: 4px;
+  font-size: 1rem;
+}
+
+.web3-wallet-balance small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.web3-error {
+  color: #aa3d31;
+  font-weight: 850;
+}
+
+.web3-connect-modal {
+  display: grid;
+  gap: 12px;
+}
+
+.web3-safety-list {
+  display: grid;
+  gap: 8px;
+}
+
+.web3-safety-list div {
+  padding: 10px;
+  border: 1px solid rgba(16, 35, 31, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 253, 247, 0.72);
+}
+
+.web3-safety-list strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--ink);
 }
 
 .crypto-wallet-hero {
@@ -3631,6 +3760,14 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .web3-wallet-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .web3-wallet-balance {
+    grid-column: 1 / -1;
+  }
+
   .three-cols,
   .two-cols {
     grid-template-columns: 1fr;
@@ -3894,16 +4031,93 @@ h1 {
     min-height: 104px;
   }
 
+  .paypal-balance-list {
+    display: none;
+  }
+
   .paypal-total strong {
     font-size: clamp(1.75rem, 10vw, 2.35rem);
   }
 
-  .desktop-card-stack {
+  .dashboard-cards-panel .desktop-card-stack {
+    display: block;
+  }
+
+  .dashboard-cards-panel .mobile-card-list {
     display: none;
   }
 
-  .mobile-card-list {
-    display: block;
+  .dashboard-cards-panel .card-stack-stage {
+    min-height: 206px;
+  }
+
+  .dashboard-cards-panel .stack-card {
+    width: min(88%, 292px);
+    min-height: 132px;
+    padding: 12px;
+  }
+
+  .dashboard-cards-panel .stack-card-name {
+    margin-top: 13px;
+  }
+
+  .dashboard-cards-panel .stack-card-footer {
+    margin-top: 9px;
+  }
+
+  .dashboard-cards-panel .card-stack-summary.only-total {
+    min-height: 54px;
+    padding: 4px 8px 10px;
+    border: 0;
+    background: transparent;
+  }
+
+  .dashboard-cards-panel .card-stack-summary.only-total strong {
+    font-size: clamp(2rem, 10vw, 2.45rem);
+  }
+
+  .vehicle-card {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 10px;
+    padding: 10px;
+    border-radius: 22px;
+  }
+
+  .vehicle-visual {
+    width: 66px;
+    height: 54px;
+    border-radius: 18px;
+  }
+
+  .vehicle-image {
+    width: 56px;
+    height: 34px;
+  }
+
+  .vehicle-main {
+    align-self: center;
+  }
+
+  .vehicle-card strong {
+    font-size: 0.98rem;
+  }
+
+  .vehicle-info-card,
+  .vehicle-insurance-check {
+    grid-column: 1 / -1;
+    min-width: 0;
+    width: 100%;
+    border-radius: 18px;
+  }
+
+  .vehicle-info-card {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 10px 12px;
+  }
+
+  .vehicle-insurance-check {
+    padding: 11px 12px;
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
   .subscription-home-page {
