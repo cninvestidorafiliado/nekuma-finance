@@ -75,6 +75,8 @@
     investimento: "Investimento",
     other: "Outros"
   };
+  const debtProviderOptions = ["Caixa", "Santander", "Bradesco", "Itau", "Banco do Brasil", "Outros"];
+  const debtPaymentMethodOptions = ["Debito automatico", "Boleto", "Pix", "Cartao de credito", "Transferencia", "Outro"];
   const subscriptionCatalog = {
     spotify: { name: "Spotify", icon: "SP", color: "#1DB954", asset: "spotify.png" },
     youtube: { name: "YouTube", icon: "YT", color: "#FF0033", asset: "youtube.png" },
@@ -2004,7 +2006,7 @@
     return rows ? `<div class="list">${rows}</div>` : `<p class="empty-state">Nenhuma conta neste modo.</p>`;
   }
 
-  function renderDebtList() {
+  function renderDebtListLegacy() {
     const debts = state.debts.filter((item) => inCountryScope(item.country));
     if (!debts.length) return `<p class="empty-state">Nenhum financiamento cadastrado.</p>`;
     return `
@@ -2019,6 +2021,60 @@
                 <p class="row-meta">${countryMeta[item.country].label} · ${escapeHtml(item.provider)} · parcela ${formatMoneyWithPrimary(item.installmentAmount, item.currency)}</p>
                 <div class="progress-track" aria-hidden="true"><div class="progress-fill" style="width:${progress}%"></div></div>
                 <p class="row-meta">${progress}% quitado · saldo ${formatMoneyWithPrimary(item.outstandingAmount, item.currency)}</p>
+              </div>
+              <div class="row-actions">
+                <button class="small-action ghost" type="button" data-action="open-modal" data-modal="debt" data-id="${item.id}">Editar</button>
+                <button class="small-action ghost" type="button" data-action="delete-debt" data-id="${item.id}">Excluir</button>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function renderDebtList() {
+    const debts = state.debts.filter((item) => inCountryScope(item.country));
+    if (!debts.length) return `<p class="empty-state">Nenhum financiamento cadastrado.</p>`;
+    return `
+      <div class="debt-list">
+        ${debts.map((item) => {
+          const progress = debtInstallmentProgress(item);
+          const payment = debtNextPaymentAmount(item);
+          const outstanding = debtEstimatedOutstanding(item);
+          const provider = debtProviderLabel(item);
+          const typeLabel = debtTypeLabel(item.type);
+          const contract = item.contractLast4 ? `Contrato **** ${escapeHtml(item.contractLast4)}` : "Contrato sem final cadastrado";
+          const dueLabel = item.dueDay ? `vence dia ${item.dueDay}` : "vencimento nao informado";
+          const paymentLabel = item.paymentMethod ? ` - ${escapeHtml(item.paymentMethod)}` : "";
+          return `
+            <div class="debt-card">
+              <div class="debt-card-head">
+                <span class="row-icon blue">F</span>
+                <div class="row-main">
+                  <div class="debt-title-line">
+                    <p class="row-title">${escapeHtml(item.title)}</p>
+                    <span class="debt-provider-tag">${escapeHtml(provider)}</span>
+                  </div>
+                  <p class="row-meta">${countryMeta[item.country]?.label || "Global"} - ${typeLabel} - ${contract}</p>
+                </div>
+              </div>
+              <div class="debt-card-grid">
+                <div class="debt-card-stat">
+                  <span>Proxima parcela</span>
+                  <strong>${formatMoneyWithPrimary(payment, item.currency)}</strong>
+                  <small>${dueLabel}${paymentLabel}</small>
+                </div>
+                <div class="debt-card-stat">
+                  <span>Parcelas</span>
+                  <strong>${progress.paid}/${progress.total || "--"}</strong>
+                  <small>${progress.remaining} faltam</small>
+                </div>
+                <div class="debt-card-stat">
+                  <span>Saldo devedor</span>
+                  <strong>${formatMoneyWithPrimary(outstanding, item.currency)}</strong>
+                  <small>Calculo aproximado</small>
+                </div>
               </div>
               <div class="row-actions">
                 <button class="small-action ghost" type="button" data-action="open-modal" data-modal="debt" data-id="${item.id}">Editar</button>
@@ -3310,7 +3366,7 @@
     `;
   }
 
-  function renderDebtModal(item = null) {
+  function renderDebtModalLegacy(item = null) {
     const activeCountry = item?.country || (state.ui.activeCountry === "global" ? "brasil" : state.ui.activeCountry);
     const selectedCurrency = item?.currency || countryMeta[activeCountry].currency;
     return `
@@ -3366,6 +3422,107 @@
           <div class="field">
             <label for="debtDueDay">Vencimento</label>
             <input id="debtDueDay" name="dueDay" required type="number" min="1" max="31" value="${item?.dueDay || ""}" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar contrato</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderDebtModal(item = null) {
+    const activeCountry = item?.country || (state.ui.activeCountry === "global" ? "brasil" : state.ui.activeCountry);
+    const selectedCurrency = item?.currency || countryMeta[activeCountry].currency;
+    const startDate = item?.startDate || dateInMonth(state.ui.selectedMonth, 1);
+    return `
+      <div class="modal-head">
+        <h2>${item ? "Editar contrato" : "Novo contrato"}</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="debt">
+        ${editHidden(item)}
+        <datalist id="debtProviderOptions">
+          ${debtProviderOptions.map((provider) => `<option value="${escapeAttr(provider)}"></option>`).join("")}
+        </datalist>
+        <datalist id="debtPaymentMethodOptions">
+          ${debtPaymentMethodOptions.map((method) => `<option value="${escapeAttr(method)}"></option>`).join("")}
+        </datalist>
+        <div class="two-cols">
+          ${countrySelect(activeCountry)}
+          <div class="field">
+            <label for="debtType">Tipo</label>
+            <select id="debtType" name="type">
+              <option value="financing" ${selectedAttr("financing", item?.type || "financing")}>Financiamento</option>
+              <option value="consortium" ${selectedAttr("consortium", item?.type)}>Consorcio</option>
+              <option value="card" ${selectedAttr("card", item?.type)}>Cartao</option>
+              <option value="device" ${selectedAttr("device", item?.type)}>Aparelho</option>
+            </select>
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="debtProvider">Banco/empresa</label>
+            <input id="debtProvider" name="provider" list="debtProviderOptions" required placeholder="Ex: Santander" value="${escapeAttr(item?.provider || "")}" />
+          </div>
+          <div class="field">
+            <label for="debtTitle">Nome</label>
+            <input id="debtTitle" name="title" required placeholder="Ex: Apto Vitoria A" value="${escapeAttr(item?.title || "")}" />
+          </div>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="originalAmount">Valor contratado</label>
+            <input id="originalAmount" name="originalAmount" required type="number" min="0" step="0.01" value="${item ? number(item.originalAmount) : ""}" />
+          </div>
+          <div class="field">
+            <label for="installmentAmount">Valor da parcela</label>
+            <input id="installmentAmount" name="installmentAmount" required type="number" min="0" step="0.01" value="${item ? number(item.installmentAmount) : ""}" />
+          </div>
+          <div class="field">
+            <label for="debtCurrency">Moeda</label>
+            <select id="debtCurrency" name="currency">
+              ${currencyOptions(selectedCurrency)}
+            </select>
+          </div>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="debtStartDate">Data de inicio do contrato</label>
+            <input id="debtStartDate" name="startDate" type="date" value="${escapeAttr(startDate)}" />
+          </div>
+          <div class="field">
+            <label for="contractedInstallments">Parcelas contratadas</label>
+            <input id="contractedInstallments" name="contractedInstallments" type="number" min="1" max="600" step="1" value="${item ? number(item.contractedInstallments) || "" : ""}" />
+          </div>
+          <div class="field">
+            <label for="debtDueDay">Dia de vencimento</label>
+            <input id="debtDueDay" name="dueDay" required type="number" min="1" max="31" value="${item?.dueDay || ""}" />
+          </div>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="annualInterestRate">Taxa de juros (% a.a.)</label>
+            <input id="annualInterestRate" name="annualInterestRate" type="number" min="0" step="0.01" placeholder="Ex: 8.99" value="${item ? number(item.annualInterestRate) || "" : ""}" />
+          </div>
+          <div class="field">
+            <label for="insuranceAmount">Valor do seguro</label>
+            <input id="insuranceAmount" name="insuranceAmount" type="number" min="0" step="0.01" value="${item ? number(item.insuranceAmount) || "" : ""}" />
+          </div>
+          <div class="field">
+            <label for="adminFeeAmount">Tarifa administrativa</label>
+            <input id="adminFeeAmount" name="adminFeeAmount" type="number" min="0" step="0.01" value="${item ? number(item.adminFeeAmount) || "" : ""}" />
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="paymentMethod">Forma de pagamento</label>
+            <input id="paymentMethod" name="paymentMethod" list="debtPaymentMethodOptions" placeholder="Ex: debito automatico" value="${escapeAttr(item?.paymentMethod || "")}" />
+          </div>
+          <div class="field">
+            <label for="contractLast4">Numero do contrato (4 ultimos)</label>
+            <input id="contractLast4" name="contractLast4" inputmode="numeric" maxlength="4" pattern="[0-9]*" placeholder="Ex: 1234" value="${escapeAttr(item?.contractLast4 || "")}" />
           </div>
         </div>
         <div class="form-actions">
@@ -4147,17 +4304,28 @@
 
   function saveDebt(form) {
     const data = formData(form);
-    const updated = upsertItem("debts", data.id, {
+    const current = findItem("debts", data.id);
+    const contractLast4 = String(data.contractLast4 || "").replace(/\D/g, "").slice(-4);
+    const draft = {
+      ...(current || {}),
       country: data.country,
       provider: data.provider.trim(),
       title: data.title.trim(),
       type: data.type,
       originalAmount: number(data.originalAmount),
-      outstandingAmount: number(data.outstandingAmount),
       installmentAmount: number(data.installmentAmount),
       currency: data.currency,
-      dueDay: clamp(Math.round(number(data.dueDay)), 1, 31)
-    });
+      dueDay: clamp(Math.round(number(data.dueDay)), 1, 31),
+      startDate: data.startDate || "",
+      contractedInstallments: clamp(Math.round(number(data.contractedInstallments)), 0, 600),
+      paymentMethod: String(data.paymentMethod || "").trim(),
+      annualInterestRate: number(data.annualInterestRate),
+      insuranceAmount: number(data.insuranceAmount),
+      adminFeeAmount: number(data.adminFeeAmount),
+      contractLast4
+    };
+    draft.outstandingAmount = debtEstimatedOutstanding(draft);
+    const updated = upsertItem("debts", data.id, draft);
     saveState();
     closeModal();
     render();
@@ -6221,6 +6389,81 @@
     const [startYear, startIndex] = startMonth.split("-").map(Number);
     const [endYear, endIndex] = endMonth.split("-").map(Number);
     return (endYear - startYear) * 12 + (endIndex - startIndex);
+  }
+
+  function monthKeyFromDate(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function debtTypeLabel(type) {
+    const labels = {
+      financing: "Financiamento",
+      consortium: "Consorcio",
+      card: "Cartao",
+      device: "Aparelho"
+    };
+    return labels[type] || "Contrato";
+  }
+
+  function debtProviderLabel(item) {
+    return String(item?.provider || "Banco/empresa").trim() || "Banco/empresa";
+  }
+
+  function debtNextPaymentAmount(item) {
+    return number(item?.installmentAmount) + number(item?.insuranceAmount) + number(item?.adminFeeAmount);
+  }
+
+  function debtInstallmentProgress(item) {
+    const original = number(item?.originalAmount);
+    const storedOutstanding = number(item?.outstandingAmount);
+    const installment = number(item?.installmentAmount);
+    const total = Math.max(0, Math.round(number(item?.contractedInstallments)));
+    const fallbackTotal = total || (original && installment ? Math.ceil(original / installment) : 0);
+    if (!fallbackTotal) return { paid: 0, remaining: 0, total: 0 };
+
+    let paid = 0;
+    if (item?.startDate) {
+      const start = parseLocalDate(item.startDate);
+      const today = startOfDay(new Date());
+      if (start <= today) {
+        paid = monthDiff(monthKeyFromDate(start), currentMonth()) + 1;
+        const dueDay = clamp(Math.round(number(item?.dueDay) || start.getDate()), 1, 31);
+        if (today.getDate() < dueDay) paid -= 1;
+      }
+    } else if (original && storedOutstanding) {
+      const paidRatio = clamp((original - storedOutstanding) / original, 0, 1);
+      paid = Math.round(paidRatio * fallbackTotal);
+    }
+
+    paid = clamp(paid, 0, fallbackTotal);
+    return {
+      paid,
+      remaining: Math.max(0, fallbackTotal - paid),
+      total: fallbackTotal
+    };
+  }
+
+  function debtEstimatedOutstanding(item) {
+    const progress = debtInstallmentProgress(item);
+    const original = number(item?.originalAmount);
+    const storedOutstanding = number(item?.outstandingAmount);
+    const installment = number(item?.installmentAmount);
+    if (!progress.total) return round(storedOutstanding || original, 2);
+    if (!progress.remaining) return 0;
+
+    const annualRate = number(item?.annualInterestRate);
+    const monthlyRate = annualRate > 0 ? Math.pow(1 + annualRate / 100, 1 / 12) - 1 : 0;
+    let estimate = 0;
+    if (installment > 0 && monthlyRate > 0) {
+      estimate = installment * (1 - Math.pow(1 + monthlyRate, -progress.remaining)) / monthlyRate;
+    } else if (original > 0) {
+      estimate = original * (progress.remaining / progress.total);
+    } else {
+      estimate = installment * progress.remaining;
+    }
+
+    if (original > 0) estimate = Math.min(estimate, original);
+    return round(Math.max(0, estimate), 2);
   }
 
   function incomeSourceById(id) {

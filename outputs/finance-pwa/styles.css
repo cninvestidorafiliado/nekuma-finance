@@ -865,6 +865,77 @@ canvas {
   margin-top: 7px;
 }
 
+.debt-list {
+  display: grid;
+  gap: 10px;
+}
+
+.debt-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(49, 44, 81, 0.12);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.debt-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.debt-title-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.debt-provider-tag {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border-radius: 999px;
+  color: var(--ink);
+  background: linear-gradient(135deg, var(--gold), var(--acid));
+  font-size: 0.74rem;
+  font-weight: 950;
+}
+
+.debt-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.debt-card-stat {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(242, 238, 229, 0.72);
+}
+
+.debt-card-stat span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.debt-card-stat strong {
+  color: var(--ink);
+  font-size: clamp(1rem, 2vw, 1.28rem);
+  line-height: 1.1;
+}
+
+.debt-card-stat small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .settings-rate-card,
 .family-members-card {
   display: grid;
@@ -3853,6 +3924,15 @@ h1 {
   }
 
   .list-row.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .debt-title-line {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .debt-card-grid {
     grid-template-columns: 1fr;
   }
 
