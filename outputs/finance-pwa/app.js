@@ -268,6 +268,7 @@
     if (action === "disconnect-web3") disconnectWeb3Wallet();
     if (action === "remote-signout") signOutRemote();
     if (action === "remote-sync-now") syncRemoteNow();
+    if (action === "reload-app") window.location.reload();
     if (action === "export-data") exportData();
     if (action === "reset-demo") resetDemo();
   });
@@ -1414,6 +1415,14 @@
           <span class="chip blue">6 meses</span>
         </div>
         <div class="chart-wrap"><canvas id="trend-chart" aria-label="Grafico mensal"></canvas></div>
+      </section>
+
+      <section class="content-panel debt-home-panel">
+        <div class="panel-head">
+          <h2>Financiamentos</h2>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="debt">Novo contrato</button>
+        </div>
+        ${renderDebtList()}
       </section>
 
       <section class="content-panel">
@@ -6410,7 +6419,7 @@
   }
 
   function debtNextPaymentAmount(item) {
-    return number(item?.installmentAmount) + number(item?.insuranceAmount) + number(item?.adminFeeAmount);
+    return number(item?.installmentAmount);
   }
 
   function debtInstallmentProgress(item) {

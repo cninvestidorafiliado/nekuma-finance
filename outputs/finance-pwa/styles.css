@@ -189,6 +189,10 @@ h3 {
   font-size: 0.82rem;
 }
 
+.mobile-refresh-button {
+  display: none;
+}
+
 .online-mode .logout-button {
   display: grid;
 }
@@ -4021,6 +4025,10 @@ h1 {
     flex: 0 0 auto;
     gap: 6px;
     max-width: 46%;
+  }
+
+  .mobile-refresh-button {
+    display: grid;
   }
 
   .logout-button {
