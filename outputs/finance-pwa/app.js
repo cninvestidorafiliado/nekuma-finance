@@ -2053,6 +2053,7 @@
           const outstanding = debtEstimatedOutstanding(item);
           const provider = debtProviderLabel(item);
           const typeLabel = debtTypeLabel(item.type);
+          const progressPercent = progress.total ? clamp(Math.round((progress.paid / progress.total) * 100), 0, 100) : 0;
           const contract = item.contractLast4 ? `Contrato **** ${escapeHtml(item.contractLast4)}` : "Contrato sem final cadastrado";
           const dueLabel = item.dueDay ? `vence dia ${item.dueDay}` : "vencimento nao informado";
           const paymentLabel = item.paymentMethod ? ` - ${escapeHtml(item.paymentMethod)}` : "";
@@ -2084,6 +2085,16 @@
                   <strong>${formatMoneyWithPrimary(outstanding, item.currency)}</strong>
                   <small>Calculo aproximado</small>
                 </div>
+              </div>
+              <div class="debt-progress" aria-label="${progressPercent}% das parcelas pagas">
+                <div class="debt-progress-copy">
+                  <span>Progresso do contrato</span>
+                  <strong>${progressPercent}% quitado</strong>
+                </div>
+                <div class="debt-progress-track" aria-hidden="true">
+                  <div class="debt-progress-fill" style="width:${progressPercent}%"></div>
+                </div>
+                <p>${progress.paid} pagas - ${progress.remaining} restantes</p>
               </div>
               <div class="row-actions">
                 <button class="small-action ghost" type="button" data-action="open-modal" data-modal="debt" data-id="${item.id}">Editar</button>
