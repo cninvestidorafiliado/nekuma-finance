@@ -203,10 +203,16 @@
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden" && hasPendingLocalChanges()) flushRemoteState().catch(() => {});
-    if (document.visibilityState === "visible") requestRemotePull("visible");
+    if (document.visibilityState === "visible") {
+      requestRemotePull("visible");
+      refreshPaypalBalance(false);
+    }
   });
 
-  window.addEventListener("focus", () => requestRemotePull("focus"));
+  window.addEventListener("focus", () => {
+    requestRemotePull("focus");
+    refreshPaypalBalance(false);
+  });
   window.addEventListener("online", () => requestRemotePull("online"));
   window.addEventListener("pagehide", () => {
     if (hasPendingLocalChanges()) flushRemoteState().catch(() => {});
@@ -333,6 +339,7 @@
     persistLocalState();
     if (!remoteStore.enabled) {
       render();
+      refreshPaypalBalance(false);
       return;
     }
 
@@ -352,6 +359,7 @@
       remoteSession.status = "ready";
       startRemoteAutoSync();
       render();
+      refreshPaypalBalance(false);
     } catch (error) {
       remoteSession.status = "error";
       remoteSession.error = error.message || "Falha ao conectar Supabase.";
@@ -919,6 +927,11 @@
     }, 0);
   }
 
+  function hasPaypalDashboardBalance(paypal = state.paypal) {
+    const safePaypal = normalizePaypalState(paypal);
+    return paypalBalanceTotal(primaryCurrency(), safePaypal.balances) > 0;
+  }
+
   function paypalStatusText(paypal = state.paypal) {
     if (paypal.status === "loading") {
       return { label: "Atualizando saldo", detail: "Consultando a API do PayPal." };
@@ -1343,6 +1356,7 @@
 
   function renderDashboard() {
     const summary = summarizeMonth(state.ui.selectedMonth, "global");
+    const showPaypal = hasPaypalDashboardBalance();
 
     return `
       ${renderFxCards()}
@@ -1351,9 +1365,9 @@
         ${renderBalanceOverview(summary)}
       </section>
 
-      <section class="content-panel paypal-panel">
+      ${showPaypal ? `<section class="content-panel paypal-panel">
         ${renderPaypalPanel()}
-      </section>
+      </section>` : ""}
 
       <section class="content-panel subscriptions-panel">
         <div class="panel-head">
@@ -5541,7 +5555,7 @@
       });
       saveState();
       render();
-      showToast("Saldo PayPal atualizado.");
+      if (force) showToast("Saldo PayPal atualizado.");
     } catch (error) {
       state.paypal = normalizePaypalState({
         ...(state.paypal || {}),
@@ -5551,7 +5565,7 @@
       });
       saveState();
       render();
-      showToast("Nao consegui atualizar o PayPal agora.");
+      if (force) showToast("Nao consegui atualizar o PayPal agora.");
     } finally {
       paypalFetchInFlight = false;
     }
