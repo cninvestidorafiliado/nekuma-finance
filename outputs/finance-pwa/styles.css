@@ -448,10 +448,18 @@ h3 {
 
 .fx-status-card {
   grid-column: auto;
+  min-height: 56px;
 }
 
 .fx-status-card .small-action {
   flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 0.76rem;
+}
+
+.fx-status-card .row-meta {
+  display: none;
 }
 
 .hero-panel {
@@ -686,6 +694,17 @@ h3 {
 .panel-head h2,
 .panel-head h3 {
   margin: 0;
+}
+
+.panel-title-block {
+  min-width: 0;
+}
+
+.panel-total {
+  margin: 3px 0 0;
+  color: var(--green);
+  font-size: 0.76rem;
+  font-weight: 900;
 }
 
 .small-action {
@@ -2193,12 +2212,16 @@ canvas {
 .subscription-home-track {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: 100%;
+  grid-auto-columns: calc((100% - 16px) / 3);
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 4px;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: thin;
+  padding-bottom: 2px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.subscription-home-track::-webkit-scrollbar {
+  display: none;
 }
 
 .subscription-home-page {
@@ -2215,20 +2238,21 @@ canvas {
   justify-items: center;
   gap: 4px;
   min-width: 0;
-  min-height: 104px;
-  padding: 9px 8px;
+  min-height: 90px;
+  padding: 8px 6px;
   border: 1px solid rgba(49, 44, 81, 0.1);
   border-radius: var(--radius);
   color: var(--ink);
   background: rgba(255, 250, 240, 0.72);
   cursor: pointer;
+  scroll-snap-align: start;
   text-align: center;
 }
 
 .subscription-home-logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 15px;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
 }
 
 .subscription-home-card strong,
@@ -2240,7 +2264,7 @@ canvas {
 .subscription-home-card strong {
   width: 100%;
   overflow: hidden;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2248,21 +2272,20 @@ canvas {
 
 .subscription-home-card small {
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 780;
 }
 
 .subscription-home-card em {
   color: #aa3d31;
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   font-style: normal;
   font-weight: 950;
   line-height: 1.1;
 }
 
 .subscription-home-card em .money-converted {
-  margin-top: 1px;
-  font-size: 0.66rem;
+  display: none;
 }
 
 .carousel-hint {
@@ -3913,23 +3936,32 @@ h1 {
     font-size: 1.14rem;
   }
 
-  .subscription-home-page {
-    gap: 8px;
+  .subscription-home-track {
+    grid-auto-columns: calc((100% - 14px) / 3);
+    gap: 7px;
   }
 
   .subscription-home-card {
-    min-height: 96px;
-    padding: 8px 6px;
+    min-height: 76px;
+    padding: 6px 5px;
   }
 
   .subscription-home-logo {
-    width: 38px;
-    height: 38px;
-    border-radius: 13px;
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
   }
 
   .subscription-home-card strong {
-    font-size: 0.72rem;
+    font-size: 0.64rem;
+  }
+
+  .subscription-home-card em {
+    font-size: 0.64rem;
+  }
+
+  .subscription-home-card small {
+    font-size: 0.56rem;
   }
 
   .paypal-card {

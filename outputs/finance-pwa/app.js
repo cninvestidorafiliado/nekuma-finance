@@ -1316,7 +1316,7 @@
     const quotes = state.fxQuotes || {};
     const usdJpy = Number(quotes.usdJpy || (quotes.usdBrl && quotes.jpyBrl ? quotes.usdBrl / quotes.jpyBrl : 0));
     const btcUsd = Number(quotes.btcUsd || cryptoPrice("BTC", "USD") || 0);
-    const status = fxStatusText();
+    const updatedLabel = quotes.updatedAt ? formatTime(quotes.updatedAt) : "--:--";
     return `
       <section class="fx-strip" aria-label="Cotacoes">
         <article class="fx-card">
@@ -1342,8 +1342,8 @@
         </article>
         <article class="fx-card fx-status-card">
           <div>
-            <p class="mini-label">Cotacao</p>
-            <strong>${status.label}</strong>
+            <p class="mini-label">Atualizado</p>
+            <strong>${updatedLabel}</strong>
             <p class="row-meta">${quotes.ratesDate ? `${escapeHtml(quotes.source || "Mercado")} · ${escapeHtml(quotes.ratesDate)}` : "Fonte mercado"}</p>
           </div>
           <button class="small-action ghost" type="button" data-action="refresh-fx">Atualizar</button>
@@ -1422,7 +1422,10 @@
 
       <section class="content-panel subscriptions-panel">
         <div class="panel-head">
-          <h2>Subscricoes atuais</h2>
+          <div class="panel-title-block">
+            <h2>Subscricoes atuais</h2>
+            <p class="panel-total">Total mensal ${formatMoney(subscriptionMonthTotal(state.ui.selectedMonth), primaryCurrency())}</p>
+          </div>
           <button class="small-action icon-action" type="button" data-action="open-modal" data-modal="subscription" aria-label="Nova subscricao">+</button>
         </div>
         ${renderSubscriptionsHomePanel()}
@@ -2496,33 +2499,33 @@
     }
 
     const visible = limit ? subscriptions.slice(0, limit) : subscriptions;
-    const pages = [];
-    for (let index = 0; index < visible.length; index += 3) {
-      pages.push(visible.slice(index, index + 3));
-    }
 
     return `
       <div class="subscription-home-carousel" aria-label="Subscricoes atuais">
         <div class="subscription-home-track">
-          ${pages.map((page) => `
-            <div class="subscription-home-page">
-              ${page.map((item) => {
-                const dueDate = subscriptionDateForMonth(item, month);
-                return `
-                  <button class="subscription-home-card" type="button" data-action="open-modal" data-modal="subscription" data-id="${item.id}">
-                    ${renderSubscriptionLogo(item, "subscription-logo subscription-home-logo")}
-                    <strong>${escapeHtml(subscriptionName(item))}</strong>
-                    <em>${formatMoneyWithPrimary(item.amount, item.currency, month)}</em>
-                    <small>Vence ${formatShortDate(dueDate)}</small>
-                  </button>
-                `;
-              }).join("")}
-            </div>
-          `).join("")}
+          ${visible.map((item) => {
+            const dueDate = subscriptionDateForMonth(item, month);
+            return `
+              <button class="subscription-home-card" type="button" data-action="open-modal" data-modal="subscription" data-id="${item.id}">
+                ${renderSubscriptionLogo(item, "subscription-logo subscription-home-logo")}
+                <strong>${escapeHtml(subscriptionName(item))}</strong>
+                <em>${formatMoneyWithPrimary(item.amount, item.currency, month)}</em>
+                <small>Vence ${formatShortDate(dueDate)}</small>
+              </button>
+            `;
+          }).join("")}
         </div>
         ${visible.length > 3 ? `<p class="carousel-hint">Arraste para ver mais</p>` : ""}
       </div>
     `;
+  }
+
+  function subscriptionMonthTotal(month = state.ui.selectedMonth) {
+    const currency = primaryCurrency();
+    const rate = latestRate(month);
+    return monthSubscriptions(month, "global").reduce((total, item) => {
+      return total + convert(item.amount, item.currency, currency, rate);
+    }, 0);
   }
 
   function renderHousingPanel(limit) {
