@@ -275,6 +275,7 @@
     if (action === "remote-signout") signOutRemote();
     if (action === "remote-sync-now") syncRemoteNow();
     if (action === "reload-app") window.location.reload();
+    if (action === "toggle-visibility") togglePanelVisibility(button.dataset.panel);
     if (action === "export-data") exportData();
     if (action === "reset-demo") resetDemo();
   });
@@ -788,7 +789,12 @@
     settings.secondaryCurrency = sanitizeSecondaryCurrency(settings.secondaryCurrency, settings.baseCurrency);
     const normalized = {
       settings,
-      ui: { ...base.ui, ...(raw.ui || {}) },
+      ui: {
+        ...base.ui,
+        ...(raw.ui || {}),
+        hideCalendarDetails: Boolean(raw.ui?.hideCalendarDetails),
+        hideCryptoDetails: Boolean(raw.ui?.hideCryptoDetails)
+      },
       transactions: Array.isArray(raw.transactions) ? raw.transactions : base.transactions,
       transfers: Array.isArray(raw.transfers) ? raw.transfers : base.transfers,
       commitments: Array.isArray(raw.commitments) ? raw.commitments : base.commitments,
@@ -1031,7 +1037,9 @@
         activeCountry: "global",
         activeTab: "dashboard",
         selectedMonth,
-        activeCardIndex: 0
+        activeCardIndex: 0,
+        hideCalendarDetails: false,
+        hideCryptoDetails: false
       },
       transactions: [],
       transfers: [],
@@ -1354,6 +1362,49 @@
     return renderDashboard();
   }
 
+  function visibilityStateKey(panel) {
+    const map = {
+      calendar: "hideCalendarDetails",
+      crypto: "hideCryptoDetails"
+    };
+    return map[panel] || "";
+  }
+
+  function togglePanelVisibility(panel) {
+    const key = visibilityStateKey(panel);
+    if (!key) return;
+    state.ui[key] = !state.ui[key];
+    saveState();
+    render();
+  }
+
+  function renderVisibilityToggle(panel, hidden, label) {
+    return `
+      <button
+        class="small-action ghost icon-action visibility-toggle"
+        type="button"
+        data-action="toggle-visibility"
+        data-panel="${escapeAttr(panel)}"
+        aria-label="${hidden ? `Mostrar ${label}` : `Ocultar ${label}`}"
+        title="${hidden ? "Mostrar" : "Ocultar"}"
+      >
+        <span data-lucide="${hidden ? "eye-off" : "eye"}" aria-hidden="true"></span>
+      </button>
+    `;
+  }
+
+  function renderHiddenDetails(title, detail) {
+    return `
+      <div class="hidden-details-note">
+        <span data-lucide="eye-off" aria-hidden="true"></span>
+        <div>
+          <strong>${escapeHtml(title)}</strong>
+          <p>${escapeHtml(detail)}</p>
+        </div>
+      </div>
+    `;
+  }
+
   function renderDashboard() {
     const summary = summarizeMonth(state.ui.selectedMonth, "global");
     const showPaypal = hasPaypalDashboardBalance();
@@ -1380,9 +1431,12 @@
       <section class="content-panel">
         <div class="panel-head">
           <h2>Calendario financeiro</h2>
-          <span class="chip gold">${formatMonthLabel(state.ui.selectedMonth)}</span>
+          <div class="chips">
+            ${renderVisibilityToggle("calendar", state.ui.hideCalendarDetails, "eventos do calendario")}
+            <span class="chip gold">${formatMonthLabel(state.ui.selectedMonth)}</span>
+          </div>
         </div>
-        ${renderFinancialCalendar(8, "upcoming")}
+        ${state.ui.hideCalendarDetails ? renderHiddenDetails("Eventos ocultos", "Clique no olho para mostrar o calendario financeiro.") : renderFinancialCalendar(8, "upcoming")}
       </section>
 
       <section class="content-panel housing-panel">
@@ -1397,6 +1451,7 @@
         <div class="panel-head">
           <h2>Carteira cripto</h2>
           <div class="chips">
+            ${renderVisibilityToggle("crypto", state.ui.hideCryptoDetails, "criptos compradas")}
             <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
             <button class="small-action" type="button" data-action="open-modal" data-modal="crypto">Nova cripto</button>
           </div>
@@ -2389,6 +2444,7 @@
         <div class="panel-head">
           <h2>Criptomoedas</h2>
           <div class="chips">
+            ${renderVisibilityToggle("crypto", state.ui.hideCryptoDetails, "criptos compradas")}
             <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
             <button class="small-action" type="button" data-action="open-modal" data-modal="crypto">Nova cripto</button>
           </div>
@@ -2612,6 +2668,7 @@
     const summary = cryptoSummary();
     const status = cryptoStatusText();
     const rows = cryptoAssetRows();
+    const hideDetails = Boolean(state.ui.hideCryptoDetails);
     if (!assets.length) {
       return `
         <div class="crypto-empty">
@@ -2639,7 +2696,9 @@
           ${compact ? "" : `<button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>`}
         </div>
 
-        ${renderCryptoTokenCards(rows, compact)}
+        ${hideDetails
+          ? renderHiddenDetails("Criptos ocultas", "O total e a alocacao continuam visiveis. Clique no olho para mostrar os ativos.")
+          : renderCryptoTokenCards(rows, compact)}
       </div>
     `;
   }
