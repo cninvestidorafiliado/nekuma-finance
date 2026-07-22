@@ -3,6 +3,7 @@
 
   const STORAGE_KEY = "ponte-financeira-state-v4";
   const REMOTE_HOUSEHOLD_KEY = "ponte-financeira-household-id";
+  const DUE_ALERT_KEY = "nekuma-finance-due-alert-key";
   const LEGACY_STORAGE_KEYS = ["ponte-financeira-state-v1", "ponte-financeira-state-v2"];
   const PRIMARY_CURRENCY = "JPY";
   const DEFAULT_SECONDARY_CURRENCY = "BRL";
@@ -193,7 +194,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=61")
+      navigator.serviceWorker.register("./service-worker.js?v=71")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -280,6 +281,9 @@
     if (action === "remote-sync-now") syncRemoteNow();
     if (action === "reload-app") window.location.reload();
     if (action === "toggle-visibility") togglePanelVisibility(button.dataset.panel);
+    if (action === "dismiss-due-alert") closeModal();
+    if (action === "copy-invite-code") copyInviteCode();
+    if (action === "request-account-delete") showAccountDeleteInfo();
     if (action === "export-data") exportData();
     if (action === "reset-demo") resetDemo();
   });
@@ -791,11 +795,22 @@
     const settings = { ...base.settings, ...(raw.settings || {}) };
     settings.baseCurrency = sanitizeCurrency(settings.baseCurrency, PRIMARY_CURRENCY);
     settings.secondaryCurrency = sanitizeSecondaryCurrency(settings.secondaryCurrency, settings.baseCurrency);
+    const profile = {
+      ...base.profile,
+      ...(raw.profile || {}),
+      country: String(raw.profile?.country || "").trim(),
+      city: String(raw.profile?.city || "").trim(),
+      age: String(raw.profile?.age || "").trim(),
+      gender: String(raw.profile?.gender || "").trim(),
+      language: String(raw.profile?.language || base.profile.language).trim() || base.profile.language
+    };
     const normalized = {
       settings,
+      profile,
       ui: {
         ...base.ui,
         ...(raw.ui || {}),
+        hideBalance: Boolean(raw.ui?.hideBalance),
         hideCalendarDetails: Boolean(raw.ui?.hideCalendarDetails),
         hideCryptoDetails: Boolean(raw.ui?.hideCryptoDetails)
       },
@@ -1037,11 +1052,19 @@
         defaultRate: 0.0352,
         dataMode: "local"
       },
+      profile: {
+        country: "",
+        city: "",
+        age: "",
+        gender: "",
+        language: "pt-BR"
+      },
       ui: {
         activeCountry: "global",
         activeTab: "dashboard",
         selectedMonth,
         activeCardIndex: 0,
+        hideBalance: false,
         hideCalendarDetails: false,
         hideCryptoDetails: false
       },
@@ -1193,6 +1216,7 @@
     requestAnimationFrame(drawVisibleCharts);
     scheduleFxRefresh(false);
     scheduleCryptoRefresh(false);
+    setTimeout(showDueAlertIfNeeded, 250);
   }
 
   function refreshIcons() {
@@ -1368,6 +1392,7 @@
 
   function visibilityStateKey(panel) {
     const map = {
+      balance: "hideBalance",
       calendar: "hideCalendarDetails",
       crypto: "hideCryptoDetails"
     };
@@ -1409,12 +1434,74 @@
     `;
   }
 
+  function showDueAlertIfNeeded() {
+    if (modalRoot.innerHTML.trim()) return;
+    if (remoteStore.enabled && remoteSession.status !== "ready") return;
+    const alerts = upcomingDueAlerts(3);
+    if (!alerts.length) return;
+    const key = `${localDateKey()}|${alerts.map((item) => `${item.type}:${item.id}:${item.date}`).join("|")}`;
+    if (localStorage.getItem(DUE_ALERT_KEY) === key) return;
+    localStorage.setItem(DUE_ALERT_KEY, key);
+    modalRoot.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal due-alert-modal" role="dialog" aria-modal="true" aria-label="Alertas de vencimento">
+          <div class="modal-head">
+            <h2>Contas proximas do vencimento</h2>
+            <button class="close-button" type="button" data-action="dismiss-due-alert" aria-label="Fechar">x</button>
+          </div>
+          <div class="due-alert-list">
+            ${alerts.map((item) => `
+              <div class="due-alert-row">
+                <span class="row-icon red">${formatCalendarDay(item.date)}</span>
+                <div>
+                  <p class="row-title">${escapeHtml(item.title)}</p>
+                  <p class="row-meta">${formatShortDate(item.date)} - ${escapeHtml(item.meta || item.category || "Conta")}</p>
+                </div>
+                <strong>${formatMoneyWithPrimary(item.amount, item.currency, item.date.slice(0, 7))}</strong>
+              </div>
+            `).join("")}
+          </div>
+          <div class="form-actions">
+            <button class="primary-button" type="button" data-action="dismiss-due-alert">Entendi</button>
+          </div>
+        </div>
+      </div>
+    `;
+    refreshIcons();
+  }
+
+  function upcomingDueAlerts(days = 3) {
+    const today = startOfDay(new Date());
+    const maxDate = new Date(today);
+    maxDate.setDate(today.getDate() + days);
+    const months = Array.from(new Set([currentMonth(), addMonths(currentMonth(), 1)]));
+    return months
+      .flatMap((month) => financialCalendarItems(month, "global"))
+      .filter((item) => item.kind !== "income" && !item.paid && Number(item.amount || 0) > 0)
+      .filter((item) => {
+        const due = parseLocalDate(item.date);
+        return due >= today && due <= maxDate;
+      })
+      .sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title))
+      .slice(0, 5);
+  }
+
+  function localDateKey() {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
   function renderDashboard() {
     const summary = summarizeMonth(state.ui.selectedMonth, "global");
     const showPaypal = hasPaypalDashboardBalance();
 
     return `
       ${renderFxCards()}
+
+      ${renderToolbar()}
 
       <section class="content-panel overview-card">
         ${renderBalanceOverview(summary)}
@@ -1428,7 +1515,7 @@
         <div class="panel-head">
           <div class="panel-title-block">
             <h2>Subscricoes atuais</h2>
-            <p class="panel-total">Total mensal ${formatMoney(subscriptionMonthTotal(state.ui.selectedMonth), primaryCurrency())}</p>
+            <p class="panel-total">Total mensal ${subscriptionMonthTotalLabel(state.ui.selectedMonth)}</p>
           </div>
           <button class="small-action icon-action" type="button" data-action="open-modal" data-modal="subscription" aria-label="Nova subscricao">+</button>
         </div>
@@ -1493,6 +1580,10 @@
         <div class="chart-wrap"><canvas id="trend-chart" aria-label="Grafico mensal"></canvas></div>
       </section>
 
+      <section class="content-panel goals-panel">
+        ${renderFinancialGoalsPanel()}
+      </section>
+
       <section class="content-panel debt-home-panel">
         <div class="panel-head">
           <h2>Financiamentos</h2>
@@ -1514,19 +1605,26 @@
   function renderBalanceOverview(summary) {
     const breakdown = dashboardBalanceBreakdown(summary);
     const payableLabel = breakdown.payables ? formatMoneyWithPrimary(breakdown.payables, breakdown.currency) : formatMoney(0, breakdown.currency);
+    const hideBalance = Boolean(state.ui.hideBalance);
+    const mainValue = hideBalance ? "¥ •••••" : formatMoneyWithPrimary(summary.remaining, summary.currency);
+    const receivedValue = hideBalance ? "•••••" : formatMoneyWithPrimary(breakdown.received, breakdown.currency);
+    const payableValue = hideBalance ? "•••••" : payableLabel;
     return `
       <div class="balance-overview">
+        <div class="balance-privacy-action">
+          ${renderVisibilityToggle("balance", hideBalance, "saldo atual")}
+        </div>
         <div class="balance-copy">
           <p class="hero-title">Saldo atual</p>
-          <p class="hero-value">${formatMoneyWithPrimary(summary.remaining, summary.currency)}</p>
+          <p class="hero-value">${mainValue}</p>
           <div class="overview-mini-grid">
             <div>
               <span>Recebido ate agora</span>
-              <strong>${formatMoneyWithPrimary(breakdown.received, breakdown.currency)}</strong>
+              <strong>${receivedValue}</strong>
             </div>
             <div>
               <span>Contas a pagar</span>
-              <strong>${payableLabel}</strong>
+              <strong>${payableValue}</strong>
             </div>
           </div>
         </div>
@@ -1892,6 +1990,45 @@
             </select>
             <p class="row-meta">Aparece entre parenteses como comparativo. Nao pode ser igual a principal.</p>
           </div>
+          <div class="settings-profile-card">
+            <div class="panel-head compact">
+              <h3>Perfil do usuario</h3>
+              <span class="chip blue">Pessoal</span>
+            </div>
+            <div class="two-cols">
+              <div class="field">
+                <label for="profileCountry">Pais</label>
+                <input id="profileCountry" name="profileCountry" value="${escapeAttr(state.profile.country)}" placeholder="Ex: Japao" />
+              </div>
+              <div class="field">
+                <label for="profileCity">Cidade</label>
+                <input id="profileCity" name="profileCity" value="${escapeAttr(state.profile.city)}" placeholder="Ex: Nagoya" />
+              </div>
+            </div>
+            <div class="three-cols">
+              <div class="field">
+                <label for="profileAge">Idade</label>
+                <input id="profileAge" name="profileAge" inputmode="numeric" value="${escapeAttr(state.profile.age)}" placeholder="--" />
+              </div>
+              <div class="field">
+                <label for="profileGender">Sexo</label>
+                <select id="profileGender" name="profileGender">
+                  <option value="" ${selectedAttr("", state.profile.gender)}>Nao informado</option>
+                  <option value="feminino" ${selectedAttr("feminino", state.profile.gender)}>Feminino</option>
+                  <option value="masculino" ${selectedAttr("masculino", state.profile.gender)}>Masculino</option>
+                  <option value="outro" ${selectedAttr("outro", state.profile.gender)}>Outro</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="profileLanguage">Idioma</label>
+                <select id="profileLanguage" name="profileLanguage">
+                  <option value="pt-BR" ${selectedAttr("pt-BR", state.profile.language)}>Portugues</option>
+                  <option value="ja-JP" ${selectedAttr("ja-JP", state.profile.language)}>Japones</option>
+                  <option value="en-US" ${selectedAttr("en-US", state.profile.language)}>Ingles</option>
+                </select>
+              </div>
+            </div>
+          </div>
           <div class="settings-rate-card">
             <div class="panel-head compact">
               <h3>Cotacao automatica</h3>
@@ -1933,6 +2070,8 @@
       </section>
 
       ${renderCloudSettings()}
+
+      ${renderProfileSupportCards()}
 
       <section class="split-grid">
         <article class="content-panel">
@@ -2020,6 +2159,82 @@
         </div>
       </section>
     `;
+  }
+
+  function renderProfileSupportCards() {
+    const household = remoteSession.household || {};
+    const inviteCode = household.invite_code || "";
+    const inviteText = inviteCode
+      ? `Use o codigo ${inviteCode} para entrar na familia ${household.name || state.settings.familyName}.`
+      : "Conecte sua familia na nuvem para gerar um codigo de convite.";
+    return `
+      <section class="profile-support-grid">
+        <article class="content-panel profile-support-card">
+          <div class="panel-head compact">
+            <h2>Convidar amigos</h2>
+            <span data-lucide="user-plus" aria-hidden="true"></span>
+          </div>
+          <p class="row-meta">${escapeHtml(inviteText)}</p>
+          <button class="secondary-button" type="button" data-action="copy-invite-code" ${inviteCode ? "" : "disabled"}>Copiar convite</button>
+        </article>
+        <article class="content-panel profile-support-card">
+          <div class="panel-head compact">
+            <h2>Privacidade</h2>
+            <span data-lucide="shield-check" aria-hidden="true"></span>
+          </div>
+          <p class="row-meta">Dados financeiros ficam vinculados apenas a sua familia. Chaves sensiveis continuam fora do navegador.</p>
+          <span class="chip green">Protegido</span>
+        </article>
+        <article class="content-panel profile-support-card danger-zone">
+          <div class="panel-head compact">
+            <h2>Cadastro</h2>
+            <span data-lucide="trash-2" aria-hidden="true"></span>
+          </div>
+          <p class="row-meta">Opcao para solicitar exclusao definitiva do cadastro e dos dados associados.</p>
+          <button class="danger-button" type="button" data-action="request-account-delete">Excluir cadastro</button>
+        </article>
+      </section>
+    `;
+  }
+
+  async function copyInviteCode() {
+    const household = remoteSession.household || {};
+    const inviteCode = household.invite_code || "";
+    if (!inviteCode) {
+      showToast("Codigo de convite indisponivel.");
+      return;
+    }
+    const text = `Entre na minha familia no Nekuma Finance com o codigo: ${inviteCode}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("Convite copiado.");
+    } catch (error) {
+      showToast(`Codigo da familia: ${inviteCode}`);
+    }
+  }
+
+  function showAccountDeleteInfo() {
+    modalRoot.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Excluir cadastro">
+          <div class="modal-head">
+            <h2>Excluir cadastro</h2>
+            <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+          </div>
+          <div class="delete-account-note">
+            <span data-lucide="shield-alert" aria-hidden="true"></span>
+            <div>
+              <strong>Exclusao definitiva precisa de uma funcao segura.</strong>
+              <p>Por seguranca, o app nao apaga usuario do Supabase direto pelo navegador. Na proxima etapa criamos uma Cloudflare Function para remover cadastro, familia e dados com confirmacao.</p>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="primary-button" type="button" data-action="close-modal">Entendi</button>
+          </div>
+        </div>
+      </div>
+    `;
+    refreshIcons();
   }
 
   function renderHouseholdMembers() {
@@ -2546,6 +2761,34 @@
     return monthSubscriptions(month, "global").reduce((total, item) => {
       return total + convert(item.amount, item.currency, currency, rate);
     }, 0);
+  }
+
+  function subscriptionMonthTotalLabel(month = state.ui.selectedMonth) {
+    const currency = primaryCurrency();
+    const total = subscriptionMonthTotal(month);
+    if (currency === "BRL") return formatMoney(total, "BRL");
+    const rate = latestRate(month);
+    const totalBrl = convert(total, currency, "BRL", rate);
+    return `${formatMoney(total, currency)} <small>${formatMoney(totalBrl, "BRL")}</small>`;
+  }
+
+  function renderFinancialGoalsPanel() {
+    return `
+      <div class="panel-head">
+        <div>
+          <h2>Metas Financeiras</h2>
+          <p class="row-meta">Reservas, objetivos e planos da familia</p>
+        </div>
+        <span class="chip gold">Em breve</span>
+      </div>
+      <div class="goals-placeholder">
+        <div>
+          <span data-lucide="target" aria-hidden="true"></span>
+          <strong>Vamos montar suas metas aqui</strong>
+          <p>Ex: reserva de emergencia, viagem, quitar financiamento ou comprar um carro.</p>
+        </div>
+      </div>
+    `;
   }
 
   function renderHousingPanel(limit) {
@@ -3163,11 +3406,13 @@
           const deleteAction = item.deleteAction || (item.generated ? "" : "delete-transaction");
           const editModal = item.editModal || (item.generated ? "" : "transaction");
           const iconStyle = item.color ? `style="background:${escapeAttr(item.color)}"` : "";
+          const author = authorLabel(item);
           return `
             <div class="list-row">
               <span class="row-icon ${meta.tone}" ${iconStyle}>${item.icon || meta.icon}</span>
               <div class="row-main">
                 <p class="row-title">${escapeHtml(item.title)}</p>
+                ${author ? `<p class="row-meta author-meta">Adicionado por ${escapeHtml(author)}</p>` : ""}
                 <p class="row-meta">${formatShortDate(item.date)} · ${countryMeta[item.country].label} · ${escapeHtml(item.category)}</p>
               </div>
               <div class="row-amount ${isIncome ? "income" : "expense"}">
@@ -4722,6 +4967,13 @@
     const baseCurrency = sanitizeCurrency(data.baseCurrency, PRIMARY_CURRENCY);
     state.settings.baseCurrency = baseCurrency;
     state.settings.secondaryCurrency = sanitizeSecondaryCurrency(data.secondaryCurrency, baseCurrency);
+    state.profile = {
+      country: String(data.profileCountry || "").trim(),
+      city: String(data.profileCity || "").trim(),
+      age: String(data.profileAge || "").replace(/\D/g, "").slice(0, 3),
+      gender: String(data.profileGender || "").trim(),
+      language: String(data.profileLanguage || "pt-BR").trim()
+    };
     saveState();
     updateRemoteHouseholdName(state.settings.familyName).catch((error) => {
       remoteSession.error = error.message || "Falha ao atualizar familia.";
@@ -4740,6 +4992,7 @@
     }
 
     state.paidCommitments[key] = true;
+    const author = currentUserAuthor();
     state.transactions.unshift({
       id: uid("tx"),
       date: commitmentDateForMonth(item, state.ui.selectedMonth),
@@ -4749,7 +5002,10 @@
       category: item.category,
       amount: item.amount,
       currency: item.currency,
-      note: "Criado a partir de conta fixa"
+      note: "Criado a partir de conta fixa",
+      createdAt: new Date().toISOString(),
+      createdBy: author.id,
+      createdByName: author.name
     });
     saveState();
     render();
@@ -4774,6 +5030,7 @@
 
     const dueDate = housingItemDateForMonth(item, month);
     state.paidCommitments[key] = true;
+    const author = currentUserAuthor();
 
     if (item.paymentMethod === "card") {
       const creditCard = creditCardById(item.cardId);
@@ -4793,7 +5050,10 @@
         installments: 1,
         firstBillMonth: month,
         purchaseDate: dueDate,
-        note: "Criado a partir do card de moradia"
+        note: "Criado a partir do card de moradia",
+        createdAt: new Date().toISOString(),
+        createdBy: author.id,
+        createdByName: author.name
       });
       saveState();
       render();
@@ -4810,7 +5070,10 @@
       category: "Moradia",
       amount: number(item.amount),
       currency: item.currency,
-      note: `Pago via ${housingPaymentMethodLabel(item.paymentMethod)}`
+      note: `Pago via ${housingPaymentMethodLabel(item.paymentMethod)}`,
+      createdAt: new Date().toISOString(),
+      createdBy: author.id,
+      createdByName: author.name
     });
     saveState();
     render();
@@ -4834,6 +5097,7 @@
     }
 
     state.paidCommitments[key] = true;
+    const author = currentUserAuthor();
     state.transactions.unshift({
       id: uid("tx"),
       date: dateInMonth(month, card.dueDay || 1),
@@ -4843,7 +5107,10 @@
       category: "Cartao",
       amount: bill.total,
       currency: card.currency,
-      note: card.paymentMethod ? `Pago via ${card.paymentMethod}` : "Fatura do cartao"
+      note: card.paymentMethod ? `Pago via ${card.paymentMethod}` : "Fatura do cartao",
+      createdAt: new Date().toISOString(),
+      createdBy: author.id,
+      createdByName: author.name
     });
     saveState();
     render();
@@ -7352,19 +7619,44 @@
   function upsertItem(collection, id, item, prepend = false) {
     const current = Array.isArray(state[collection]) ? state[collection] : [];
     const index = id ? current.findIndex((entry) => entry.id === id) : -1;
+    const now = new Date().toISOString();
+    const author = currentUserAuthor();
     if (index >= 0) {
       state[collection] = current.map((entry, entryIndex) => (
-        entryIndex === index ? { ...entry, ...item, id: entry.id } : entry
+        entryIndex === index ? { ...entry, ...item, id: entry.id, updatedAt: now, updatedBy: author.id, updatedByName: author.name } : entry
       ));
       return true;
     }
 
     const next = {
       id: id || uid(collectionPrefixes[collection] || "it"),
-      ...item
+      ...item,
+      createdAt: item.createdAt || now,
+      createdBy: item.createdBy || author.id,
+      createdByName: item.createdByName || author.name,
+      updatedAt: now,
+      updatedBy: author.id,
+      updatedByName: author.name
     };
     state[collection] = prepend ? [next, ...current] : [...current, next];
     return false;
+  }
+
+  function currentUserAuthor() {
+    const user = remoteSession.user;
+    const metadata = user?.user_metadata || {};
+    const name = metadata.display_name || metadata.name || user?.email || state.settings.familyName || "Usuario local";
+    return {
+      id: user?.id || "local",
+      name
+    };
+  }
+
+  function authorLabel(item) {
+    if (!item) return "";
+    if (item.createdByName) return item.createdByName;
+    const member = (remoteSession.householdMembers || []).find((entry) => entry.userId && entry.userId === item.createdBy);
+    return member?.displayName || member?.email || "";
   }
 
   function uid(prefix) {

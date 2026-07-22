@@ -511,10 +511,25 @@ h3 {
 }
 
 .balance-overview {
+  position: relative;
   display: grid;
   gap: 18px;
   padding: 20px;
   color: var(--paper);
+}
+
+.balance-privacy-action {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+}
+
+.balance-privacy-action .visibility-toggle {
+  border-color: rgba(255, 250, 240, 0.2);
+  color: var(--paper);
+  background: rgba(255, 250, 240, 0.12);
+  backdrop-filter: blur(12px);
 }
 
 .balance-copy {
@@ -774,6 +789,81 @@ h3 {
   margin: 2px 0 0;
   font-size: 0.82rem;
   font-weight: 750;
+}
+
+.goals-panel {
+  background:
+    radial-gradient(circle at 92% 10%, rgba(216, 255, 114, 0.18), transparent 28%),
+    rgba(255, 253, 247, 0.84);
+}
+
+.goals-placeholder {
+  display: grid;
+  min-height: 110px;
+  place-items: center;
+  padding: 16px;
+  border: 1px dashed rgba(16, 35, 31, 0.16);
+  border-radius: 18px;
+  color: var(--muted);
+  background: rgba(255, 253, 247, 0.58);
+  text-align: center;
+}
+
+.goals-placeholder span {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 8px;
+  color: var(--green);
+}
+
+.goals-placeholder strong {
+  display: block;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.goals-placeholder p {
+  margin: 5px auto 0;
+  max-width: 520px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.due-alert-list {
+  display: grid;
+  gap: 8px;
+}
+
+.due-alert-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(217, 93, 78, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 240, 234, 0.64);
+}
+
+.due-alert-row strong {
+  color: var(--red);
+  white-space: nowrap;
+}
+
+.delete-account-note {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(217, 93, 78, 0.18);
+  border-radius: 18px;
+  background: rgba(255, 240, 234, 0.7);
+}
+
+.delete-account-note > span {
+  width: 24px;
+  height: 24px;
+  color: var(--red);
 }
 
 .chart-wrap {
@@ -1061,6 +1151,7 @@ canvas {
 }
 
 .settings-rate-card,
+.settings-profile-card,
 .family-members-card {
   display: grid;
   gap: 10px;
@@ -1074,6 +1165,29 @@ canvas {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.profile-support-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.profile-support-card {
+  display: grid;
+  align-content: space-between;
+  gap: 10px;
+  min-height: 150px;
+}
+
+.profile-support-card .panel-head span {
+  width: 22px;
+  height: 22px;
+  color: var(--green);
+}
+
+.profile-support-card.danger-zone .panel-head span {
+  color: var(--red);
 }
 
 .readonly-field span {
@@ -4030,6 +4144,7 @@ h1 {
   }
 
   .settings-rate-grid,
+  .profile-support-grid,
   .family-member-row {
     grid-template-columns: 1fr;
   }
