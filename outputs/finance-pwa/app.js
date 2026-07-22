@@ -248,6 +248,10 @@
       selectCardCarousel(Number(button.dataset.index || 0), Number(button.dataset.total || 0));
     }
 
+    if (action === "scroll-subscriptions") {
+      scrollSubscriptionCarousel(Number(button.dataset.direction || 1));
+    }
+
     if (action === "open-modal") openModal(button.dataset.modal, button.dataset.id);
     if (action === "close-modal") closeModal();
     if (action === "pay-commitment") payCommitment(button.dataset.id);
@@ -2515,9 +2519,25 @@
             `;
           }).join("")}
         </div>
-        ${visible.length > 3 ? `<p class="carousel-hint">Arraste para ver mais</p>` : ""}
+        ${visible.length > 3 ? `
+          <div class="subscription-carousel-controls">
+            <button class="carousel-arrow" type="button" data-action="scroll-subscriptions" data-direction="-1" aria-label="Subscricoes anteriores">‹</button>
+            <p class="carousel-hint">Arraste ou use as setas</p>
+            <button class="carousel-arrow" type="button" data-action="scroll-subscriptions" data-direction="1" aria-label="Proximas subscricoes">›</button>
+          </div>
+        ` : ""}
       </div>
     `;
+  }
+
+  function scrollSubscriptionCarousel(direction = 1) {
+    const track = document.querySelector(".subscription-home-track");
+    if (!track) return;
+    const firstCard = track.querySelector(".subscription-home-card");
+    const gap = Number.parseFloat(getComputedStyle(track).columnGap || getComputedStyle(track).gap || "8") || 8;
+    const cardWidth = firstCard ? firstCard.getBoundingClientRect().width : track.clientWidth / 3;
+    const step = (cardWidth + gap) * 3;
+    track.scrollBy({ left: direction * step, behavior: "smooth" });
   }
 
   function subscriptionMonthTotal(month = state.ui.selectedMonth) {

@@ -2296,6 +2296,25 @@ canvas {
   text-align: right;
 }
 
+.subscription-carousel-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.subscription-carousel-controls .carousel-hint {
+  text-align: center;
+}
+
+.subscription-carousel-controls .carousel-arrow {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  border-radius: 999px;
+  box-shadow: 0 8px 18px rgba(49, 44, 81, 0.08);
+}
+
 .subscription-detail-row {
   grid-template-columns: auto minmax(0, 1fr) auto;
 }
