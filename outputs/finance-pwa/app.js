@@ -44,7 +44,8 @@
     housingCards: "hc",
     vehicleMaintenance: "vm",
     incomeSources: "is",
-    workIncomes: "wi"
+    workIncomes: "wi",
+    workScheduleOverrides: "wo"
   };
   const housingItemTemplates = [
     { key: "rent", label: "Aluguel", icon: "A" },
@@ -175,6 +176,7 @@
   let web3ListenersAttached = false;
   let remotePullTimer = null;
   let remotePullInFlight = false;
+  let dashboardMonthAnchored = "";
   let lastLocalChangeAt = 0;
   cleanupLegacyStorage();
   let state = loadState();
@@ -194,7 +196,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=71")
+      navigator.serviceWorker.register("./service-worker.js?v=75")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -229,8 +231,10 @@
     if (!button) return;
 
     const action = button.dataset.action;
+    if (action === "none") return;
     if (action === "set-tab") {
       state.ui.activeTab = button.dataset.tab;
+      if (state.ui.activeTab === "dashboard") state.ui.selectedMonth = currentMonth();
       saveState();
       render();
     }
@@ -253,7 +257,7 @@
       scrollSubscriptionCarousel(Number(button.dataset.direction || 1));
     }
 
-    if (action === "open-modal") openModal(button.dataset.modal, button.dataset.id);
+    if (action === "open-modal") openModal(button.dataset.modal, button.dataset.id || button.dataset.paymentId);
     if (action === "close-modal") closeModal();
     if (action === "pay-commitment") payCommitment(button.dataset.id);
     if (action === "pay-housing-item") payHousingItem(button.dataset.id, button.dataset.itemKey);
@@ -271,6 +275,7 @@
     if (action === "delete-vehicle-maintenance") deleteItem("vehicleMaintenance", button.dataset.id, "Manutencao removida.");
     if (action === "delete-income-source") deleteItem("incomeSources", button.dataset.id, "Empresa removida.");
     if (action === "delete-work-income") deleteItem("workIncomes", button.dataset.id, "Recebimento removido.");
+    if (action === "delete-work-override") deleteItem("workScheduleOverrides", button.dataset.id, "Folga extra removida.");
     if (action === "refresh-crypto") refreshCryptoQuotes(true);
     if (action === "refresh-fx") refreshFxQuotes(true);
     if (action === "refresh-paypal") refreshPaypalBalance(true);
@@ -302,12 +307,14 @@
     if (formType === "credit-card") saveCreditCard(form);
     if (formType === "card-purchase") saveCardPurchase(form);
     if (formType === "subscription") saveSubscription(form);
+    if (formType === "monthly-payment") saveMonthlyPayment(form);
     if (formType === "crypto") saveCryptoAsset(form);
     if (formType === "housing-card") saveHousingCard(form);
     if (formType === "vehicle") saveVehicle(form);
     if (formType === "vehicle-maintenance") saveVehicleMaintenance(form);
     if (formType === "income-source") saveIncomeSource(form);
     if (formType === "work-income") saveWorkIncome(form);
+    if (formType === "work-override") saveWorkOverride(form);
     if (formType === "auth-login") signInRemote(form);
     if (formType === "auth-signup") signUpRemote(form);
     if (formType === "join-family") joinFamilyFromForm(form);
@@ -320,7 +327,9 @@
 
   document.addEventListener("change", (event) => {
     if (event.target.id === "import-file") importData(event.target.files[0]);
-    if (event.target.id === "sourceType") updateIncomeSourceOtherField();
+    if (event.target.id === "sourceType") updateIncomeSourceDynamicFields();
+    if (event.target.id === "shiftSystem") updateIncomeSourceDynamicFields();
+    if (event.target.id === "banNaming") updateIncomeSourceDynamicFields();
     if (event.target.id === "incomeSourceId") updateWorkIncomeCurrencyField();
     if (event.target.id === "commitmentCategory") updateCommitmentCategoryField();
     if (event.target.id === "commitmentType") updateCommitmentProviderField();
@@ -832,6 +841,7 @@
       vehicleMaintenance: Array.isArray(raw.vehicleMaintenance) ? raw.vehicleMaintenance : base.vehicleMaintenance,
       incomeSources: Array.isArray(raw.incomeSources) ? raw.incomeSources : base.incomeSources,
       workIncomes: Array.isArray(raw.workIncomes) ? raw.workIncomes : base.workIncomes,
+      workScheduleOverrides: Array.isArray(raw.workScheduleOverrides) ? raw.workScheduleOverrides : base.workScheduleOverrides,
       paidCommitments: raw.paidCommitments || {}
     };
     normalized.ui.activeCountry = "global";
@@ -1130,6 +1140,7 @@
       vehicleMaintenance: [],
       incomeSources: [],
       workIncomes: [],
+      workScheduleOverrides: [],
       paidCommitments: {}
     };
   }
@@ -1495,6 +1506,7 @@
   }
 
   function renderDashboard() {
+    ensureDashboardCurrentMonth();
     const summary = summarizeMonth(state.ui.selectedMonth, "global");
     const showPaypal = hasPaypalDashboardBalance();
 
@@ -1531,6 +1543,10 @@
           </div>
         </div>
         ${state.ui.hideCalendarDetails ? renderHiddenDetails("Eventos ocultos", "Clique no olho para mostrar o calendario financeiro.") : renderFinancialCalendar(8, "upcoming")}
+      </section>
+
+      <section class="content-panel work-calendar-panel">
+        ${renderWorkCalendarPanel()}
       </section>
 
       <section class="content-panel housing-panel">
@@ -1602,10 +1618,18 @@
     `;
   }
 
+  function ensureDashboardCurrentMonth() {
+    const month = currentMonth();
+    if (state.ui.selectedMonth === month || dashboardMonthAnchored === month) return;
+    state.ui.selectedMonth = month;
+    dashboardMonthAnchored = month;
+  }
+
   function renderBalanceOverview(summary) {
     const breakdown = dashboardBalanceBreakdown(summary);
     const payableLabel = breakdown.payables ? formatMoneyWithPrimary(breakdown.payables, breakdown.currency) : formatMoney(0, breakdown.currency);
     const hideBalance = Boolean(state.ui.hideBalance);
+    const paidValue = hideBalance ? "*****" : formatMoneyWithPrimary(breakdown.paid, breakdown.currency);
     const mainValue = hideBalance ? "¥ •••••" : formatMoneyWithPrimary(summary.remaining, summary.currency);
     const receivedValue = hideBalance ? "•••••" : formatMoneyWithPrimary(breakdown.received, breakdown.currency);
     const payableValue = hideBalance ? "•••••" : payableLabel;
@@ -1621,6 +1645,10 @@
             <div>
               <span>Recebido ate agora</span>
               <strong>${receivedValue}</strong>
+            </div>
+            <div>
+              <span>Pagos no mes</span>
+              <strong>${paidValue}</strong>
             </div>
             <div>
               <span>Contas a pagar</span>
@@ -1690,6 +1718,7 @@
     return {
       currency,
       received: Math.max(0, summary.actualInflow),
+      paid: Math.max(0, summary.actualOutflow),
       payables: Math.max(0, payables)
     };
   }
@@ -2294,7 +2323,7 @@
             <div class="row-amount">
               ${formatMoneyWithPrimary(item.amount, item.currency, month)}
               <div class="chips" style="justify-content:flex-end;margin-top:6px">
-                <button class="small-action ${paid ? "ghost" : ""}" type="button" data-action="pay-commitment" data-id="${item.id}">${paid ? "Pago" : "Pagar"}</button>
+                <button class="small-action ${paid ? "ghost" : ""}" type="button" data-action="${paid ? "none" : "open-modal"}" data-modal="monthlyPayment" data-payment-id="commitment:${item.id}">${paid ? "Pago" : "Pagar"}</button>
                 ${limit ? "" : `<button class="small-action ghost" type="button" data-action="open-modal" data-modal="commitment" data-id="${item.id}">Editar</button>`}
                 ${limit ? "" : `<button class="small-action ghost" type="button" data-action="delete-commitment" data-id="${item.id}">Excluir</button>`}
               </div>
@@ -2344,12 +2373,15 @@
           const outstanding = debtEstimatedOutstanding(item);
           const provider = debtProviderLabel(item);
           const typeLabel = debtTypeLabel(item.type);
+          const paid = isDebtPaid(item.id, state.ui.selectedMonth);
+          const dueDate = debtDateForMonth(item, state.ui.selectedMonth);
+          const dueState = dueStateForDate(dueDate, paid);
           const progressPercent = progress.total ? clamp(Math.round((progress.paid / progress.total) * 100), 0, 100) : 0;
           const contract = item.contractLast4 ? `Contrato **** ${escapeHtml(item.contractLast4)}` : "Contrato sem final cadastrado";
           const dueLabel = item.dueDay ? `vence dia ${item.dueDay}` : "vencimento nao informado";
           const paymentLabel = item.paymentMethod ? ` - ${escapeHtml(item.paymentMethod)}` : "";
           return `
-            <div class="debt-card">
+            <div class="debt-card ${paid ? "is-paid" : dueState.tone}">
               <div class="debt-card-head">
                 <span class="row-icon blue">F</span>
                 <div class="row-main">
@@ -2358,6 +2390,7 @@
                     <span class="debt-provider-tag">${escapeHtml(provider)}</span>
                   </div>
                   <p class="row-meta">${countryMeta[item.country]?.label || "Global"} - ${typeLabel} - ${contract}</p>
+                  <span class="chip ${paid ? "green" : dueState.tone}">${escapeHtml(dueState.label)}</span>
                 </div>
               </div>
               <div class="debt-card-grid">
@@ -2388,6 +2421,7 @@
                 <p>${progress.paid} pagas - ${progress.remaining} restantes</p>
               </div>
               <div class="row-actions">
+                <button class="small-action ${paid ? "ghost" : ""}" type="button" data-action="${paid ? "none" : "open-modal"}" data-modal="monthlyPayment" data-payment-id="debt:${item.id}">${paid ? "Pago" : "Pagar"}</button>
                 <button class="small-action ghost" type="button" data-action="open-modal" data-modal="debt" data-id="${item.id}">Editar</button>
                 <button class="small-action ghost" type="button" data-action="delete-debt" data-id="${item.id}">Excluir</button>
               </div>
@@ -2462,7 +2496,7 @@
               ${limit ? "" : `
                 <div class="card-actions">
                   <button class="small-action ghost" type="button" data-action="open-modal" data-modal="creditCard" data-id="${item.id}">Editar</button>
-                  <button class="small-action" type="button" data-action="pay-card-bill" data-id="${item.id}">${paid ? "Pago" : "Pagar fatura"}</button>
+                  <button class="small-action" type="button" data-action="${paid ? "none" : "open-modal"}" data-modal="monthlyPayment" data-payment-id="card:${item.id}">${paid ? "Pago" : "Pagar fatura"}</button>
                   <button class="small-action ghost" type="button" data-action="delete-credit-card" data-id="${item.id}">Excluir</button>
                 </div>
               `}
@@ -2631,19 +2665,24 @@
         <div class="subscription-list">
           ${visible.map((item) => {
             const card = item.cardId ? creditCardById(item.cardId) : null;
+            const paid = isSubscriptionMonthPaid(item, month) || (item.paymentMethod === "bank" && isDateReached(subscriptionDateForMonth(item, month)));
+            const autoPaid = isSubscriptionAutoPaid(item);
             const payment = item.paymentMethod === "card"
               ? `Cartao ${card ? card.nickname || card.issuer : ""}`.trim()
-              : "Pix";
+              : item.paymentMethod === "bank" ? "Debito em conta" : "Pix";
+            const dueState = dueStateForDate(subscriptionDateForMonth(item, month), paid);
             return `
-              <div class="list-row subscription-detail-row">
+              <div class="list-row subscription-detail-row ${paid ? "is-paid" : ""}">
                 ${renderSubscriptionLogo(item, "row-icon subscription-logo subscription-row-icon")}
                 <div class="row-main">
                   <p class="row-title">${escapeHtml(subscriptionName(item))}</p>
                   <p class="row-meta">${countryMeta[item.country]?.label || ""} - vence dia ${item.dueDay || "--"} - ${escapeHtml(payment)}</p>
+                  <span class="chip ${paid ? "green" : dueState.tone}">${escapeHtml(paid ? "Pago" : dueState.label)}</span>
                 </div>
                 <div class="row-amount expense">
                   ${formatMoneyWithPrimary(item.amount, item.currency, month)}
                   <div class="row-actions">
+                    ${autoPaid || paid ? "" : `<button class="small-action" type="button" data-action="open-modal" data-modal="monthlyPayment" data-payment-id="subscription:${item.id}">Pagar</button>`}
                     <button class="small-action ghost" type="button" data-action="open-modal" data-modal="subscription" data-id="${item.id}">Editar</button>
                     <button class="small-action ghost" type="button" data-action="delete-subscription" data-id="${item.id}">Excluir</button>
                   </div>
@@ -2908,6 +2947,7 @@
       <div class="calendar-list">
         ${visible.map((item) => {
           const titleStyle = item.titleColor ? ` style="color:${escapeAttr(item.titleColor)}"` : "";
+          const canPay = canPayCalendarItem(item);
           return `
             <div class="calendar-item ${item.kind === "income" ? "calendar-income" : "calendar-expense"} ${item.tone}">
               <div class="calendar-date">
@@ -2921,12 +2961,19 @@
               <div class="calendar-amount ${item.kind === "income" ? "income" : "expense"}">
                 ${item.kind === "income" ? "+" : "-"} ${formatMoneyWithPrimary(item.amount, item.currency, item.date?.slice(0, 7) || state.ui.selectedMonth)}
                 <span class="chip ${item.tone}">${escapeHtml(item.status)}</span>
+                ${canPay ? `<button class="small-action ghost calendar-pay-button" type="button" data-action="open-modal" data-modal="monthlyPayment" data-payment-id="${escapeAttr(item.paymentRef)}">Pagar</button>` : ""}
               </div>
             </div>
           `;
         }).join("")}
       </div>
     `;
+  }
+
+  function canPayCalendarItem(item) {
+    if (!item || item.kind === "income" || item.paid || !item.paymentRef || !number(item.amount)) return false;
+    if (item.paymentMethod === "card" || item.paymentMethod === "bank") return false;
+    return ["commitment", "debt", "card", "subscription", "vehicle"].includes(String(item.paymentRef).split(":")[0]);
   }
 
   function renderCryptoPanel(compact = false) {
@@ -3294,6 +3341,102 @@
     `;
   }
 
+  function renderWorkCalendarPanel() {
+    const source = primaryFactorySource();
+    const month = state.ui.selectedMonth;
+    if (!source) {
+      return `
+        <div class="panel-head">
+          <div>
+            <h2>Calendario de turnos</h2>
+            <p class="row-meta">Cadastre uma empresa do tipo Fabrica para gerar sua escala.</p>
+          </div>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="incomeSource">Cadastrar fabrica</button>
+        </div>
+      `;
+    }
+
+    const schedule = factoryScheduleConfig(source);
+    if (!schedule.cycleStartDate) {
+      return `
+        <div class="panel-head">
+          <div>
+            <h2>Calendario de turnos</h2>
+            <p class="row-meta">${escapeHtml(source.name)} precisa da data inicial da escala.</p>
+          </div>
+          <button class="small-action ghost" type="button" data-action="open-modal" data-modal="incomeSource" data-id="${source.id}">Configurar</button>
+        </div>
+      `;
+    }
+
+    const days = daysInMonth(month).map((date) => factoryScheduleDay(source, date));
+    const counts = workScheduleCounts(days);
+    return `
+      <div class="panel-head">
+        <div class="panel-title-block">
+          <h2>Calendario de turnos</h2>
+          <p class="row-meta">${escapeHtml(source.name)} - ${escapeHtml(scheduleLabel(schedule))}</p>
+        </div>
+        <div class="chips">
+          <span class="chip work-ban-chip" style="--ban-color:${escapeAttr(schedule.myBanColor)}">${escapeHtml(schedule.myBanName || "Meu ban")}</span>
+          <button class="small-action ghost" type="button" data-action="open-modal" data-modal="workOverride">Folga extra</button>
+        </div>
+      </div>
+      <div class="work-calendar-summary">
+        <span><strong>${counts.day}</strong> dia</span>
+        <span><strong>${counts.night}</strong> noite</span>
+        <span><strong>${counts.off}</strong> folgas</span>
+        <span><strong>${counts.forcedOff}</strong> folga extra</span>
+        <span><strong>Domingo</strong> 35%</span>
+      </div>
+      <div class="work-calendar-weekdays" aria-hidden="true">
+        ${["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((day) => `<span>${day}</span>`).join("")}
+      </div>
+      <div class="work-calendar-grid">
+        ${renderWorkCalendarBlanks(month)}
+        ${days.map((day) => renderWorkCalendarCell(day)).join("")}
+      </div>
+      ${renderWorkOverrideList(source)}
+    `;
+  }
+
+  function renderWorkCalendarCell(day) {
+    return `
+      <div class="work-day-cell ${escapeAttr(day.className)} ${day.isSundayWork ? "is-sunday-work" : ""}" style="--ban-color:${escapeAttr(day.banColor)}" title="${escapeAttr(day.title)}">
+        <strong>${formatCalendarDay(day.date)}</strong>
+        <span>${escapeHtml(day.label)}</span>
+        ${day.time ? `<small>${escapeHtml(day.time)}</small>` : ""}
+      </div>
+    `;
+  }
+
+  function renderWorkCalendarBlanks(month) {
+    const first = parseLocalDate(dateInMonth(month, 1));
+    const mondayIndex = (first.getDay() + 6) % 7;
+    return Array.from({ length: mondayIndex }, () => `<span class="work-day-blank"></span>`).join("");
+  }
+
+  function renderWorkOverrideList(source) {
+    const rows = workScheduleOverridesForSource(source.id)
+      .filter((item) => item.date?.slice(0, 7) === state.ui.selectedMonth)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (!rows.length) return "";
+    return `
+      <div class="work-override-list">
+        <p class="mini-label">Ajustes do mes</p>
+        ${rows.map((item) => `
+          <div class="list-row compact">
+            <div>
+              <p class="row-title">${formatShortDate(item.date)} - ${escapeHtml(workOverrideTypeLabel(item.type))}</p>
+              <p class="row-meta">${escapeHtml(item.note || "Ajuste manual da escala")}</p>
+            </div>
+            <button class="small-action ghost" type="button" data-action="delete-work-override" data-id="${item.id}">Excluir</button>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
   function renderVehiclePanel(limit) {
     const vehicle = state.vehicle || {};
     const hasInsurance = vehicleHasInsurance(vehicle);
@@ -3407,12 +3550,15 @@
           const editModal = item.editModal || (item.generated ? "" : "transaction");
           const iconStyle = item.color ? `style="background:${escapeAttr(item.color)}"` : "";
           const author = authorLabel(item);
+          const noteText = normalizeLookupText(item.note || "");
+          const paidNote = noteText.startsWith("pago") || noteText.includes("pago no app");
           return `
-            <div class="list-row">
+            <div class="list-row ${paidNote ? "is-paid" : ""}">
               <span class="row-icon ${meta.tone}" ${iconStyle}>${item.icon || meta.icon}</span>
               <div class="row-main">
-                <p class="row-title">${escapeHtml(item.title)}</p>
+                <p class="row-title">${escapeHtml(item.title)}${paidNote ? ` <span class="chip green inline-chip">Pago</span>` : ""}</p>
                 ${author ? `<p class="row-meta author-meta">Adicionado por ${escapeHtml(author)}</p>` : ""}
+                ${paidNote ? `<p class="row-meta paid-note">${escapeHtml(item.note)}</p>` : ""}
                 <p class="row-meta">${formatShortDate(item.date)} · ${countryMeta[item.country].label} · ${escapeHtml(item.category)}</p>
               </div>
               <div class="row-amount ${isIncome ? "income" : "expense"}">
@@ -3472,10 +3618,13 @@
       vehicle: renderVehicleModal,
       vehicleMaintenance: renderVehicleMaintenanceModal,
       incomeSource: renderIncomeSourceModal,
+      workOverride: renderWorkOverrideModal,
       workIncome: renderWorkIncomeModal,
+      monthlyPayment: renderMonthlyPaymentModal,
       subscription: renderSubscriptionModal
     };
-    const content = map[type] ? map[type](editableItem(type, id)) : "";
+    const modalData = type === "monthlyPayment" ? id : editableItem(type, id);
+    const content = map[type] ? map[type](modalData) : "";
     modalRoot.innerHTML = `
       <div class="modal-backdrop">
         <div class="modal" role="dialog" aria-modal="true" aria-label="Formulario">
@@ -3486,7 +3635,7 @@
     const first = modalRoot.querySelector("input, select, textarea, button");
     if (first) first.focus();
     updateTransferPreview();
-    updateIncomeSourceOtherField();
+    updateIncomeSourceDynamicFields();
     updateCommitmentCategoryField();
     updateCommitmentProviderField();
     updateSubscriptionCardField();
@@ -4174,6 +4323,7 @@
             <label for="subscriptionPaymentMethod">Forma de pagamento</label>
             <select id="subscriptionPaymentMethod" name="paymentMethod">
               <option value="card" ${selectedAttr("card", paymentMethod)}>Cartao de credito</option>
+              <option value="bank" ${selectedAttr("bank", paymentMethod)}>Debito em conta</option>
               <option value="pix" ${selectedAttr("pix", paymentMethod)}>Pix</option>
             </select>
           </div>
@@ -4486,6 +4636,7 @@
     const nextColor = item?.color || sourceColors[(state.incomeSources || []).length % sourceColors.length];
     const sourceType = normalizedSourceType(item?.type);
     const customType = item?.customType || (sourceType === "other" && item?.type && !incomeSourceTypeMeta[item.type] ? item.type : "");
+    const schedule = factoryScheduleConfig(item || {});
     return `
       <div class="modal-head">
         <h2>${item ? "Editar empresa" : "Nova empresa"}</h2>
@@ -4529,9 +4680,239 @@
           <label for="sourcePayRule">Agenda de pagamento</label>
           <input id="sourcePayRule" name="payRule" placeholder="Ex: toda quarta, toda terca, dia 25" value="${escapeAttr(item?.payRule || "")}" />
         </div>
+        <div class="factory-source-fields ${sourceType === "factory" ? "" : "is-hidden"}">
+          <div class="form-section-title">
+            <strong>Escala da fabrica</strong>
+            <span>Usada para preencher o calendario da tela inicial.</span>
+          </div>
+          <div class="two-cols">
+            <div class="field">
+              <label for="shiftSystem">Sistema de turnos</label>
+              <select id="shiftSystem" name="shiftSystem">
+                <option value="nikoutai" ${selectedAttr("nikoutai", schedule.shiftSystem)}>Nikoutai</option>
+                <option value="sankoutai" ${selectedAttr("sankoutai", schedule.shiftSystem)}>Sankoutai</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="schedulePattern">Escala</label>
+              <select id="schedulePattern" name="schedulePattern">
+                <option value="4x2" ${selectedAttr("4x2", schedule.pattern)}>4x2</option>
+                <option value="5x2" ${selectedAttr("5x2", schedule.pattern)}>5x2</option>
+                <option value="6x1" ${selectedAttr("6x1", schedule.pattern)}>6x1</option>
+              </select>
+            </div>
+          </div>
+          <div class="factory-nikoutai-fields">
+            <div class="two-cols">
+              <div class="field">
+                <label for="hirukinStart">Hirukin inicio</label>
+                <input id="hirukinStart" name="hirukinStart" type="time" value="${escapeAttr(schedule.hirukinStart)}" />
+              </div>
+              <div class="field">
+                <label for="hirukinEnd">Hirukin fim</label>
+                <input id="hirukinEnd" name="hirukinEnd" type="time" value="${escapeAttr(schedule.hirukinEnd)}" />
+              </div>
+            </div>
+            <div class="two-cols">
+              <div class="field">
+                <label for="yakinStart">Yakin inicio</label>
+                <input id="yakinStart" name="yakinStart" type="time" value="${escapeAttr(schedule.yakinStart)}" />
+              </div>
+              <div class="field">
+                <label for="yakinEnd">Yakin fim</label>
+                <input id="yakinEnd" name="yakinEnd" type="time" value="${escapeAttr(schedule.yakinEnd)}" />
+              </div>
+            </div>
+          </div>
+          <div class="factory-sankoutai-fields">
+            <div class="three-cols">
+              <div class="field">
+                <label for="shiftOneTime">Turno 1</label>
+                <input id="shiftOneTime" name="shiftOneTime" placeholder="06:00-14:00" value="${escapeAttr(schedule.shiftOneTime)}" />
+              </div>
+              <div class="field">
+                <label for="shiftTwoTime">Turno 2</label>
+                <input id="shiftTwoTime" name="shiftTwoTime" placeholder="14:00-22:00" value="${escapeAttr(schedule.shiftTwoTime)}" />
+              </div>
+              <div class="field">
+                <label for="shiftThreeTime">Turno 3</label>
+                <input id="shiftThreeTime" name="shiftThreeTime" placeholder="22:00-06:00" value="${escapeAttr(schedule.shiftThreeTime)}" />
+              </div>
+            </div>
+          </div>
+          <div class="three-cols">
+            <div class="field">
+              <label for="banCount">Quantidade de bans</label>
+              <input id="banCount" name="banCount" type="number" min="1" max="12" value="${escapeAttr(schedule.banCount)}" />
+            </div>
+            <div class="field">
+              <label for="banNaming">Como nomeia</label>
+              <select id="banNaming" name="banNaming">
+                <option value="colors" ${selectedAttr("colors", schedule.banNaming)}>Cores</option>
+                <option value="letters" ${selectedAttr("letters", schedule.banNaming)}>Letras</option>
+                <option value="numbers" ${selectedAttr("numbers", schedule.banNaming)}>Numeros</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="myBanColor">Cor do meu ban</label>
+              <input id="myBanColor" name="myBanColor" type="color" value="${escapeAttr(schedule.myBanColor)}" />
+            </div>
+          </div>
+          <div class="two-cols">
+            <div class="field">
+              <label for="banNames">Nomes dos bans</label>
+              <input id="banNames" name="banNames" placeholder="Ex: Verde, Azul, Amarelo" value="${escapeAttr(schedule.banNames)}" />
+            </div>
+            <div class="field">
+              <label for="myBanName">Meu ban</label>
+              <input id="myBanName" name="myBanName" placeholder="Ex: Verde" value="${escapeAttr(schedule.myBanName)}" />
+            </div>
+          </div>
+          <div class="two-cols">
+            <div class="field">
+              <label for="cycleStartDate">Primeiro dia da escala</label>
+              <input id="cycleStartDate" name="cycleStartDate" type="date" value="${escapeAttr(schedule.cycleStartDate)}" />
+            </div>
+            <div class="field">
+              <label for="cycleStartPhase">Nesse dia comeca como</label>
+              <select id="cycleStartPhase" name="cycleStartPhase">
+                <option value="day" ${selectedAttr("day", schedule.cycleStartPhase)}>Dia / Hirukin</option>
+                <option value="night" ${selectedAttr("night", schedule.cycleStartPhase)}>Noite / Yakin</option>
+                <option value="shift1" ${selectedAttr("shift1", schedule.cycleStartPhase)}>Turno 1</option>
+                <option value="shift2" ${selectedAttr("shift2", schedule.cycleStartPhase)}>Turno 2</option>
+                <option value="shift3" ${selectedAttr("shift3", schedule.cycleStartPhase)}>Turno 3</option>
+              </select>
+            </div>
+          </div>
+        </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
           <button class="primary-button" type="submit">Salvar empresa</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderWorkOverrideModal(item = null) {
+    const sources = factorySources();
+    if (!sources.length) {
+      return `
+        <div class="modal-head">
+          <h2>Folga extra</h2>
+          <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+        </div>
+        <div class="form-grid">
+          <p class="empty-state">Cadastre uma empresa do tipo Fabrica primeiro.</p>
+          <div class="form-actions">
+            <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+            <button class="primary-button" type="button" data-action="open-modal" data-modal="incomeSource">Cadastrar fabrica</button>
+          </div>
+        </div>
+      `;
+    }
+    return `
+      <div class="modal-head">
+        <h2>${item ? "Editar folga extra" : "Folga extra"}</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="work-override">
+        ${editHidden(item)}
+        <div class="two-cols">
+          <div class="field">
+            <label for="overrideSourceId">Empresa</label>
+            <select id="overrideSourceId" name="sourceId">
+              ${sources.map((source) => `<option value="${source.id}" ${selectedAttr(source.id, item?.sourceId || sources[0]?.id)}>${escapeHtml(source.name)}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="overrideDate">Data</label>
+            <input id="overrideDate" name="date" type="date" required value="${escapeAttr(item?.date || dateInMonth(state.ui.selectedMonth, new Date().getDate()))}" />
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="overrideType">Tipo de ajuste</label>
+            <select id="overrideType" name="type">
+              <option value="forcedOff" ${selectedAttr("forcedOff", item?.type || "forcedOff")}>Folga forcada</option>
+              <option value="paidOff" ${selectedAttr("paidOff", item?.type)}>Yukyu / folga remunerada</option>
+              <option value="manualOff" ${selectedAttr("manualOff", item?.type)}>Folga manual</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="overrideNote">Observacao</label>
+            <input id="overrideNote" name="note" placeholder="Ex: folga forcada da fabrica" value="${escapeAttr(item?.note || "")}" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar folga</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderMonthlyPaymentModal(paymentRef = "") {
+    const target = paymentTargetFromRef(paymentRef);
+    if (!target) {
+      return `
+        <div class="modal-head">
+          <h2>Registrar pagamento</h2>
+          <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+        </div>
+        <div class="form-grid">
+          <p class="empty-state">Nao foi possivel encontrar este pagamento.</p>
+          <div class="form-actions">
+            <button class="secondary-button" type="button" data-action="close-modal">Fechar</button>
+          </div>
+        </div>
+      `;
+    }
+    const sourceOptions = monthlyPaymentSourceOptions();
+    return `
+      <div class="modal-head">
+        <h2>Registrar pagamento</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="monthly-payment">
+        <input type="hidden" name="paymentRef" value="${escapeAttr(paymentRef)}" />
+        <div class="payment-confirm-card">
+          <p class="mini-label">${escapeHtml(target.category)}</p>
+          <strong>${escapeHtml(target.title)}</strong>
+          <span>${formatMoneyWithPrimary(target.amount, target.currency, target.month)} - vence ${formatShortDate(target.date)}</span>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="monthlyPaymentMethod">Forma de pagamento</label>
+            <select id="monthlyPaymentMethod" name="paymentMethod">
+              <option value="balance">Saldo atual</option>
+              <option value="extra">Ganho extra</option>
+              <option value="pix">Pix</option>
+              <option value="bank">Debito em conta</option>
+              <option value="cash">Dinheiro</option>
+              <option value="other">Outro</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="monthlyPaymentSource">Origem</label>
+            <select id="monthlyPaymentSource" name="sourceId">
+              <option value="">Saldo geral</option>
+              ${sourceOptions}
+            </select>
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="monthlyPaymentDate">Data do pagamento</label>
+            <input id="monthlyPaymentDate" name="date" type="date" required value="${escapeAttr(target.date)}" />
+          </div>
+          <div class="field">
+            <label for="monthlyPaymentNote">Observacao</label>
+            <input id="monthlyPaymentNote" name="note" placeholder="Ex: pago pelo salario, bonus, conta..." />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Confirmar pagamento</button>
         </div>
       </form>
     `;
@@ -4920,14 +5301,31 @@
   function saveIncomeSource(form) {
     const data = formData(form);
     const sourceType = normalizedSourceType(data.type);
+    const isFactory = sourceType === "factory";
     const updated = upsertItem("incomeSources", data.id, {
       name: data.name.trim(),
       type: sourceType,
       customType: sourceType === "other" ? String(data.customType || "").trim() : "",
       hourlyRate: 0,
-      color: data.color || sourceColors[state.incomeSources.length % sourceColors.length],
+      color: data.color || sourceColors[(state.incomeSources || []).length % sourceColors.length],
       currency: data.currency || "JPY",
-      payRule: String(data.payRule || "").trim()
+      payRule: String(data.payRule || "").trim(),
+      shiftSystem: isFactory ? String(data.shiftSystem || "nikoutai") : "",
+      schedulePattern: isFactory ? String(data.schedulePattern || "4x2") : "",
+      hirukinStart: isFactory ? String(data.hirukinStart || "08:00") : "",
+      hirukinEnd: isFactory ? String(data.hirukinEnd || "17:00") : "",
+      yakinStart: isFactory ? String(data.yakinStart || "20:00") : "",
+      yakinEnd: isFactory ? String(data.yakinEnd || "05:00") : "",
+      shiftOneTime: isFactory ? String(data.shiftOneTime || "") : "",
+      shiftTwoTime: isFactory ? String(data.shiftTwoTime || "") : "",
+      shiftThreeTime: isFactory ? String(data.shiftThreeTime || "") : "",
+      banCount: isFactory ? clamp(number(data.banCount) || 3, 1, 12) : 0,
+      banNaming: isFactory ? String(data.banNaming || "colors") : "",
+      banNames: isFactory ? String(data.banNames || "").trim() : "",
+      myBanName: isFactory ? String(data.myBanName || "").trim() : "",
+      myBanColor: isFactory ? String(data.myBanColor || data.color || "#42a67a") : "",
+      cycleStartDate: isFactory ? String(data.cycleStartDate || "") : "",
+      cycleStartPhase: isFactory ? String(data.cycleStartPhase || "day") : ""
     });
     saveState();
     closeModal();
@@ -4961,6 +5359,73 @@
     showToast(updated ? "Recebimento atualizado." : "Recebimento salvo.");
   }
 
+  function saveWorkOverride(form) {
+    const data = formData(form);
+    const source = incomeSourceById(data.sourceId);
+    const updated = upsertItem("workScheduleOverrides", data.id, {
+      sourceId: data.sourceId,
+      sourceName: source.name,
+      date: data.date,
+      type: data.type || "forcedOff",
+      note: String(data.note || "").trim()
+    }, true);
+    state.ui.selectedMonth = data.date.slice(0, 7);
+    saveState();
+    closeModal();
+    render();
+    showToast(updated ? "Folga atualizada." : "Folga extra salva.");
+  }
+
+  function saveMonthlyPayment(form) {
+    const data = formData(form);
+    const target = paymentTargetFromRef(data.paymentRef);
+    if (!target) {
+      showToast("Pagamento nao encontrado.");
+      return;
+    }
+    if (!number(target.amount)) {
+      showToast("Este item esta zerado.");
+      closeModal();
+      return;
+    }
+
+    const key = target.paymentKey;
+    if (state.paidCommitments[key]) {
+      showToast("Este item ja esta pago no mes.");
+      closeModal();
+      render();
+      return;
+    }
+
+    state.paidCommitments[key] = {
+      paidAt: new Date().toISOString(),
+      method: data.paymentMethod || "balance",
+      sourceId: data.sourceId || "",
+      note: String(data.note || "").trim()
+    };
+
+    const author = currentUserAuthor();
+    state.transactions.unshift({
+      id: uid("tx"),
+      date: data.date || target.date,
+      country: target.country,
+      type: target.type,
+      title: target.transactionTitle || target.title,
+      category: target.category,
+      amount: number(target.amount),
+      currency: target.currency,
+      note: monthlyPaymentNote(target, data),
+      createdAt: new Date().toISOString(),
+      createdBy: author.id,
+      createdByName: author.name
+    });
+
+    saveState();
+    closeModal();
+    render();
+    showToast(`${target.category} marcado como pago.`);
+  }
+
   function saveSettings(form) {
     const data = formData(form);
     state.settings.familyName = data.familyName.trim() || "Familia";
@@ -4983,33 +5448,7 @@
   }
 
   function payCommitment(id) {
-    const item = state.commitments.find((entry) => entry.id === id);
-    if (!item) return;
-    const key = commitmentKey(id, state.ui.selectedMonth);
-    if (state.paidCommitments[key]) {
-      showToast("Conta ja marcada como paga.");
-      return;
-    }
-
-    state.paidCommitments[key] = true;
-    const author = currentUserAuthor();
-    state.transactions.unshift({
-      id: uid("tx"),
-      date: commitmentDateForMonth(item, state.ui.selectedMonth),
-      country: item.country,
-      type: item.type,
-      title: item.title,
-      category: item.category,
-      amount: item.amount,
-      currency: item.currency,
-      note: "Criado a partir de conta fixa",
-      createdAt: new Date().toISOString(),
-      createdBy: author.id,
-      createdByName: author.name
-    });
-    saveState();
-    render();
-    showToast("Conta lancada no mes.");
+    openModal("monthlyPayment", `commitment:${id}`);
   }
 
   function payHousingItem(housingId, itemKey) {
@@ -5081,40 +5520,142 @@
   }
 
   function payCardBill(id) {
-    const card = creditCardById(id);
-    if (!card) return;
+    openModal("monthlyPayment", `card:${id}`);
+  }
+
+  function paymentTargetFromRef(ref) {
+    const [kind, ...rest] = String(ref || "").split(":");
+    const id = rest.join(":");
     const month = state.ui.selectedMonth;
-    const key = cardBillKey(id, month);
-    if (state.paidCommitments[key]) {
-      showToast("Fatura ja marcada como paga.");
-      return;
+    if (!kind || !id) return null;
+
+    if (kind === "commitment") {
+      const item = findItem("commitments", id);
+      if (!item) return null;
+      return {
+        kind,
+        id,
+        paymentKey: commitmentKey(id, month),
+        country: item.country,
+        type: item.type,
+        title: item.title,
+        transactionTitle: item.title,
+        category: item.category || typeMeta[item.type]?.label || "Conta",
+        amount: number(item.amount),
+        currency: item.currency,
+        date: commitmentDateForMonth(item, month),
+        month
+      };
     }
 
-    const bill = creditCardMonthBill(card, month);
-    if (!bill.total) {
-      showToast("Esta fatura esta zerada.");
-      return;
+    if (kind === "debt") {
+      const item = findItem("debts", id);
+      if (!item) return null;
+      return {
+        kind,
+        id,
+        paymentKey: debtPaymentKey(id, month),
+        country: item.country,
+        type: "debt",
+        title: item.title,
+        transactionTitle: `Parcela ${item.title}`,
+        category: "Financiamento",
+        amount: debtNextPaymentAmount(item),
+        currency: item.currency,
+        date: debtDateForMonth(item, month),
+        month
+      };
     }
 
-    state.paidCommitments[key] = true;
-    const author = currentUserAuthor();
-    state.transactions.unshift({
-      id: uid("tx"),
-      date: dateInMonth(month, card.dueDay || 1),
-      country: card.country,
-      type: "card",
-      title: `Fatura ${card.nickname || card.issuer}`,
-      category: "Cartao",
-      amount: bill.total,
-      currency: card.currency,
-      note: card.paymentMethod ? `Pago via ${card.paymentMethod}` : "Fatura do cartao",
-      createdAt: new Date().toISOString(),
-      createdBy: author.id,
-      createdByName: author.name
-    });
-    saveState();
-    render();
-    showToast("Fatura lancada no mes.");
+    if (kind === "subscription") {
+      const item = findItem("subscriptions", id);
+      if (!item) return null;
+      return {
+        kind,
+        id,
+        paymentKey: subscriptionPaymentKey(id, month),
+        country: item.country,
+        type: "expense",
+        title: subscriptionName(item),
+        transactionTitle: subscriptionName(item),
+        category: "Subscricao",
+        amount: number(item.amount),
+        currency: item.currency,
+        date: subscriptionDateForMonth(item, month),
+        month
+      };
+    }
+
+    if (kind === "card") {
+      const card = creditCardById(id);
+      if (!card) return null;
+      const bill = creditCardMonthBill(card, month);
+      return {
+        kind,
+        id,
+        paymentKey: cardBillKey(id, month),
+        country: card.country,
+        type: "card",
+        title: `Fatura ${card.nickname || card.issuer}`,
+        transactionTitle: `Fatura ${card.nickname || card.issuer}`,
+        category: "Cartao",
+        amount: bill.total,
+        currency: card.currency,
+        date: dateInMonth(month, card.dueDay || 1),
+        month
+      };
+    }
+
+    if (kind === "vehicle") {
+      const item = vehicleMonthlyCosts(month).find((entry) => entry.id === id);
+      if (!item) return null;
+      return {
+        kind,
+        id,
+        paymentKey: vehiclePaymentKey(id, month),
+        country: "japao",
+        type: "vehicle",
+        title: item.title,
+        transactionTitle: item.title,
+        category: "Veiculo",
+        amount: number(item.amount),
+        currency: item.currency || "JPY",
+        date: item.date,
+        month
+      };
+    }
+
+    return null;
+  }
+
+  function monthlyPaymentSourceOptions() {
+    return (state.incomeSources || [])
+      .map((source) => `<option value="${source.id}">${escapeHtml(source.name)} - ${escapeHtml(sourceTypeLabel(source))}</option>`)
+      .join("");
+  }
+
+  function monthlyPaymentNote(target, data) {
+    const method = monthlyPaymentMethodLabel(data.paymentMethod);
+    const source = data.sourceId ? incomeSourceById(data.sourceId) : null;
+    const pieces = [
+      "Pago no app",
+      method ? `via ${method}` : "",
+      source?.id ? `origem ${source.name}` : "",
+      data.note ? String(data.note).trim() : ""
+    ].filter(Boolean);
+    return pieces.join(" - ");
+  }
+
+  function monthlyPaymentMethodLabel(method) {
+    const labels = {
+      balance: "saldo atual",
+      extra: "ganho extra",
+      pix: "Pix",
+      bank: "debito em conta",
+      cash: "dinheiro",
+      other: "outro"
+    };
+    return labels[method] || "saldo atual";
   }
 
   function deleteItem(collection, id, message) {
@@ -6197,10 +6738,22 @@
       plannedExpenses += converted;
     });
 
+    plannedDebtEntries(month, country).forEach((item) => {
+      const converted = convert(item.amount, item.currency, targetCurrency, rate);
+      expenses += converted;
+      plannedExpenses += converted;
+    });
+
     plannedSubscriptionEntries(month, country).forEach((item) => {
       const converted = convert(item.amount, item.currency, targetCurrency, rate);
       expenses += converted;
       plannedExpenses += converted;
+    });
+
+    autoPaidSubscriptionEntries(month, country).forEach((item) => {
+      const converted = convert(item.amount, item.currency, targetCurrency, rate);
+      expenses += converted;
+      actualExpenses += converted;
     });
 
     plannedHousingEntries(month, country).forEach((item) => {
@@ -6211,9 +6764,11 @@
 
     if (country === "global" || country === "japao") {
       vehicleMonthlyCosts(month).forEach((item) => {
+        const isPlannedVehicle = item.id === "vehicle-insurance" || item.id === "vehicle-shaken";
+        if (isPlannedVehicle && isVehiclePaymentPaid(item.id, month)) return;
         const converted = convert(item.amount, item.currency, targetCurrency, rate);
         expenses += converted;
-        if (item.id === "vehicle-insurance" || item.id === "vehicle-shaken") plannedExpenses += converted;
+        if (isPlannedVehicle) plannedExpenses += converted;
         else actualExpenses += converted;
       });
       monthWorkIncomes(month).forEach((item) => {
@@ -6330,7 +6885,8 @@
           status: dueState.label,
           tone: paid ? "green" : dueState.tone,
           meta: `${countryMeta[item.country]?.label || ""} - ${commitmentFrequencyLabel(item)} - ${item.provider || item.category || "conta fixa"}`,
-          kind: item.type === "income" ? "income" : "expense"
+          kind: item.type === "income" ? "income" : "expense",
+          paymentRef: `commitment:${item.id}`
         };
       });
   }
@@ -6477,6 +7033,50 @@
     return cardBillCalendarEntries(month, country).filter((item) => !item.paid && item.amount > 0);
   }
 
+  function plannedDebtEntries(month, country) {
+    return debtCalendarEntries(month, country).filter((item) => !item.paid && item.amount > 0);
+  }
+
+  function debtCalendarEntries(month, country) {
+    return (state.debts || [])
+      .filter((item) => country === "global" || item.country === country)
+      .filter((item) => isDebtActiveInMonth(item, month))
+      .map((item) => {
+        const dueDate = debtDateForMonth(item, month);
+        const paid = isDebtPaid(item.id, month);
+        const dueState = dueStateForDate(dueDate, paid);
+        return {
+          id: item.id,
+          debtId: item.id,
+          country: item.country,
+          type: "debt",
+          title: item.title,
+          category: "Financiamento",
+          amount: debtNextPaymentAmount(item),
+          currency: item.currency,
+          date: dueDate,
+          paid,
+          status: dueState.label,
+          tone: paid ? "green" : dueState.tone,
+          meta: `${debtProviderLabel(item)} - ${item.paymentMethod || "forma nao informada"}`,
+          kind: "expense",
+          paymentRef: `debt:${item.id}`
+        };
+      })
+      .filter((item) => item.amount > 0);
+  }
+
+  function isDebtActiveInMonth(item, month) {
+    const progress = debtInstallmentProgress(item, month);
+    if (progress.total && progress.paid > progress.total) return false;
+    const startMonth = item.startDate ? item.startDate.slice(0, 7) : "";
+    return !startMonth || month >= startMonth;
+  }
+
+  function debtDateForMonth(item, month) {
+    return dateInMonth(month, item?.dueDay || 1);
+  }
+
   function cardBillCalendarEntries(month, country) {
     return (state.creditCards || [])
       .filter((card) => country === "global" || card.country === country)
@@ -6499,14 +7099,30 @@
           status: paid ? "Pago" : bill.total ? dueState.label : "Zerada",
           tone: paid ? "green" : bill.total ? dueState.tone : "blue",
           meta: `${countryMeta[card.country]?.label || ""} - fecha ${card.closingDay || "--"} - ${bill.purchaseCount} compra${bill.purchaseCount === 1 ? "" : "s"}`,
-          kind: "expense"
+          kind: "expense",
+          paymentRef: `card:${card.id}`
         };
       })
       .filter((item) => item.amount > 0);
   }
 
   function plannedSubscriptionEntries(month, country) {
-    return subscriptionCalendarEntries(month, country).filter((item) => item.paymentMethod !== "card");
+    return subscriptionCalendarEntries(month, country).filter((item) => {
+      if (item.paymentMethod === "card" || item.paid) return false;
+      return !isAutoPaidSubscriptionDue(item);
+    });
+  }
+
+  function autoPaidSubscriptionEntries(month, country) {
+    return subscriptionCalendarEntries(month, country)
+      .filter((item) => item.autoSettled)
+      .map((item) => ({
+        ...item,
+        generated: true,
+        type: "expense",
+        note: `Pago automaticamente - ${subscriptionPaymentMethodLabel(item.paymentMethod)}`,
+        icon: "S"
+      }));
   }
 
   function subscriptionCalendarEntries(month, country) {
@@ -6514,8 +7130,11 @@
       .filter((item) => item.paymentMethod !== "card")
       .map((item) => {
         const dueDate = subscriptionDateForMonth(item, month);
-        const dueState = dueStateForDate(dueDate, false);
+        const paid = isSubscriptionPaid(item.id, month);
+        const dueState = dueStateForDate(dueDate, paid);
         const meta = subscriptionMeta(item);
+        const autoPaid = isSubscriptionAutoPaid(item);
+        const autoSettled = item.paymentMethod === "bank" && !paid && isDateReached(dueDate);
         return {
           id: item.id,
           country: item.country,
@@ -6525,11 +7144,15 @@
           amount: number(item.amount),
           currency: item.currency,
           date: dueDate,
-          status: dueState.label,
-          tone: dueState.tone,
-          meta: `Subscricao - ${item.paymentMethod === "pix" ? "Pix" : "Cartao"}`,
+          paid: paid || autoSettled,
+          autoSettled,
+          paymentMethod: item.paymentMethod,
+          status: autoSettled ? "Pago" : autoPaid && !paid ? "Debito agendado" : dueState.label,
+          tone: paid || autoSettled ? "green" : autoPaid ? "blue" : dueState.tone,
+          meta: `Subscricao - ${subscriptionPaymentMethodLabel(item.paymentMethod)}`,
           kind: "expense",
-          titleColor: meta.color
+          titleColor: meta.color,
+          paymentRef: `subscription:${item.id}`
         };
       });
   }
@@ -6538,6 +7161,7 @@
     const items = [
       ...commitmentCalendarEntries(month, country),
       ...housingCalendarEntries(month, country),
+      ...debtCalendarEntries(month, country),
       ...cardBillCalendarEntries(month, country),
       ...subscriptionCalendarEntries(month, country),
       ...vehicleCalendarEntries(month, country),
@@ -6551,20 +7175,26 @@
     if (country !== "global" && country !== "japao") return [];
     return vehicleMonthlyCosts(month)
       .filter((item) => item.id === "vehicle-insurance" || item.id === "vehicle-shaken")
-      .map((item) => ({
-      id: item.id,
-      country: "japao",
-      type: "vehicle",
-      title: item.title,
-      category: "Veiculo",
-      amount: number(item.amount),
-      currency: item.currency || "JPY",
-      date: item.date,
-      status: "Veiculo",
-      tone: "blue",
-      meta: item.note || "custo do veiculo",
-      kind: "expense"
-    }));
+      .map((item) => {
+        const paid = isVehiclePaymentPaid(item.id, month);
+        const dueState = dueStateForDate(item.date, paid);
+        return {
+          id: item.id,
+          country: "japao",
+          type: "vehicle",
+          title: item.title,
+          category: "Veiculo",
+          amount: number(item.amount),
+          currency: item.currency || "JPY",
+          date: item.date,
+          paid,
+          status: dueState.label,
+          tone: paid ? "green" : dueState.tone,
+          meta: item.note || "custo do veiculo",
+          kind: "expense",
+          paymentRef: `vehicle:${item.id}`
+        };
+      });
   }
 
   function incomeCalendarEntries(month, country) {
@@ -6819,7 +7449,7 @@
     return number(item?.installmentAmount);
   }
 
-  function debtInstallmentProgress(item) {
+  function debtInstallmentProgress(item, targetMonth = state.ui.selectedMonth) {
     const original = number(item?.originalAmount);
     const storedOutstanding = number(item?.outstandingAmount);
     const installment = number(item?.installmentAmount);
@@ -6832,21 +7462,29 @@
       const start = parseLocalDate(item.startDate);
       const today = startOfDay(new Date());
       if (start <= today) {
-        paid = monthDiff(monthKeyFromDate(start), currentMonth()) + 1;
+        paid = monthDiff(monthKeyFromDate(start), targetMonth || currentMonth()) + 1;
         const dueDay = clamp(Math.round(number(item?.dueDay) || start.getDate()), 1, 31);
-        if (today.getDate() < dueDay) paid -= 1;
+        if ((targetMonth || currentMonth()) === currentMonth() && !isDebtPaid(item.id, targetMonth || currentMonth())) paid -= 1;
       }
     } else if (original && storedOutstanding) {
       const paidRatio = clamp((original - storedOutstanding) / original, 0, 1);
       paid = Math.round(paidRatio * fallbackTotal);
     }
 
+    paid = Math.max(paid, paidDebtMonthsCount(item.id, targetMonth));
     paid = clamp(paid, 0, fallbackTotal);
     return {
       paid,
       remaining: Math.max(0, fallbackTotal - paid),
       total: fallbackTotal
     };
+  }
+
+  function paidDebtMonthsCount(id, targetMonth = state.ui.selectedMonth) {
+    return Object.keys(state.paidCommitments || {})
+      .filter((key) => key.includes(`:debt:${id}`))
+      .filter((key) => key.slice(0, 7) <= targetMonth)
+      .length;
   }
 
   function debtEstimatedOutstanding(item) {
@@ -6983,15 +7621,211 @@
     return incomeSourceTypeMeta[type] || "Renda";
   }
 
-  function updateIncomeSourceOtherField() {
+  function factorySources() {
+    return (state.incomeSources || []).filter((source) => normalizedSourceType(source.type) === "factory");
+  }
+
+  function primaryFactorySource() {
+    return factorySources()[0] || null;
+  }
+
+  function factoryScheduleConfig(source = {}) {
+    const naming = source.banNaming || "colors";
+    const names = String(source.banNames || defaultBanNames(naming, source.banCount || 3)).trim();
+    const firstName = names.split(",").map((name) => name.trim()).filter(Boolean)[0] || "Verde";
+    const color = source.myBanColor || source.color || (normalizeLookupText(source.myBanName || firstName).includes("azul") ? "#567c9b" : "#42a67a");
+    return {
+      shiftSystem: source.shiftSystem || "nikoutai",
+      pattern: source.schedulePattern || "4x2",
+      hirukinStart: source.hirukinStart || "08:00",
+      hirukinEnd: source.hirukinEnd || "17:00",
+      yakinStart: source.yakinStart || "20:00",
+      yakinEnd: source.yakinEnd || "05:00",
+      shiftOneTime: source.shiftOneTime || "06:00-14:00",
+      shiftTwoTime: source.shiftTwoTime || "14:00-22:00",
+      shiftThreeTime: source.shiftThreeTime || "22:00-06:00",
+      banCount: clamp(number(source.banCount) || 3, 1, 12),
+      banNaming: naming,
+      banNames: names,
+      myBanName: source.myBanName || firstName,
+      myBanColor: color,
+      cycleStartDate: source.cycleStartDate || "",
+      cycleStartPhase: source.cycleStartPhase || (source.shiftSystem === "sankoutai" ? "shift1" : "day")
+    };
+  }
+
+  function defaultBanNames(naming, count = 3) {
+    const total = clamp(number(count) || 3, 1, 12);
+    if (naming === "letters") return Array.from({ length: total }, (_, index) => String.fromCharCode(65 + index)).join(", ");
+    if (naming === "numbers") return Array.from({ length: total }, (_, index) => String(index + 1)).join(", ");
+    return ["Verde", "Azul", "Amarelo", "Vermelho", "Roxo", "Branco", "Preto", "Laranja", "Rosa", "Cinza", "Prata", "Dourado"].slice(0, total).join(", ");
+  }
+
+  function scheduleLabel(schedule) {
+    const shift = schedule.shiftSystem === "sankoutai" ? "Sankoutai" : "Nikoutai";
+    return `${shift} - ${schedule.pattern} - ban ${schedule.myBanName || "principal"}`;
+  }
+
+  function daysInMonth(month) {
+    const [year, monthIndex] = month.split("-").map(Number);
+    const last = new Date(year, monthIndex, 0).getDate();
+    return Array.from({ length: last }, (_, index) => dateInMonth(month, index + 1));
+  }
+
+  function factoryScheduleDay(source, date) {
+    const schedule = factoryScheduleConfig(source);
+    const override = workScheduleOverridesForSource(source.id).find((item) => item.date === date);
+    if (override) {
+      return {
+        date,
+        type: "forcedOff",
+        className: "is-forced-off",
+        label: workOverrideTypeShortLabel(override.type),
+        time: "",
+        title: `${workOverrideTypeLabel(override.type)} - ${override.note || "ajuste manual"}`,
+        banColor: schedule.myBanColor
+      };
+    }
+
+    const cycle = buildFactoryCycle(schedule);
+    if (!cycle.length || !schedule.cycleStartDate) {
+      return {
+        date,
+        type: "unknown",
+        className: "is-empty",
+        label: "--",
+        time: "",
+        title: "Escala nao configurada",
+        banColor: schedule.myBanColor
+      };
+    }
+
+    const diff = Math.floor((startOfDay(parseLocalDate(date)) - startOfDay(parseLocalDate(schedule.cycleStartDate))) / 86400000);
+    const index = ((diff % cycle.length) + cycle.length) % cycle.length;
+    const slot = cycle[index];
+    return {
+      date,
+      ...slot,
+      banColor: schedule.myBanColor,
+      isSundayWork: parseLocalDate(date).getDay() === 0 && isWorkedScheduleDay(slot)
+    };
+  }
+
+  function buildFactoryCycle(schedule) {
+    const [workDays, offDays] = String(schedule.pattern || "4x2").split("x").map((value) => clamp(Number(value) || 0, 0, 14));
+    if (!workDays || !offDays) return [];
+    if (schedule.shiftSystem === "sankoutai") {
+      const order = ["shift1", "shift2", "shift3"];
+      const startIndex = Math.max(0, order.indexOf(schedule.cycleStartPhase));
+      return order.flatMap((type, phaseIndex) => [
+        ...Array.from({ length: workDays }, () => factoryShiftSlot(order[(startIndex + phaseIndex) % order.length], schedule)),
+        ...Array.from({ length: offDays }, () => factoryOffSlot())
+      ]);
+    }
+
+    const first = schedule.cycleStartPhase === "night" ? "night" : "day";
+    const second = first === "day" ? "night" : "day";
+    return [
+      ...Array.from({ length: workDays }, () => factoryShiftSlot(first, schedule)),
+      ...Array.from({ length: offDays }, () => factoryOffSlot()),
+      ...Array.from({ length: workDays }, () => factoryShiftSlot(second, schedule)),
+      ...Array.from({ length: offDays }, () => factoryOffSlot())
+    ];
+  }
+
+  function factoryShiftSlot(type, schedule) {
+    const meta = {
+      day: { label: "Dia", time: `${schedule.hirukinStart}-${schedule.hirukinEnd}`, className: "is-day" },
+      night: { label: "Noite", time: `${schedule.yakinStart}-${schedule.yakinEnd}`, className: "is-night" },
+      shift1: { label: "T1", time: schedule.shiftOneTime, className: "is-day" },
+      shift2: { label: "T2", time: schedule.shiftTwoTime, className: "is-swing" },
+      shift3: { label: "T3", time: schedule.shiftThreeTime, className: "is-night" }
+    };
+    const slot = meta[type] || meta.day;
+    return {
+      type,
+      label: slot.label,
+      time: slot.time,
+      className: slot.className,
+      title: `${slot.label} ${slot.time || ""}`.trim()
+    };
+  }
+
+  function factoryOffSlot() {
+    return {
+      type: "off",
+      label: "Folga",
+      time: "",
+      className: "is-off",
+      title: "Folga"
+    };
+  }
+
+  function workScheduleCounts(days) {
+    return days.reduce((current, day) => {
+      if (day.type === "day" || day.type === "shift1" || day.type === "shift2") current.day += 1;
+      if (day.type === "night" || day.type === "shift3") current.night += 1;
+      if (day.type === "off") current.off += 1;
+      if (day.type === "forcedOff") current.forcedOff += 1;
+      return current;
+    }, { day: 0, night: 0, off: 0, forcedOff: 0 });
+  }
+
+  function isWorkedScheduleDay(day) {
+    return ["day", "night", "shift1", "shift2", "shift3"].includes(day?.type);
+  }
+
+  function workScheduleOverridesForSource(sourceId) {
+    return (state.workScheduleOverrides || []).filter((item) => item.sourceId === sourceId);
+  }
+
+
+  function workOverrideTypeLabel(type) {
+    const map = {
+      forcedOff: "Folga forcada",
+      paidOff: "Yukyu",
+      manualOff: "Folga manual"
+    };
+    return map[type] || "Folga extra";
+  }
+
+  function workOverrideTypeShortLabel(type) {
+    return type === "paidOff" ? "Yukyu" : "Extra";
+  }
+
+  function updateIncomeSourceDynamicFields() {
     const select = modalRoot.querySelector("#sourceType");
     const field = modalRoot.querySelector(".other-source-field");
     const input = modalRoot.querySelector("#sourceCustomType");
-    if (!select || !field || !input) return;
-    const show = select.value === "other";
-    field.classList.toggle("is-hidden", !show);
-    input.required = show;
-    if (!show) input.value = "";
+    if (select && field && input) {
+      const show = select.value === "other";
+      field.classList.toggle("is-hidden", !show);
+      input.required = show;
+      if (!show) input.value = "";
+    }
+
+    const factoryFields = modalRoot.querySelector(".factory-source-fields");
+    if (select && factoryFields) factoryFields.classList.toggle("is-hidden", select.value !== "factory");
+
+    const shiftSystem = modalRoot.querySelector("#shiftSystem");
+    const nikoutai = modalRoot.querySelector(".factory-nikoutai-fields");
+    const sankoutai = modalRoot.querySelector(".factory-sankoutai-fields");
+    if (shiftSystem && nikoutai && sankoutai) {
+      const isSankoutai = shiftSystem.value === "sankoutai";
+      nikoutai.classList.toggle("is-hidden", isSankoutai);
+      sankoutai.classList.toggle("is-hidden", !isSankoutai);
+    }
+
+    const naming = modalRoot.querySelector("#banNaming");
+    const banNames = modalRoot.querySelector("#banNames");
+    const banCount = modalRoot.querySelector("#banCount");
+    if (naming && banNames && !banNames.value.trim()) {
+      banNames.placeholder = `Ex: ${defaultBanNames(naming.value, banCount?.value || 3)}`;
+    }
+  }
+
+  function updateIncomeSourceOtherField() {
+    updateIncomeSourceDynamicFields();
   }
 
   function updateCommitmentCategoryField() {
@@ -7145,6 +7979,7 @@
   function monthLedgerEntries(month, country) {
     const txs = monthTransactions(month, country);
     const vehicle = country === "global" || country === "japao" ? vehicleMonthlyCosts(month) : [];
+    const autoSubscriptions = autoPaidSubscriptionEntries(month, country);
     const incomes = country === "global" || country === "japao"
       ? monthWorkIncomes(month).map((item) => {
         const source = incomeSourceById(item.sourceId);
@@ -7166,7 +8001,7 @@
         };
       })
       : [];
-    return [...txs, ...vehicle, ...incomes].sort((a, b) => b.date.localeCompare(a.date));
+    return [...txs, ...autoSubscriptions, ...vehicle, ...incomes].sort((a, b) => b.date.localeCompare(a.date));
   }
 
   function categoryTotals(month, country) {
@@ -7193,12 +8028,17 @@
       const current = totals.get("Subscricao") || 0;
       totals.set("Subscricao", current + convert(item.amount, item.currency, currency, rate));
     });
+    autoPaidSubscriptionEntries(month, country).forEach((item) => {
+      const current = totals.get("Subscricao") || 0;
+      totals.set("Subscricao", current + convert(item.amount, item.currency, currency, rate));
+    });
     plannedHousingEntries(month, country).forEach((item) => {
       const current = totals.get("Moradia") || 0;
       totals.set("Moradia", current + convert(item.amount, item.currency, currency, rate));
     });
     if (country === "global" || country === "japao") {
       vehicleMonthlyCosts(month).forEach((item) => {
+        if ((item.id === "vehicle-insurance" || item.id === "vehicle-shaken") && isVehiclePaymentPaid(item.id, month)) return;
         const current = totals.get("Veiculo") || 0;
         totals.set("Veiculo", current + convert(item.amount, item.currency, currency, rate));
       });
@@ -7261,6 +8101,54 @@
 
   function cardBillKey(id, month) {
     return `${month}:card:${id}`;
+  }
+
+  function isDebtPaid(id, month) {
+    return Boolean(state.paidCommitments[debtPaymentKey(id, month)]);
+  }
+
+  function debtPaymentKey(id, month) {
+    return `${month}:debt:${id}`;
+  }
+
+  function isSubscriptionPaid(id, month) {
+    return Boolean(state.paidCommitments[subscriptionPaymentKey(id, month)]);
+  }
+
+  function isSubscriptionMonthPaid(item, month) {
+    if (!item) return false;
+    if (item.paymentMethod === "card") return Boolean(item.cardId && isCardBillPaid(item.cardId, month));
+    return isSubscriptionPaid(item.id, month);
+  }
+
+  function isSubscriptionAutoPaid(item) {
+    return item?.paymentMethod === "card" || item?.paymentMethod === "bank";
+  }
+
+  function isAutoPaidSubscriptionDue(item) {
+    return item?.paymentMethod === "bank" && isDateReached(item.date || subscriptionDateForMonth(item, state.ui.selectedMonth));
+  }
+
+  function isDateReached(dateValue) {
+    return startOfDay(parseLocalDate(dateValue)) <= startOfDay(new Date());
+  }
+
+  function subscriptionPaymentMethodLabel(method) {
+    if (method === "card") return "Cartao";
+    if (method === "bank") return "Debito em conta";
+    return "Pix";
+  }
+
+  function subscriptionPaymentKey(id, month) {
+    return `${month}:subscription:${id}`;
+  }
+
+  function isVehiclePaymentPaid(id, month) {
+    return Boolean(state.paidCommitments[vehiclePaymentKey(id, month)]);
+  }
+
+  function vehiclePaymentKey(id, month) {
+    return `${month}:vehicle:${id}`;
   }
 
   function isHousingItemPaid(housingId, itemKey, month) {
@@ -7598,6 +8486,7 @@
       housingCard: "housingCards",
       vehicleMaintenance: "vehicleMaintenance",
       incomeSource: "incomeSources",
+      workOverride: "workScheduleOverrides",
       workIncome: "workIncomes"
     };
     return findItem(map[type], id);

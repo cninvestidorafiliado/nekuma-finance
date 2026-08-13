@@ -550,7 +550,7 @@ h3 {
 
 .overview-mini-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1028,6 +1028,26 @@ canvas {
   justify-content: flex-end;
   gap: 6px;
   margin-top: 7px;
+}
+
+.list-row.is-paid {
+  border-color: rgba(66, 166, 122, 0.2);
+  background: rgba(239, 249, 241, 0.58);
+}
+
+.inline-chip {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  padding: 0 7px;
+  margin-left: 6px;
+  font-size: 0.66rem;
+  vertical-align: middle;
+}
+
+.paid-note {
+  color: #2f6f55;
+  font-weight: 850;
 }
 
 .debt-list {
@@ -2589,6 +2609,155 @@ canvas {
   min-width: 0;
 }
 
+.work-calendar-panel {
+  overflow: hidden;
+}
+
+.work-ban-chip {
+  border: 1px solid color-mix(in srgb, var(--ban-color), #ffffff 48%);
+  background: color-mix(in srgb, var(--ban-color), #fff8e9 72%);
+  color: var(--ink);
+}
+
+.work-calendar-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.work-calendar-summary span {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.48);
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-align: center;
+}
+
+.work-calendar-summary strong {
+  display: block;
+  color: var(--ink);
+  font-size: 1.05rem;
+}
+
+.work-calendar-weekdays,
+.work-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.work-calendar-weekdays {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.work-day-cell,
+.work-day-blank {
+  min-height: 64px;
+  border-radius: 16px;
+}
+
+.work-day-cell {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 8px 6px;
+  border: 1px solid rgba(49, 44, 81, 0.1);
+  background: rgba(255, 255, 255, 0.42);
+  color: var(--ink);
+  text-align: center;
+}
+
+.work-day-cell strong {
+  font-size: 1.02rem;
+  line-height: 1;
+}
+
+.work-day-cell span {
+  font-size: 0.7rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.work-day-cell small {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.work-day-cell.is-day {
+  border-color: color-mix(in srgb, var(--ban-color), #ffffff 45%);
+  background: color-mix(in srgb, var(--ban-color), #fff8e9 78%);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ban-color), transparent 70%);
+}
+
+.work-day-cell.is-night {
+  border-color: rgba(49, 44, 81, 0.18);
+  background: linear-gradient(135deg, #16352b, #48426d);
+  color: var(--paper);
+}
+
+.work-day-cell.is-night small {
+  color: rgba(255, 250, 244, 0.72);
+}
+
+.work-day-cell.is-swing {
+  border-color: rgba(245, 200, 76, 0.55);
+  background: #fff3bf;
+}
+
+.work-day-cell.is-off {
+  border-style: dashed;
+  background: rgba(233, 234, 225, 0.54);
+  color: color-mix(in srgb, var(--ink), #ffffff 30%);
+}
+
+.work-day-cell.is-forced-off {
+  border-color: rgba(217, 93, 78, 0.28);
+  background: #fff0ec;
+  color: #7a332d;
+}
+
+.work-day-cell.is-sunday-work {
+  border-color: #d4a43d;
+  box-shadow: inset 0 0 0 2px rgba(245, 200, 76, 0.72), 0 8px 22px rgba(212, 164, 61, 0.18);
+}
+
+.work-day-cell.is-empty {
+  color: var(--muted);
+}
+
+.work-override-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.form-section-title {
+  display: grid;
+  gap: 2px;
+  padding: 10px 0 2px;
+}
+
+.form-section-title strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.form-section-title span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .calendar-amount {
   display: grid;
   justify-items: end;
@@ -2604,6 +2773,31 @@ canvas {
 
 .calendar-amount.expense {
   color: #aa3d31;
+}
+
+.calendar-pay-button {
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 0.74rem;
+}
+
+.payment-confirm-card {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(239, 249, 241, 0.76);
+}
+
+.payment-confirm-card strong {
+  font-size: 1.15rem;
+}
+
+.payment-confirm-card span {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 850;
 }
 
 .crypto-panel {
@@ -4099,6 +4293,29 @@ h1 {
 
   .paypal-card {
     grid-template-columns: 1fr;
+  }
+
+  .work-calendar-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .work-calendar-grid,
+  .work-calendar-weekdays {
+    gap: 4px;
+  }
+
+  .work-day-cell,
+  .work-day-blank {
+    min-height: 54px;
+    border-radius: 13px;
+  }
+
+  .work-day-cell {
+    padding: 7px 3px;
+  }
+
+  .work-day-cell small {
+    display: none;
   }
 
   .web3-wallet-card {
