@@ -204,6 +204,50 @@ h3 {
   max-width: 100%;
 }
 
+.refresh-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(216, 255, 114, 0.18), transparent 30%),
+    rgba(6, 20, 17, 0.62);
+  backdrop-filter: blur(14px);
+  transition: opacity 180ms ease;
+}
+
+.refresh-splash.is-visible {
+  pointer-events: auto;
+  opacity: 1;
+}
+
+.refresh-splash-card {
+  display: grid;
+  gap: 12px;
+  place-items: center;
+  color: #fffdf7;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.refresh-splash-card img {
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  box-shadow: 0 24px 60px rgba(6, 20, 17, 0.36);
+  animation: refresh-logo-spin 1.15s linear infinite;
+}
+
+@keyframes refresh-logo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .auth-mode .topbar,
 .auth-mode .top-actions,
 .auth-mode .bottom-nav {
@@ -550,7 +594,7 @@ h3 {
 
 .overview-mini-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -2748,6 +2792,10 @@ canvas {
   padding: 10px 0 2px;
 }
 
+.form-section-title.compact {
+  padding-top: 14px;
+}
+
 .form-section-title strong {
   color: var(--ink);
   font-size: 0.95rem;
@@ -4232,7 +4280,7 @@ h1 {
   }
 
   .overview-mini-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .balance-copy {
@@ -4589,7 +4637,6 @@ h1 {
     height: 178px;
   }
 
-  .overview-mini-grid,
   .paypal-card,
   .dashboard-card-vehicle-grid,
   .split-grid,

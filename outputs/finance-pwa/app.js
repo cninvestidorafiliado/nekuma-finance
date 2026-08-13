@@ -196,7 +196,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=75")
+      navigator.serviceWorker.register("./service-worker.js?v=79")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -284,7 +284,7 @@
     if (action === "disconnect-web3") disconnectWeb3Wallet();
     if (action === "remote-signout") signOutRemote();
     if (action === "remote-sync-now") syncRemoteNow();
-    if (action === "reload-app") window.location.reload();
+    if (action === "reload-app") refreshAppInPlace();
     if (action === "toggle-visibility") togglePanelVisibility(button.dataset.panel);
     if (action === "dismiss-due-alert") closeModal();
     if (action === "copy-invite-code") copyInviteCode();
@@ -552,8 +552,9 @@
     if (data?.state && Object.keys(data.state).length) {
       const remoteState = normalizeState(data.state);
       const mergedCrypto = mergeCryptoAssetsWithLocal(remoteState.cryptoAssets, state.cryptoAssets);
-      shouldRewriteRemoteState = cryptoAssetsWereNormalized(data.state.cryptoAssets, remoteState.cryptoAssets) || mergedCrypto.changed;
-      state = { ...remoteState, cryptoAssets: mergedCrypto.items };
+      const mergedLocalData = mergeLocalCollections(remoteState, state, ["incomeSources", "workIncomes", "workScheduleOverrides"]);
+      shouldRewriteRemoteState = cryptoAssetsWereNormalized(data.state.cryptoAssets, remoteState.cryptoAssets) || mergedCrypto.changed || mergedLocalData.changed;
+      state = { ...remoteState, ...mergedLocalData.collections, cryptoAssets: mergedCrypto.items };
     } else if (!createIfEmpty) {
       state = createInitialState();
     }
@@ -718,6 +719,43 @@
     }
   }
 
+  async function refreshAppInPlace() {
+    const splash = document.getElementById("refresh-splash");
+    const startedAt = Date.now();
+    if (splash) {
+      splash.classList.add("is-visible");
+      splash.setAttribute("aria-hidden", "false");
+    }
+    try {
+      if (remoteStore.enabled && remoteSession.status === "ready") {
+        if (hasPendingLocalChanges()) {
+          await flushRemoteState();
+        } else if (remoteSession.householdId) {
+          await loadRemoteStateForHousehold(remoteSession.householdId, false);
+        }
+        await loadRemoteHouseholdMembers();
+      } else {
+        persistLocalState();
+      }
+      await Promise.allSettled([
+        refreshFxQuotes(false),
+        refreshCryptoQuotes(false)
+      ]);
+      render();
+    } catch (error) {
+      remoteSession.error = error.message || "Falha ao atualizar.";
+      render();
+    } finally {
+      const remaining = Math.max(0, 3000 - (Date.now() - startedAt));
+      setTimeout(() => {
+        if (splash) {
+          splash.classList.remove("is-visible");
+          splash.setAttribute("aria-hidden", "true");
+        }
+      }, remaining);
+    }
+  }
+
   function startRemoteAutoSync() {
     stopRemoteAutoSync();
     if (!remoteStore.enabled) return;
@@ -760,12 +798,15 @@
       if (remoteUpdatedAt && localSyncedAt && remoteUpdatedAt <= localSyncedAt) return;
       if (localSyncedAt && lastLocalChangeAt > localSyncedAt) return;
 
-      const nextState = normalizeState(data.state);
-      state = nextState;
+      const remoteState = normalizeState(data.state);
+      const mergedCrypto = mergeCryptoAssetsWithLocal(remoteState.cryptoAssets, state.cryptoAssets);
+      const mergedLocalData = mergeLocalCollections(remoteState, state, ["incomeSources", "workIncomes", "workScheduleOverrides"]);
+      state = { ...remoteState, ...mergedLocalData.collections, cryptoAssets: mergedCrypto.items };
       state.settings.dataMode = "online";
       if (remoteSession.household?.name) state.settings.familyName = remoteSession.household.name;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       remoteSession.lastSyncedAt = data.updated_at || new Date().toISOString();
+      if (mergedCrypto.changed || mergedLocalData.changed) await flushRemoteState();
       await loadRemoteHouseholdMembers();
       render();
       if (reason !== "timer") showToast("Dados atualizados da nuvem.");
@@ -1032,6 +1073,67 @@
     const remoteQuantity = cryptoQuantityNumber(remoteItem.quantity);
     const localQuantity = cryptoQuantityNumber(localItem.quantity);
     return localQuantity > 0 && localQuantity < 1 && remoteQuantity >= 1;
+  }
+
+  function mergeLocalCollections(remoteState, localState, collectionNames = []) {
+    return collectionNames.reduce((result, collection) => {
+      const merged = mergeCollectionWithLocal(remoteState?.[collection], localState?.[collection], collection);
+      result.collections[collection] = merged.items;
+      result.changed = result.changed || merged.changed;
+      return result;
+    }, { collections: {}, changed: false });
+  }
+
+  function mergeCollectionWithLocal(remoteItems = [], localItems = [], collection = "") {
+    const remoteList = Array.isArray(remoteItems) ? remoteItems : [];
+    const localList = Array.isArray(localItems) ? localItems : [];
+    const localById = new Map(localList.map((item) => [item?.id, item]).filter(([id]) => Boolean(id)));
+    let changed = false;
+    const merged = remoteList.map((remoteItem) => {
+      const localItem = localById.get(remoteItem?.id);
+      if (shouldPreferLocalItem(remoteItem, localItem, collection)) {
+        changed = true;
+        return { ...remoteItem, ...localItem };
+      }
+      return remoteItem;
+    });
+
+    localList.forEach((localItem) => {
+      if (localItem?.id && !merged.some((item) => item?.id === localItem.id)) {
+        changed = true;
+        merged.push(localItem);
+      }
+    });
+
+    return { items: merged, changed };
+  }
+
+  function shouldPreferLocalItem(remoteItem, localItem, collection = "") {
+    if (!remoteItem || !localItem) return false;
+    const remoteTime = itemSyncTime(remoteItem);
+    const localTime = itemSyncTime(localItem);
+    if (localTime && (!remoteTime || localTime >= remoteTime)) return true;
+    if (collection === "incomeSources") {
+      const localHasSalary = hasFactorySalaryConfig(localItem);
+      const remoteHasSalary = hasFactorySalaryConfig(remoteItem);
+      if (localHasSalary && !remoteHasSalary) return true;
+    }
+    return false;
+  }
+
+  function itemSyncTime(item = {}) {
+    return Date.parse(item.updatedAt || item.savedAt || item.createdAt || "") || 0;
+  }
+
+  function hasFactorySalaryConfig(source = {}) {
+    return [
+      "salaryHourlyRate",
+      "salaryTeijiHours",
+      "salaryFixedOvertimeHours",
+      "salaryOvertimeRate",
+      "salaryNightRate",
+      "salarySundayRate"
+    ].some((key) => number(source[key]) > 0);
   }
 
   function saveState(options = {}) {
@@ -1630,6 +1732,9 @@
     const payableLabel = breakdown.payables ? formatMoneyWithPrimary(breakdown.payables, breakdown.currency) : formatMoney(0, breakdown.currency);
     const hideBalance = Boolean(state.ui.hideBalance);
     const paidValue = hideBalance ? "*****" : formatMoneyWithPrimary(breakdown.paid, breakdown.currency);
+    const salaryValue = hideBalance
+      ? "*****"
+      : (breakdown.salaryEstimate.configured ? formatMoneyWithPrimary(breakdown.salaryEstimate.total, breakdown.salaryEstimate.currency, state.ui.selectedMonth) : "--");
     const mainValue = hideBalance ? "¥ •••••" : formatMoneyWithPrimary(summary.remaining, summary.currency);
     const receivedValue = hideBalance ? "•••••" : formatMoneyWithPrimary(breakdown.received, breakdown.currency);
     const payableValue = hideBalance ? "•••••" : payableLabel;
@@ -1649,6 +1754,10 @@
             <div>
               <span>Pagos no mes</span>
               <strong>${paidValue}</strong>
+            </div>
+            <div>
+              <span>Salario estimado</span>
+              <strong>${salaryValue}</strong>
             </div>
             <div>
               <span>Contas a pagar</span>
@@ -1712,6 +1821,7 @@
   function dashboardBalanceBreakdown(summary = summarizeMonth(state.ui.selectedMonth, "global")) {
     const currency = summary.currency;
     const rate = latestRate(state.ui.selectedMonth);
+    const salaryEstimate = estimateFactorySalaryForMonth(state.ui.selectedMonth, currency);
     const payables = dashboardUpcomingFinancialItems(99).reduce((total, item) => {
       return total + convert(item.amount, item.currency, currency, rate);
     }, 0);
@@ -1719,6 +1829,7 @@
       currency,
       received: Math.max(0, summary.actualInflow),
       paid: Math.max(0, summary.actualOutflow),
+      salaryEstimate,
       payables: Math.max(0, payables)
     };
   }
@@ -3387,7 +3498,7 @@
         <span><strong>${counts.night}</strong> noite</span>
         <span><strong>${counts.off}</strong> folgas</span>
         <span><strong>${counts.forcedOff}</strong> folga extra</span>
-        <span><strong>Domingo</strong> 35%</span>
+        <span><strong>Dom</strong> 35%</span>
       </div>
       <div class="work-calendar-weekdays" aria-hidden="true">
         ${["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((day) => `<span>${day}</span>`).join("")}
@@ -3405,7 +3516,6 @@
       <div class="work-day-cell ${escapeAttr(day.className)} ${day.isSundayWork ? "is-sunday-work" : ""}" style="--ban-color:${escapeAttr(day.banColor)}" title="${escapeAttr(day.title)}">
         <strong>${formatCalendarDay(day.date)}</strong>
         <span>${escapeHtml(day.label)}</span>
-        ${day.time ? `<small>${escapeHtml(day.time)}</small>` : ""}
       </div>
     `;
   }
@@ -4685,6 +4795,55 @@
             <strong>Escala da fabrica</strong>
             <span>Usada para preencher o calendario da tela inicial.</span>
           </div>
+          <div class="form-section-title compact">
+            <strong>Provisao de salario</strong>
+            <span>Percentuais configuraveis por empresa para estimar o bruto do mes.</span>
+          </div>
+          <div class="three-cols">
+            <div class="field">
+              <label for="salaryHourlyRate">Valor hora</label>
+              <input id="salaryHourlyRate" name="salaryHourlyRate" inputmode="decimal" placeholder="Ex: 1550" value="${escapeAttr(item?.salaryHourlyRate || item?.hourlyRate || "")}" />
+            </div>
+            <div class="field">
+              <label for="salaryTeijiHours">Horas teiji/dia</label>
+              <input id="salaryTeijiHours" name="salaryTeijiHours" inputmode="decimal" placeholder="Ex: 9" value="${escapeAttr(item?.salaryTeijiHours || "")}" />
+            </div>
+            <div class="field">
+              <label for="salaryFixedOvertimeHours">Hora extra fixa/dia</label>
+              <input id="salaryFixedOvertimeHours" name="salaryFixedOvertimeHours" inputmode="decimal" placeholder="Ex: 2" value="${escapeAttr(item?.salaryFixedOvertimeHours || "")}" />
+            </div>
+          </div>
+          <div class="three-cols">
+            <div class="field">
+              <label for="salaryOvertimeRate">Hora extra %</label>
+              <input id="salaryOvertimeRate" name="salaryOvertimeRate" inputmode="decimal" placeholder="Ex: 25" value="${escapeAttr(item?.salaryOvertimeRate || "")}" />
+            </div>
+            <div class="field">
+              <label for="salaryNightRate">Noturno %</label>
+              <input id="salaryNightRate" name="salaryNightRate" inputmode="decimal" placeholder="Ex: 25" value="${escapeAttr(item?.salaryNightRate || "")}" />
+            </div>
+            <div class="field">
+              <label for="salarySundayRate">Domingo %</label>
+              <input id="salarySundayRate" name="salarySundayRate" inputmode="decimal" placeholder="Ex: 35" value="${escapeAttr(item?.salarySundayRate || "")}" />
+            </div>
+          </div>
+          <div class="three-cols">
+            <div class="field">
+              <label for="salaryNightStart">Noturno inicio</label>
+              <input id="salaryNightStart" name="salaryNightStart" type="time" value="${escapeAttr(item?.salaryNightStart || "22:00")}" />
+            </div>
+            <div class="field">
+              <label for="salaryNightEnd">Noturno fim</label>
+              <input id="salaryNightEnd" name="salaryNightEnd" type="time" value="${escapeAttr(item?.salaryNightEnd || "05:00")}" />
+            </div>
+            <div class="field">
+              <label for="salarySundayAllDay">Domingo</label>
+              <select id="salarySundayAllDay" name="salarySundayAllDay">
+                <option value="yes" ${selectedAttr("yes", item?.salarySundayAllDay === false ? "no" : "yes")}>Adicional o dia inteiro</option>
+                <option value="no" ${selectedAttr("no", item?.salarySundayAllDay === false ? "no" : "yes")}>Nao calcular domingo</option>
+              </select>
+            </div>
+          </div>
           <div class="two-cols">
             <div class="field">
               <label for="shiftSystem">Sistema de turnos</label>
@@ -4753,7 +4912,7 @@
                 <option value="numbers" ${selectedAttr("numbers", schedule.banNaming)}>Numeros</option>
               </select>
             </div>
-            <div class="field">
+            <div class="field ban-color-field ${schedule.banNaming === "colors" ? "" : "is-hidden"}">
               <label for="myBanColor">Cor do meu ban</label>
               <input id="myBanColor" name="myBanColor" type="color" value="${escapeAttr(schedule.myBanColor)}" />
             </div>
@@ -5302,11 +5461,21 @@
     const data = formData(form);
     const sourceType = normalizedSourceType(data.type);
     const isFactory = sourceType === "factory";
+    const banNaming = isFactory ? String(data.banNaming || "colors") : "";
     const updated = upsertItem("incomeSources", data.id, {
       name: data.name.trim(),
       type: sourceType,
       customType: sourceType === "other" ? String(data.customType || "").trim() : "",
-      hourlyRate: 0,
+      hourlyRate: isFactory ? number(data.salaryHourlyRate) : 0,
+      salaryHourlyRate: isFactory ? number(data.salaryHourlyRate) : 0,
+      salaryTeijiHours: isFactory ? number(data.salaryTeijiHours) : 0,
+      salaryFixedOvertimeHours: isFactory ? number(data.salaryFixedOvertimeHours) : 0,
+      salaryOvertimeRate: isFactory ? number(data.salaryOvertimeRate) : 0,
+      salaryNightRate: isFactory ? number(data.salaryNightRate) : 0,
+      salarySundayRate: isFactory ? number(data.salarySundayRate) : 0,
+      salaryNightStart: isFactory ? String(data.salaryNightStart || "22:00") : "",
+      salaryNightEnd: isFactory ? String(data.salaryNightEnd || "05:00") : "",
+      salarySundayAllDay: isFactory ? data.salarySundayAllDay !== "no" : false,
       color: data.color || sourceColors[(state.incomeSources || []).length % sourceColors.length],
       currency: data.currency || "JPY",
       payRule: String(data.payRule || "").trim(),
@@ -5320,10 +5489,10 @@
       shiftTwoTime: isFactory ? String(data.shiftTwoTime || "") : "",
       shiftThreeTime: isFactory ? String(data.shiftThreeTime || "") : "",
       banCount: isFactory ? clamp(number(data.banCount) || 3, 1, 12) : 0,
-      banNaming: isFactory ? String(data.banNaming || "colors") : "",
+      banNaming,
       banNames: isFactory ? String(data.banNames || "").trim() : "",
       myBanName: isFactory ? String(data.myBanName || "").trim() : "",
-      myBanColor: isFactory ? String(data.myBanColor || data.color || "#42a67a") : "",
+      myBanColor: isFactory && banNaming === "colors" ? String(data.myBanColor || data.color || "#42a67a") : "",
       cycleStartDate: isFactory ? String(data.cycleStartDate || "") : "",
       cycleStartPhase: isFactory ? String(data.cycleStartPhase || "day") : ""
     });
@@ -7629,6 +7798,121 @@
     return factorySources()[0] || null;
   }
 
+  function estimateFactorySalaryForMonth(month = state.ui.selectedMonth, targetCurrency = primaryCurrency()) {
+    const sources = factorySources();
+    const rate = latestRate(month);
+    const empty = {
+      configured: false,
+      currency: targetCurrency,
+      total: 0,
+      teiji: 0,
+      overtime: 0,
+      night: 0,
+      sunday: 0,
+      workDays: 0
+    };
+    if (!sources.length) return empty;
+
+    const totals = sources.reduce((current, source) => {
+      const estimate = estimateFactorySourceSalary(source, month);
+      current.configured = current.configured || estimate.configured;
+      current.total += convert(estimate.total, estimate.currency, targetCurrency, rate);
+      current.teiji += convert(estimate.teiji, estimate.currency, targetCurrency, rate);
+      current.overtime += convert(estimate.overtime, estimate.currency, targetCurrency, rate);
+      current.night += convert(estimate.night, estimate.currency, targetCurrency, rate);
+      current.sunday += convert(estimate.sunday, estimate.currency, targetCurrency, rate);
+      current.workDays += estimate.workDays;
+      return current;
+    }, { ...empty, currency: targetCurrency });
+
+    return totals;
+  }
+
+  function estimateFactorySourceSalary(source, month = state.ui.selectedMonth) {
+    const currency = source.currency || primaryCurrency();
+    const hourlyRate = number(source.salaryHourlyRate || source.hourlyRate);
+    const teijiHours = number(source.salaryTeijiHours);
+    const overtimeHours = number(source.salaryFixedOvertimeHours);
+    const overtimeRate = number(source.salaryOvertimeRate) / 100;
+    const nightRate = number(source.salaryNightRate) / 100;
+    const sundayRate = number(source.salarySundayRate) / 100;
+    const sundayAllDay = source.salarySundayAllDay !== false;
+    const configured = hourlyRate > 0 && teijiHours > 0;
+    const base = {
+      configured,
+      currency,
+      total: 0,
+      teiji: 0,
+      overtime: 0,
+      night: 0,
+      sunday: 0,
+      workDays: 0
+    };
+    if (!configured) return base;
+
+    return daysInMonth(month)
+      .map((date) => factoryScheduleDay(source, date))
+      .filter((day) => isWorkedScheduleDay(day))
+      .reduce((current, day) => {
+        const shiftHours = shiftDurationHours(day.time);
+        const paidTeijiHours = teijiHours || shiftHours;
+        const totalShiftHours = Math.max(shiftHours, paidTeijiHours + overtimeHours);
+        const nightHours = shiftNightHours(day.time, source.salaryNightStart || "22:00", source.salaryNightEnd || "05:00");
+        const sundayHours = day.isSundayWork && sundayAllDay ? totalShiftHours : 0;
+
+        current.workDays += 1;
+        current.teiji += hourlyRate * paidTeijiHours;
+        current.overtime += hourlyRate * overtimeHours * (1 + overtimeRate);
+        current.night += hourlyRate * nightHours * nightRate;
+        current.sunday += hourlyRate * sundayHours * sundayRate;
+        current.total = current.teiji + current.overtime + current.night + current.sunday;
+        return current;
+      }, base);
+  }
+
+  function shiftDurationHours(range) {
+    const times = parseTimeRange(range);
+    if (!times) return 0;
+    let diff = times.end - times.start;
+    if (diff <= 0) diff += 1440;
+    return diff / 60;
+  }
+
+  function shiftNightHours(range, nightStart = "22:00", nightEnd = "05:00") {
+    const shift = parseTimeRange(range);
+    const night = parseTimeRange(`${nightStart}-${nightEnd}`);
+    if (!shift || !night) return 0;
+    const shiftEnd = shift.end <= shift.start ? shift.end + 1440 : shift.end;
+    const nightWindows = [
+      normalizeMinuteWindow(night.start - 1440, night.end - 1440),
+      normalizeMinuteWindow(night.start, night.end),
+      normalizeMinuteWindow(night.start + 1440, night.end + 1440)
+    ];
+    const minutes = nightWindows.reduce((total, window) => {
+      return total + Math.max(0, Math.min(shiftEnd, window.end) - Math.max(shift.start, window.start));
+    }, 0);
+    return minutes / 60;
+  }
+
+  function normalizeMinuteWindow(start, end) {
+    return { start, end: end <= start ? end + 1440 : end };
+  }
+
+  function parseTimeRange(range) {
+    const match = String(range || "").match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+    if (!match) return null;
+    return {
+      start: timeToMinutes(`${match[1]}:${match[2]}`),
+      end: timeToMinutes(`${match[3]}:${match[4]}`)
+    };
+  }
+
+  function timeToMinutes(value) {
+    const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return 0;
+    return clamp(Number(match[1]) || 0, 0, 23) * 60 + clamp(Number(match[2]) || 0, 0, 59);
+  }
+
   function factoryScheduleConfig(source = {}) {
     const naming = source.banNaming || "colors";
     const names = String(source.banNames || defaultBanNames(naming, source.banCount || 3)).trim();
@@ -7819,8 +8103,15 @@
     const naming = modalRoot.querySelector("#banNaming");
     const banNames = modalRoot.querySelector("#banNames");
     const banCount = modalRoot.querySelector("#banCount");
+    const banColorField = modalRoot.querySelector(".ban-color-field");
+    const banColorInput = modalRoot.querySelector("#myBanColor");
     if (naming && banNames && !banNames.value.trim()) {
       banNames.placeholder = `Ex: ${defaultBanNames(naming.value, banCount?.value || 3)}`;
+    }
+    if (naming && banColorField && banColorInput) {
+      const useColors = naming.value === "colors";
+      banColorField.classList.toggle("is-hidden", !useColors);
+      banColorInput.disabled = !useColors;
     }
   }
 
