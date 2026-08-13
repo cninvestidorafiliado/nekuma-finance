@@ -196,7 +196,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=79")
+      navigator.serviceWorker.register("./service-worker.js?v=80")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -1756,10 +1756,6 @@
               <strong>${paidValue}</strong>
             </div>
             <div>
-              <span>Salario estimado</span>
-              <strong>${salaryValue}</strong>
-            </div>
-            <div>
               <span>Contas a pagar</span>
               <strong>${payableValue}</strong>
             </div>
@@ -1771,6 +1767,11 @@
             <span>Folego</span>
             <strong>${summary.coverage}%</strong>
           </div>
+        </div>
+        <div class="salary-estimate-card">
+          <span>Salario estimado</span>
+          <strong>${salaryValue}</strong>
+          <small>Bruto previsto pela escala</small>
         </div>
       </div>
     `;
