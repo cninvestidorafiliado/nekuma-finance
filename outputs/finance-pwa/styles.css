@@ -2409,6 +2409,16 @@ canvas {
   font-size: 0.66rem;
 }
 
+.subscription-cycle-note {
+  display: block;
+  margin-top: 2px;
+  color: var(--blue);
+  font-size: 0.64rem;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .subscription-list {
   display: grid;
   gap: 8px;
@@ -2497,6 +2507,11 @@ canvas {
 
 .subscription-home-card em .money-converted {
   display: none;
+}
+
+.subscription-home-card em .subscription-cycle-note {
+  color: var(--blue);
+  font-size: 0.58rem;
 }
 
 .carousel-hint {

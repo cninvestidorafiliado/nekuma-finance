@@ -196,7 +196,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=80")
+      navigator.serviceWorker.register("./service-worker.js?v=81")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -335,6 +335,7 @@
     if (event.target.id === "commitmentType") updateCommitmentProviderField();
     if (event.target.id === "subscriptionPaymentMethod") updateSubscriptionCardField();
     if (event.target.id === "subscriptionServiceKey") updateSubscriptionCustomField();
+    if (event.target.id === "subscriptionBillingCycle") updateSubscriptionCycleField();
     if (event.target.id === "vehicleInsurancePaymentType") updateVehicleInsuranceCardField();
   });
 
@@ -1629,7 +1630,7 @@
         <div class="panel-head">
           <div class="panel-title-block">
             <h2>Subscricoes atuais</h2>
-            <p class="panel-total">Total mensal ${subscriptionMonthTotalLabel(state.ui.selectedMonth)}</p>
+            <p class="panel-total">Total a pagar ${subscriptionMonthTotalLabel(state.ui.selectedMonth)}</p>
           </div>
           <button class="small-action icon-action" type="button" data-action="open-modal" data-modal="subscription" aria-label="Nova subscricao">+</button>
         </div>
@@ -2747,7 +2748,8 @@
     const subscriptions = monthSubscriptions(month, "global");
     const visible = limit ? subscriptions.slice(0, limit) : subscriptions;
     const totalCurrency = primaryCurrency();
-    const total = subscriptions.reduce((sumValue, item) => {
+    const payableSubscriptions = subscriptions.filter((item) => isSubscriptionDueInMonth(item, month));
+    const total = payableSubscriptions.reduce((sumValue, item) => {
       return sumValue + convert(item.amount, item.currency, totalCurrency, latestRate(month));
     }, 0);
 
@@ -2757,7 +2759,7 @@
 
     return `
       <div class="subscription-summary">
-        <p class="mini-label">${subscriptions.length} ativa${subscriptions.length === 1 ? "" : "s"} no mes</p>
+        <p class="mini-label">${subscriptions.length} ativa${subscriptions.length === 1 ? "" : "s"} no mes · ${payableSubscriptions.length} vencendo</p>
         <strong>${formatMoney(total, totalCurrency)}</strong>
       </div>
       ${limit ? `
@@ -2767,7 +2769,7 @@
               <button class="subscription-badge" type="button" data-action="open-modal" data-modal="subscription" data-id="${item.id}">
                 ${renderSubscriptionLogo(item, "subscription-logo subscription-icon")}
                 <strong>${escapeHtml(subscriptionName(item))}</strong>
-                <span class="subscription-value">${formatMoneyWithPrimary(item.amount, item.currency, month)}</span>
+                <span class="subscription-value">${subscriptionAmountLabel(item, month)}</span>
               </button>
             `;
           }).join("")}
@@ -2777,24 +2779,29 @@
         <div class="subscription-list">
           ${visible.map((item) => {
             const card = item.cardId ? creditCardById(item.cardId) : null;
-            const paid = isSubscriptionMonthPaid(item, month) || (item.paymentMethod === "bank" && isDateReached(subscriptionDateForMonth(item, month)));
+            const billable = isSubscriptionDueInMonth(item, month);
+            const dueDate = billable ? subscriptionDateForMonth(item, month) : nextSubscriptionDueDate(item, month);
+            const paid = billable && (isSubscriptionMonthPaid(item, month) || (item.paymentMethod === "bank" && isDateReached(subscriptionDateForMonth(item, month))));
             const autoPaid = isSubscriptionAutoPaid(item);
             const payment = item.paymentMethod === "card"
               ? `Cartao ${card ? card.nickname || card.issuer : ""}`.trim()
               : item.paymentMethod === "bank" ? "Debito em conta" : "Pix";
-            const dueState = dueStateForDate(subscriptionDateForMonth(item, month), paid);
+            const dueState = billable ? dueStateForDate(dueDate, paid) : { label: "Anual", tone: "blue" };
+            const dueLabel = subscriptionBillingCycle(item) === "annual"
+              ? `vencimento anual ${formatShortDate(dueDate)}`
+              : `vence dia ${item.dueDay || "--"}`;
             return `
               <div class="list-row subscription-detail-row ${paid ? "is-paid" : ""}">
                 ${renderSubscriptionLogo(item, "row-icon subscription-logo subscription-row-icon")}
                 <div class="row-main">
                   <p class="row-title">${escapeHtml(subscriptionName(item))}</p>
-                  <p class="row-meta">${countryMeta[item.country]?.label || ""} - vence dia ${item.dueDay || "--"} - ${escapeHtml(payment)}</p>
+                  <p class="row-meta">${countryMeta[item.country]?.label || ""} - ${dueLabel} - ${escapeHtml(payment)}</p>
                   <span class="chip ${paid ? "green" : dueState.tone}">${escapeHtml(paid ? "Pago" : dueState.label)}</span>
                 </div>
                 <div class="row-amount expense">
-                  ${formatMoneyWithPrimary(item.amount, item.currency, month)}
+                  ${subscriptionAmountLabel(item, month)}
                   <div class="row-actions">
-                    ${autoPaid || paid ? "" : `<button class="small-action" type="button" data-action="open-modal" data-modal="monthlyPayment" data-payment-id="subscription:${item.id}">Pagar</button>`}
+                    ${!billable || autoPaid || paid ? "" : `<button class="small-action" type="button" data-action="open-modal" data-modal="monthlyPayment" data-payment-id="subscription:${item.id}">Pagar</button>`}
                     <button class="small-action ghost" type="button" data-action="open-modal" data-modal="subscription" data-id="${item.id}">Editar</button>
                     <button class="small-action ghost" type="button" data-action="delete-subscription" data-id="${item.id}">Excluir</button>
                   </div>
@@ -2874,13 +2881,15 @@
       <div class="subscription-home-carousel" aria-label="Subscricoes atuais">
         <div class="subscription-home-track">
           ${visible.map((item) => {
-            const dueDate = subscriptionDateForMonth(item, month);
+            const billable = isSubscriptionDueInMonth(item, month);
+            const dueDate = billable ? subscriptionDateForMonth(item, month) : nextSubscriptionDueDate(item, month);
+            const cycleLabel = subscriptionBillingCycle(item) === "annual" ? "Anual · " : "";
             return `
               <button class="subscription-home-card" type="button" data-action="open-modal" data-modal="subscription" data-id="${item.id}">
                 ${renderSubscriptionLogo(item, "subscription-logo subscription-home-logo")}
                 <strong>${escapeHtml(subscriptionName(item))}</strong>
-                <em>${formatMoneyWithPrimary(item.amount, item.currency, month)}</em>
-                <small>Vence ${formatShortDate(dueDate)}</small>
+                <em>${subscriptionAmountLabel(item, month)}</em>
+                <small>${cycleLabel}Vence ${formatShortDate(dueDate)}</small>
               </button>
             `;
           }).join("")}
@@ -2910,6 +2919,7 @@
     const currency = primaryCurrency();
     const rate = latestRate(month);
     return monthSubscriptions(month, "global").reduce((total, item) => {
+      if (!isSubscriptionDueInMonth(item, month)) return total;
       return total + convert(item.amount, item.currency, currency, rate);
     }, 0);
   }
@@ -3751,6 +3761,7 @@
     updateCommitmentProviderField();
     updateSubscriptionCardField();
     updateSubscriptionCustomField();
+    updateSubscriptionCycleField();
     updateVehicleInsuranceCardField();
   }
 
@@ -4391,6 +4402,7 @@
     const selectedCurrency = item?.currency || countryMeta[activeCountry].currency;
     const serviceKey = item?.serviceKey || "spotify";
     const paymentMethod = item?.paymentMethod || "card";
+    const billingCycle = subscriptionBillingCycle(item);
     const cards = state.creditCards || [];
     const dueDate = item?.dueDate || dateInMonth(state.ui.selectedMonth, item?.dueDay || new Date().getDate());
     return `
@@ -4425,9 +4437,17 @@
             </select>
           </div>
           <div class="field">
-            <label for="subscriptionDueDate">Vencimento</label>
-            <input id="subscriptionDueDate" name="dueDate" required type="date" value="${escapeAttr(dueDate)}" />
+            <label for="subscriptionBillingCycle">Periodicidade</label>
+            <select id="subscriptionBillingCycle" name="billingCycle">
+              <option value="monthly" ${selectedAttr("monthly", billingCycle)}>Mensal</option>
+              <option value="annual" ${selectedAttr("annual", billingCycle)}>Anual</option>
+            </select>
           </div>
+        </div>
+        <div class="field subscription-due-date-field" data-annual-copy="Vencimento anual do plano">
+          <label for="subscriptionDueDate">${billingCycle === "annual" ? "Vencimento anual do plano" : "Vencimento"}</label>
+          <input id="subscriptionDueDate" name="dueDate" required type="date" value="${escapeAttr(dueDate)}" />
+          <p class="row-meta subscription-cycle-hint">${billingCycle === "annual" ? "A assinatura aparece todos os meses, mas so cobra no mes deste vencimento." : "Assinatura mensal recorrente a partir deste vencimento."}</p>
         </div>
         <div class="two-cols">
           <div class="field">
@@ -5324,9 +5344,11 @@
 
   function saveSubscription(form) {
     const data = formData(form);
+    const previous = findItem("subscriptions", data.id);
     const dueDate = data.dueDate || dateInMonth(state.ui.selectedMonth, 1);
     const dueDay = parseLocalDate(dueDate).getDate();
     const paymentMethod = data.paymentMethod || "card";
+    const billingCycle = data.billingCycle === "annual" ? "annual" : "monthly";
     if (paymentMethod === "card" && !data.cardId) {
       showToast("Selecione o cartao da subscricao.");
       return;
@@ -5337,14 +5359,15 @@
       customName: String(data.customName || "").trim(),
       amount: number(data.amount),
       currency: data.currency,
+      billingCycle,
       dueDate,
       dueDay: clamp(dueDay, 1, 31),
-      startMonth: dueDate.slice(0, 7),
+      startMonth: previous?.startMonth || (billingCycle === "annual" ? state.ui.selectedMonth : dueDate.slice(0, 7)),
       paymentMethod,
       cardId: paymentMethod === "card" ? data.cardId : "",
       active: true
     }, true);
-    state.ui.selectedMonth = dueDate.slice(0, 7);
+    if (billingCycle !== "annual") state.ui.selectedMonth = dueDate.slice(0, 7);
     saveState();
     closeModal();
     render();
@@ -5740,6 +5763,7 @@
     if (kind === "subscription") {
       const item = findItem("subscriptions", id);
       if (!item) return null;
+      if (!isSubscriptionDueInMonth(item, month)) return null;
       return {
         kind,
         id,
@@ -7279,7 +7303,7 @@
   function plannedSubscriptionEntries(month, country) {
     return subscriptionCalendarEntries(month, country).filter((item) => {
       if (item.paymentMethod === "card" || item.paid) return false;
-      return !isAutoPaidSubscriptionDue(item);
+      return !isAutoPaidSubscriptionDue(item, month);
     });
   }
 
@@ -7297,6 +7321,7 @@
 
   function subscriptionCalendarEntries(month, country) {
     return monthSubscriptions(month, country)
+      .filter((item) => isSubscriptionDueInMonth(item, month))
       .filter((item) => item.paymentMethod !== "card")
       .map((item) => {
         const dueDate = subscriptionDateForMonth(item, month);
@@ -7759,23 +7784,61 @@
     return meta.name;
   }
 
+  function subscriptionBillingCycle(item) {
+    return item?.billingCycle === "annual" ? "annual" : "monthly";
+  }
+
+  function subscriptionAmountLabel(item, month = state.ui.selectedMonth) {
+    const amount = formatMoneyWithPrimary(item.amount, item.currency, month);
+    if (subscriptionBillingCycle(item) !== "annual") return amount;
+    return `${amount}<small class="subscription-cycle-note">Anual</small>`;
+  }
+
   function monthSubscriptions(month, country) {
     return (state.subscriptions || [])
       .filter((item) => item.active !== false)
       .filter((item) => country === "global" || item.country === country || (item.cardId && creditCardById(item.cardId)?.country === country))
-      .filter((item) => isSubscriptionDueInMonth(item, month))
-      .sort((a, b) => subscriptionDateForMonth(a, month).localeCompare(subscriptionDateForMonth(b, month)));
+      .filter((item) => isSubscriptionActiveInMonth(item, month))
+      .sort((a, b) => {
+        const billableDiff = Number(isSubscriptionDueInMonth(b, month)) - Number(isSubscriptionDueInMonth(a, month));
+        if (billableDiff) return billableDiff;
+        return nextSubscriptionDueDate(a, month).localeCompare(nextSubscriptionDueDate(b, month));
+      });
   }
 
-  function isSubscriptionDueInMonth(item, month) {
+  function isSubscriptionActiveInMonth(item, month) {
     if (item.active === false) return false;
     const startMonth = item.startMonth || item.dueDate?.slice(0, 7) || "";
     return !startMonth || month >= startMonth;
   }
 
+  function isSubscriptionDueInMonth(item, month) {
+    if (!isSubscriptionActiveInMonth(item, month)) return false;
+    if (subscriptionBillingCycle(item) !== "annual") return true;
+    return subscriptionDateForMonth(item, month).slice(0, 7) === month;
+  }
+
   function subscriptionDateForMonth(item, month) {
+    if (subscriptionBillingCycle(item) === "annual") {
+      return annualSubscriptionDateForYear(item, Number(month.slice(0, 4)) || new Date().getFullYear());
+    }
     const dueDay = item?.dueDay || parseLocalDate(item?.dueDate).getDate() || 1;
     return dateInMonth(month, dueDay);
+  }
+
+  function annualSubscriptionDateForYear(item, year) {
+    const base = parseLocalDate(item?.dueDate || dateInMonth(state.ui.selectedMonth, item?.dueDay || 1));
+    const month = String(base.getMonth() + 1).padStart(2, "0");
+    return dateInMonth(`${year}-${month}`, base.getDate());
+  }
+
+  function nextSubscriptionDueDate(item, month = state.ui.selectedMonth) {
+    if (subscriptionBillingCycle(item) !== "annual") return subscriptionDateForMonth(item, month);
+    const [year, monthIndex] = month.split("-").map(Number);
+    const monthStart = parseLocalDate(`${year}-${String(monthIndex).padStart(2, "0")}-01`);
+    const thisYearDue = annualSubscriptionDateForYear(item, year);
+    if (parseLocalDate(thisYearDue) >= monthStart) return thisYearDue;
+    return annualSubscriptionDateForYear(item, year + 1);
   }
 
   function normalizedSourceType(type) {
@@ -8163,6 +8226,19 @@
     if (!show) cardSelect.value = "";
   }
 
+  function updateSubscriptionCycleField() {
+    const select = modalRoot.querySelector("#subscriptionBillingCycle");
+    const field = modalRoot.querySelector(".subscription-due-date-field");
+    const label = field?.querySelector("label");
+    const hint = field?.querySelector(".subscription-cycle-hint");
+    if (!select || !field || !label || !hint) return;
+    const annual = select.value === "annual";
+    label.textContent = annual ? "Vencimento anual do plano" : "Vencimento";
+    hint.textContent = annual
+      ? "A assinatura aparece todos os meses, mas so cobra no mes deste vencimento."
+      : "Assinatura mensal recorrente a partir deste vencimento.";
+  }
+
   function updateVehicleInsuranceCardField() {
     const select = modalRoot.querySelector("#vehicleInsurancePaymentType");
     const field = modalRoot.querySelector(".vehicle-insurance-card-field");
@@ -8409,6 +8485,7 @@
 
   function isSubscriptionMonthPaid(item, month) {
     if (!item) return false;
+    if (!isSubscriptionDueInMonth(item, month)) return false;
     if (item.paymentMethod === "card") return Boolean(item.cardId && isCardBillPaid(item.cardId, month));
     return isSubscriptionPaid(item.id, month);
   }
@@ -8417,8 +8494,8 @@
     return item?.paymentMethod === "card" || item?.paymentMethod === "bank";
   }
 
-  function isAutoPaidSubscriptionDue(item) {
-    return item?.paymentMethod === "bank" && isDateReached(item.date || subscriptionDateForMonth(item, state.ui.selectedMonth));
+  function isAutoPaidSubscriptionDue(item, month = state.ui.selectedMonth) {
+    return item?.paymentMethod === "bank" && isSubscriptionDueInMonth(item, month) && isDateReached(subscriptionDateForMonth(item, month));
   }
 
   function isDateReached(dateValue) {
