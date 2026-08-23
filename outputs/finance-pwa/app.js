@@ -223,7 +223,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=84")
+      navigator.serviceWorker.register("./service-worker.js?v=85")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -770,15 +770,13 @@
       } else {
         persistLocalState();
       }
-      await Promise.allSettled([
-        refreshFxQuotes(false),
-        refreshCryptoQuotes(false)
-      ]);
-      render();
+      await forcePwaUpdate();
+      const url = new URL(window.location.href);
+      url.searchParams.set("refresh", `manual-${Date.now()}`);
+      window.location.replace(url.toString());
     } catch (error) {
       remoteSession.error = error.message || "Falha ao atualizar.";
       render();
-    } finally {
       const remaining = Math.max(0, 3000 - (Date.now() - startedAt));
       setTimeout(() => {
         if (splash) {
@@ -787,6 +785,20 @@
         }
       }, remaining);
     }
+  }
+
+  async function forcePwaUpdate() {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+    if (!("serviceWorker" in navigator)) return;
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map(async (registration) => {
+      await registration.update().catch(() => {});
+      const worker = registration.waiting || registration.active || registration.installing;
+      if (worker) worker.postMessage({ type: "FORCE_APP_UPDATE" });
+    }));
   }
 
   function startRemoteAutoSync() {

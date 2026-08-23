@@ -1,10 +1,10 @@
-const CACHE_NAME = "nekuma-finance-v84";
+const CACHE_NAME = "nekuma-finance-v85";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./clean.html",
-  "./styles.css?v=84",
-  "./app.js?v=84",
+  "./styles.css?v=85",
+  "./app.js?v=85",
   "./supabase-config.js?v=26",
   "./manifest.webmanifest",
   "./assets/nekuma-logo-192.png",
@@ -27,6 +27,16 @@ self.addEventListener("activate", (event) => {
     )
   );
   self.clients.claim();
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "FORCE_APP_UPDATE") return;
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+      .then(() => self.skipWaiting())
+      .then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener("fetch", (event) => {

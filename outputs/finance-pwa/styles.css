@@ -221,7 +221,7 @@ h3 {
 }
 
 .mobile-refresh-button {
-  display: none;
+  display: grid;
 }
 
 .online-mode .logout-button {
