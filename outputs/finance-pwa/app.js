@@ -223,7 +223,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=83")
+      navigator.serviceWorker.register("./service-worker.js?v=84")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -3565,7 +3565,6 @@
               <p class="row-title"><span class="source-dot" style="background:${escapeAttr(source.color)}"></span>${escapeHtml(source.name)}</p>
               <p class="row-meta">${escapeHtml(sourceTypeLabel(source))} - ${source.currency || "JPY"}</p>
               <p class="row-meta">Pagamento: ${escapeHtml(source.payRule || "agenda nao informada")}</p>
-              ${salaryProgressionSummaryForMonth(source, state.ui.selectedMonth) ? `<p class="row-meta">${escapeHtml(salaryProgressionSummaryForMonth(source, state.ui.selectedMonth))}</p>` : ""}
               ${normalizeSalaryProgressions(source.salaryProgressions).length ? `<p class="row-meta">Progressao salarial: ${normalizeSalaryProgressions(source.salaryProgressions).length} etapa(s)</p>` : ""}
             </div>
             <div class="row-actions">
@@ -3662,7 +3661,6 @@
 
     const days = daysInMonth(month).map((date) => factoryScheduleDay(source, date));
     const counts = workScheduleCounts(days);
-    const salaryRateSummary = salaryProgressionSummaryForMonth(source, month);
     return `
       <div class="panel-head">
         <div class="panel-title-block">
@@ -3680,7 +3678,6 @@
         <span><strong>${counts.off}</strong> folgas</span>
         <span><strong>${counts.forcedOff}</strong> folga extra</span>
         <span><strong>Dom</strong> 35%</span>
-        ${salaryRateSummary ? `<span class="salary-rate-chip">${escapeHtml(salaryRateSummary)}</span>` : ""}
       </div>
       <div class="work-calendar-weekdays" aria-hidden="true">
         ${["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((day) => `<span>${day}</span>`).join("")}
@@ -3709,9 +3706,23 @@
   }
 
   function renderWorkOverrideList(source) {
-    const rows = workScheduleOverridesForSource(source.id)
+    const overrides = workScheduleOverridesForSource(source.id)
       .filter((item) => item.date?.slice(0, 7) === state.ui.selectedMonth)
-      .sort((a, b) => a.date.localeCompare(b.date));
+      .map((item) => ({
+        date: item.date,
+        title: `${formatShortDate(item.date)} - ${workOverrideTypeLabel(item.type)}`,
+        meta: item.note || "Ajuste manual da escala",
+        action: `<button class="small-action ghost" type="button" data-action="delete-work-override" data-id="${item.id}">Excluir</button>`
+      }));
+    const salaryChanges = normalizeSalaryProgressions(source.salaryProgressions)
+      .filter((item) => item.effectiveDate?.slice(0, 7) === state.ui.selectedMonth)
+      .map((item) => ({
+        date: item.effectiveDate,
+        title: `A partir de ${formatShortDate(item.effectiveDate)} - Salario alterado`,
+        meta: item.note || "Progressao salarial cadastrada",
+        action: ""
+      }));
+    const rows = [...overrides, ...salaryChanges].sort((a, b) => a.date.localeCompare(b.date));
     if (!rows.length) return "";
     return `
       <div class="work-override-list">
@@ -3719,10 +3730,10 @@
         ${rows.map((item) => `
           <div class="list-row compact">
             <div>
-              <p class="row-title">${formatShortDate(item.date)} - ${escapeHtml(workOverrideTypeLabel(item.type))}</p>
-              <p class="row-meta">${escapeHtml(item.note || "Ajuste manual da escala")}</p>
+              <p class="row-title">${escapeHtml(item.title)}</p>
+              <p class="row-meta">${escapeHtml(item.meta)}</p>
             </div>
-            <button class="small-action ghost" type="button" data-action="delete-work-override" data-id="${item.id}">Excluir</button>
+            ${item.action}
           </div>
         `).join("")}
       </div>
@@ -8190,18 +8201,6 @@
       hourlyRate: number(latest?.hourlyRate || baseHourlyRate),
       note: latest?.note || (baseHourlyRate > 0 ? "Base" : "")
     };
-  }
-
-  function salaryProgressionSummaryForMonth(source, month = state.ui.selectedMonth) {
-    if (normalizedSourceType(source?.type) !== "factory") return "";
-    const monthDays = daysInMonth(month);
-    if (!monthDays.length) return "";
-    const currency = source.currency || primaryCurrency();
-    const firstRate = salaryHourlyRateForDate(source, monthDays[0]);
-    const lastRate = salaryHourlyRateForDate(source, monthDays[monthDays.length - 1]);
-    if (firstRate <= 0 && lastRate <= 0) return "";
-    if (firstRate === lastRate) return `Valor hora do mes: ${formatMoneyWithPrimary(firstRate, currency, month)}`;
-    return `Valor hora do mes: ${formatMoneyWithPrimary(firstRate, currency, month)} -> ${formatMoneyWithPrimary(lastRate, currency, month)}`;
   }
 
   function shiftDurationHours(range) {

@@ -2771,13 +2771,6 @@ canvas {
   font-size: 1.05rem;
 }
 
-.work-calendar-summary .salary-rate-chip {
-  grid-column: span 2;
-  background: rgba(210, 238, 255, 0.62);
-  border-color: rgba(116, 181, 224, 0.32);
-  color: #315f7d;
-}
-
 .work-calendar-weekdays,
 .work-calendar-grid {
   display: grid;
@@ -4522,10 +4515,6 @@ h1 {
 
   .work-calendar-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .work-calendar-summary .salary-rate-chip {
-    grid-column: 1 / -1;
   }
 
   .work-calendar-grid,
