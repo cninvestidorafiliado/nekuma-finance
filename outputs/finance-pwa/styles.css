@@ -181,6 +181,37 @@ h3 {
   background: var(--gold);
 }
 
+.news-button {
+  position: relative;
+}
+
+.news-button.has-unread {
+  color: var(--ink);
+  background: linear-gradient(135deg, #d9ff66, var(--gold));
+}
+
+.news-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  place-items: center;
+  border: 2px solid var(--paper);
+  border-radius: 999px;
+  color: var(--paper);
+  background: var(--red);
+  font-size: 0.62rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.news-badge:empty {
+  display: none;
+}
+
 .logout-button {
   display: none;
   width: auto;
@@ -1056,6 +1087,10 @@ canvas {
 
 .row-icon.green {
   background: #bfe6cd;
+}
+
+.row-icon.gold {
+  background: var(--gold);
 }
 
 .row-icon.red {
@@ -2736,6 +2771,13 @@ canvas {
   font-size: 1.05rem;
 }
 
+.work-calendar-summary .salary-rate-chip {
+  grid-column: span 2;
+  background: rgba(210, 238, 255, 0.62);
+  border-color: rgba(116, 181, 224, 0.32);
+  color: #315f7d;
+}
+
 .work-calendar-weekdays,
 .work-calendar-grid {
   display: grid;
@@ -2852,6 +2894,80 @@ canvas {
 .form-section-title span {
   color: var(--muted);
   font-size: 0.78rem;
+}
+
+.salary-progression-card {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 10px;
+  padding: 12px;
+  border: 1px solid rgba(66, 166, 122, 0.22);
+  border-radius: var(--radius);
+  background: rgba(66, 166, 122, 0.06);
+}
+
+.salary-progression-head {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  padding-top: 0;
+}
+
+.salary-progression-list {
+  display: grid;
+  gap: 8px;
+}
+
+.salary-progression-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.8fr) minmax(130px, 0.8fr) minmax(160px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 250, 244, 0.82);
+}
+
+.salary-progression-remove {
+  min-height: 42px;
+}
+
+.app-news-list {
+  display: grid;
+  gap: 10px;
+}
+
+.app-news-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper-2);
+}
+
+.app-news-row.is-unread {
+  border-color: rgba(245, 200, 76, 0.72);
+  background: rgba(245, 200, 76, 0.12);
+}
+
+.app-news-title-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.app-news-title-line strong {
+  color: var(--ink);
+}
+
+.app-news-title-line small,
+.app-news-row p {
+  margin: 0;
+  color: var(--muted);
 }
 
 .calendar-amount {
@@ -4408,6 +4524,10 @@ h1 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .work-calendar-summary .salary-rate-chip {
+    grid-column: 1 / -1;
+  }
+
   .work-calendar-grid,
   .work-calendar-weekdays {
     gap: 4px;
@@ -4627,6 +4747,17 @@ h1 {
   .logout-button {
     min-width: 0;
     padding: 0 10px;
+  }
+
+  .salary-progression-row,
+  .app-news-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .salary-progression-remove,
+  .app-news-row .small-action {
+    width: 100%;
   }
 
   .content-panel,

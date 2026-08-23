@@ -4,6 +4,7 @@
   const STORAGE_KEY = "ponte-financeira-state-v4";
   const REMOTE_HOUSEHOLD_KEY = "ponte-financeira-household-id";
   const DUE_ALERT_KEY = "nekuma-finance-due-alert-key";
+  const APP_NEWS_READ_KEY = "nekuma-finance-news-read";
   const LEGACY_STORAGE_KEYS = ["ponte-financeira-state-v1", "ponte-financeira-state-v2"];
   const PRIMARY_CURRENCY = "JPY";
   const DEFAULT_SECONDARY_CURRENCY = "BRL";
@@ -160,6 +161,32 @@
     "0x2105": { name: "Base", symbol: "ETH" },
     "0xaa36a7": { name: "Sepolia", symbol: "ETH" }
   };
+  const appNews = [
+    {
+      id: "salary-progression-calc-v83",
+      date: "2026-08-23",
+      title: "Calculo da progressao salarial corrigido",
+      body: "O salario estimado agora resolve o valor hora por dia trabalhado. Se houver aumento no meio ou no inicio de um mes futuro, o calculo acompanha automaticamente o mes selecionado."
+    },
+    {
+      id: "work-data-personal-v82",
+      date: "2026-08-23",
+      title: "Dados de trabalho agora sao pessoais",
+      body: "Empresa, ban, calendario de turnos, folgas extras, valor hora e previsao salarial ficam ligados ao usuario logado. Contas, cartoes, moradia, cripto e demais dados financeiros continuam sincronizados com a familia."
+    },
+    {
+      id: "salary-progression-v82",
+      date: "2026-08-23",
+      title: "Progressao salarial",
+      body: "No cadastro da empresa do tipo fabrica, voce pode adicionar datas futuras de aumento do valor hora. O salario estimado passa a usar o valor correto para cada dia do mes."
+    },
+    {
+      id: "annual-subscriptions-v81",
+      date: "2026-08-17",
+      title: "Subscricoes mensais e anuais",
+      body: "Assinaturas agora podem ser mensais ou anuais. Planos anuais aparecem em todos os meses, mas so entram como cobranca no mes de vencimento."
+    }
+  ];
 
   const app = document.getElementById("app");
   const appGreeting = document.getElementById("app-greeting");
@@ -196,7 +223,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=81")
+      navigator.serviceWorker.register("./service-worker.js?v=83")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -286,6 +313,11 @@
     if (action === "remote-sync-now") syncRemoteNow();
     if (action === "reload-app") refreshAppInPlace();
     if (action === "toggle-visibility") togglePanelVisibility(button.dataset.panel);
+    if (action === "open-app-news") showAppNewsModal();
+    if (action === "mark-app-news-read") markAppNewsRead(button.dataset.newsId);
+    if (action === "mark-all-app-news-read") markAllAppNewsRead();
+    if (action === "add-salary-progression-step") addSalaryProgressionRow();
+    if (action === "remove-salary-progression-step") removeSalaryProgressionRow(button);
     if (action === "dismiss-due-alert") closeModal();
     if (action === "copy-invite-code") copyInviteCode();
     if (action === "request-account-delete") showAccountDeleteInfo();
@@ -673,7 +705,7 @@
     remoteSaveTimer = null;
     remoteSession.saving = true;
     const now = new Date().toISOString();
-    const nextState = { ...state, settings: { ...state.settings, dataMode: "online" } };
+    const nextState = withCurrentWorkOwner({ ...state, settings: { ...state.settings, dataMode: "online" } });
 
     try {
       const { data, error } = await remoteStore.client.rpc("save_app_state", {
@@ -881,9 +913,9 @@
       web3Wallet: normalizeWeb3Wallet(raw.web3Wallet || base.web3Wallet),
       vehicle: normalizeVehicle(raw.vehicle, base.vehicle),
       vehicleMaintenance: Array.isArray(raw.vehicleMaintenance) ? raw.vehicleMaintenance : base.vehicleMaintenance,
-      incomeSources: Array.isArray(raw.incomeSources) ? raw.incomeSources : base.incomeSources,
-      workIncomes: Array.isArray(raw.workIncomes) ? raw.workIncomes : base.workIncomes,
-      workScheduleOverrides: Array.isArray(raw.workScheduleOverrides) ? raw.workScheduleOverrides : base.workScheduleOverrides,
+      incomeSources: normalizeIncomeSources(raw.incomeSources, base.incomeSources),
+      workIncomes: normalizeWorkItems(raw.workIncomes, base.workIncomes),
+      workScheduleOverrides: normalizeWorkItems(raw.workScheduleOverrides, base.workScheduleOverrides),
       paidCommitments: raw.paidCommitments || {}
     };
     normalized.ui.activeCountry = "global";
@@ -891,6 +923,54 @@
       normalized.ui.activeTab = "dashboard";
     }
     return normalized;
+  }
+
+  function normalizeIncomeSources(items, fallback = []) {
+    if (!Array.isArray(items)) return fallback;
+    return items.map((item) => ({
+      ...item,
+      ownerId: item.ownerId || item.createdBy || "",
+      salaryProgressions: normalizeSalaryProgressions(item.salaryProgressions)
+    }));
+  }
+
+  function normalizeWorkItems(items, fallback = []) {
+    if (!Array.isArray(items)) return fallback;
+    return items.map((item) => ({
+      ...item,
+      ownerId: item.ownerId || item.createdBy || ""
+    }));
+  }
+
+  function withCurrentWorkOwner(rawState) {
+    const ownerId = currentWorkOwnerId();
+    const stamp = (item) => {
+      const existingOwner = item.ownerId && item.ownerId !== "local" ? item.ownerId : "";
+      const existingCreator = item.createdBy && item.createdBy !== "local" ? item.createdBy : "";
+      return {
+        ...item,
+        ownerId: existingOwner || existingCreator || ownerId
+      };
+    };
+    return {
+      ...rawState,
+      incomeSources: Array.isArray(rawState.incomeSources) ? rawState.incomeSources.map(stamp) : [],
+      workIncomes: Array.isArray(rawState.workIncomes) ? rawState.workIncomes.map(stamp) : [],
+      workScheduleOverrides: Array.isArray(rawState.workScheduleOverrides) ? rawState.workScheduleOverrides.map(stamp) : []
+    };
+  }
+
+  function normalizeSalaryProgressions(items) {
+    if (!Array.isArray(items)) return [];
+    return items
+      .map((item) => ({
+        id: item.id || uid("sp"),
+        effectiveDate: String(item.effectiveDate || item.date || "").slice(0, 10),
+        hourlyRate: number(item.hourlyRate || item.salaryHourlyRate || item.value),
+        note: String(item.note || "").trim()
+      }))
+      .filter((item) => item.effectiveDate && item.hourlyRate > 0)
+      .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
   }
 
   function normalizeVehicle(rawVehicle, baseVehicle) {
@@ -1309,6 +1389,7 @@
     document.body.classList.toggle("auth-mode", remoteStore.enabled && remoteSession.status !== "ready");
     document.body.classList.toggle("online-mode", remoteStore.enabled && remoteSession.status === "ready");
     updateAppGreeting();
+    updateAppNewsButton();
     if (remoteStore.enabled && remoteSession.status !== "ready") {
       app.innerHTML = renderAuthGate();
       refreshIcons();
@@ -1351,6 +1432,16 @@
         : `Hey, ${family}`;
     }
     if (countryContext) countryContext.textContent = countryContextLabel();
+  }
+
+  function updateAppNewsButton() {
+    const button = document.getElementById("app-news-button");
+    const badge = document.getElementById("app-news-badge");
+    if (!button || !badge) return;
+    const count = unreadAppNews().length;
+    button.classList.toggle("has-unread", count > 0);
+    badge.textContent = count > 9 ? "9+" : String(count || "");
+    badge.hidden = count === 0;
   }
 
   function countryContextLabel() {
@@ -1582,6 +1673,82 @@
       </div>
     `;
     refreshIcons();
+  }
+
+  function showAppNewsModal() {
+    const readIds = readAppNewsIds();
+    modalRoot.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal app-news-modal" role="dialog" aria-modal="true" aria-label="Novidades do app">
+          <div class="modal-head">
+            <div>
+              <h2>Novidades do app</h2>
+              <p class="row-meta">Atualizacoes importantes do Nekuma Finance.</p>
+            </div>
+            <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+          </div>
+          <div class="app-news-list">
+            ${appNews.map((item) => {
+              const read = readIds.includes(item.id);
+              return `
+                <article class="app-news-row ${read ? "is-read" : "is-unread"}">
+                  <span class="row-icon ${read ? "green" : "gold"}">${read ? "OK" : "!"}</span>
+                  <div>
+                    <div class="app-news-title-line">
+                      <strong>${escapeHtml(item.title)}</strong>
+                      <small>${formatShortDate(item.date)}</small>
+                    </div>
+                    <p>${escapeHtml(item.body)}</p>
+                  </div>
+                  <button class="small-action ${read ? "ghost" : ""}" type="button" data-action="mark-app-news-read" data-news-id="${escapeAttr(item.id)}">${read ? "Lido" : "Marcar lido"}</button>
+                </article>
+              `;
+            }).join("")}
+          </div>
+          <div class="form-actions">
+            <button class="secondary-button" type="button" data-action="close-modal">Fechar</button>
+            <button class="primary-button" type="button" data-action="mark-all-app-news-read">Marcar tudo como lido</button>
+          </div>
+        </div>
+      </div>
+    `;
+    refreshIcons();
+  }
+
+  function unreadAppNews() {
+    const readIds = readAppNewsIds();
+    return appNews.filter((item) => !readIds.includes(item.id));
+  }
+
+  function readAppNewsIds() {
+    try {
+      const value = JSON.parse(localStorage.getItem(appNewsStorageKey()) || "[]");
+      return Array.isArray(value) ? value.map(String) : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function writeAppNewsIds(ids) {
+    localStorage.setItem(appNewsStorageKey(), JSON.stringify(Array.from(new Set(ids.filter(Boolean)))));
+    updateAppNewsButton();
+  }
+
+  function appNewsStorageKey() {
+    return `${APP_NEWS_READ_KEY}:${currentUserAuthor().id}`;
+  }
+
+  function markAppNewsRead(newsId) {
+    const ids = readAppNewsIds();
+    if (newsId && !ids.includes(newsId)) ids.push(newsId);
+    writeAppNewsIds(ids);
+    showAppNewsModal();
+  }
+
+  function markAllAppNewsRead() {
+    writeAppNewsIds(appNews.map((item) => item.id));
+    closeModal();
+    showToast("Novidades marcadas como lidas.");
   }
 
   function upcomingDueAlerts(days = 3) {
@@ -3317,7 +3484,7 @@
   }
 
   function renderIncomePanel(limit) {
-    const sources = state.incomeSources || [];
+    const sources = userIncomeSources();
     const monthRows = monthWorkIncomes(state.ui.selectedMonth);
     const visibleSources = limit ? sources.slice(0, limit) : sources;
     const rate = latestRate(state.ui.selectedMonth);
@@ -3380,7 +3547,7 @@
   }
 
   function renderIncomeSourcesSettingsPanel() {
-    const sources = state.incomeSources || [];
+    const sources = userIncomeSources();
     if (!sources.length) {
       return `
         <div class="empty-action">
@@ -3398,6 +3565,8 @@
               <p class="row-title"><span class="source-dot" style="background:${escapeAttr(source.color)}"></span>${escapeHtml(source.name)}</p>
               <p class="row-meta">${escapeHtml(sourceTypeLabel(source))} - ${source.currency || "JPY"}</p>
               <p class="row-meta">Pagamento: ${escapeHtml(source.payRule || "agenda nao informada")}</p>
+              ${salaryProgressionSummaryForMonth(source, state.ui.selectedMonth) ? `<p class="row-meta">${escapeHtml(salaryProgressionSummaryForMonth(source, state.ui.selectedMonth))}</p>` : ""}
+              ${normalizeSalaryProgressions(source.salaryProgressions).length ? `<p class="row-meta">Progressao salarial: ${normalizeSalaryProgressions(source.salaryProgressions).length} etapa(s)</p>` : ""}
             </div>
             <div class="row-actions">
               <button class="small-action ghost" type="button" data-action="open-modal" data-modal="incomeSource" data-id="${source.id}">Editar</button>
@@ -3411,7 +3580,7 @@
 
   function renderIncomePaymentsPanel(limit) {
     const rows = monthWorkIncomes(state.ui.selectedMonth);
-    const sources = state.incomeSources || [];
+    const sources = userIncomeSources();
     if (!sources.length) {
       return `
         <div class="empty-action">
@@ -3493,6 +3662,7 @@
 
     const days = daysInMonth(month).map((date) => factoryScheduleDay(source, date));
     const counts = workScheduleCounts(days);
+    const salaryRateSummary = salaryProgressionSummaryForMonth(source, month);
     return `
       <div class="panel-head">
         <div class="panel-title-block">
@@ -3510,6 +3680,7 @@
         <span><strong>${counts.off}</strong> folgas</span>
         <span><strong>${counts.forcedOff}</strong> folga extra</span>
         <span><strong>Dom</strong> 35%</span>
+        ${salaryRateSummary ? `<span class="salary-rate-chip">${escapeHtml(salaryRateSummary)}</span>` : ""}
       </div>
       <div class="work-calendar-weekdays" aria-hidden="true">
         ${["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((day) => `<span>${day}</span>`).join("")}
@@ -4764,10 +4935,11 @@
   }
 
   function renderIncomeSourceModal(item = null) {
-    const nextColor = item?.color || sourceColors[(state.incomeSources || []).length % sourceColors.length];
+    const nextColor = item?.color || sourceColors[userIncomeSources().length % sourceColors.length];
     const sourceType = normalizedSourceType(item?.type);
     const customType = item?.customType || (sourceType === "other" && item?.type && !incomeSourceTypeMeta[item.type] ? item.type : "");
     const schedule = factoryScheduleConfig(item || {});
+    const salaryProgressions = normalizeSalaryProgressions(item?.salaryProgressions || []);
     return `
       <div class="modal-head">
         <h2>${item ? "Editar empresa" : "Nova empresa"}</h2>
@@ -4863,6 +5035,18 @@
                 <option value="yes" ${selectedAttr("yes", item?.salarySundayAllDay === false ? "no" : "yes")}>Adicional o dia inteiro</option>
                 <option value="no" ${selectedAttr("no", item?.salarySundayAllDay === false ? "no" : "yes")}>Nao calcular domingo</option>
               </select>
+            </div>
+          </div>
+          <div class="salary-progression-card">
+            <div class="form-section-title compact salary-progression-head">
+              <div>
+                <strong>Progressao salarial</strong>
+                <span>Use quando o valor hora muda a partir de uma data.</span>
+              </div>
+              <button class="small-action ghost" type="button" data-action="add-salary-progression-step">+</button>
+            </div>
+            <div class="salary-progression-list" data-salary-progression-list>
+              ${(salaryProgressions.length ? salaryProgressions : [{}]).map((row) => renderSalaryProgressionRow(row)).join("")}
             </div>
           </div>
           <div class="two-cols">
@@ -4970,6 +5154,26 @@
           <button class="primary-button" type="submit">Salvar empresa</button>
         </div>
       </form>
+    `;
+  }
+
+  function renderSalaryProgressionRow(row = {}) {
+    return `
+      <div class="salary-progression-row">
+        <div class="field">
+          <label>Data de inicio</label>
+          <input name="progressionDate" type="date" value="${escapeAttr(row.effectiveDate || "")}" />
+        </div>
+        <div class="field">
+          <label>Novo valor hora</label>
+          <input name="progressionHourlyRate" inputmode="decimal" placeholder="Ex: 1600" value="${escapeAttr(row.hourlyRate || "")}" />
+        </div>
+        <div class="field">
+          <label>Observacao</label>
+          <input name="progressionNote" placeholder="Ex: apos 6 meses" value="${escapeAttr(row.note || "")}" />
+        </div>
+        <button class="small-action ghost salary-progression-remove" type="button" data-action="remove-salary-progression-step" aria-label="Remover progressao">Remover</button>
+      </div>
     `;
   }
 
@@ -5099,7 +5303,7 @@
   }
 
   function renderWorkIncomeModal(item = null) {
-    const sources = state.incomeSources || [];
+    const sources = userIncomeSources();
     const selectedSource = item ? incomeSourceById(item.sourceId) : sources[0];
     const selectedCurrency = item?.currency || selectedSource?.currency || "JPY";
     if (!sources.length) {
@@ -5486,7 +5690,9 @@
     const sourceType = normalizedSourceType(data.type);
     const isFactory = sourceType === "factory";
     const banNaming = isFactory ? String(data.banNaming || "colors") : "";
+    const author = currentUserAuthor();
     const updated = upsertItem("incomeSources", data.id, {
+      ownerId: author.id,
       name: data.name.trim(),
       type: sourceType,
       customType: sourceType === "other" ? String(data.customType || "").trim() : "",
@@ -5500,7 +5706,7 @@
       salaryNightStart: isFactory ? String(data.salaryNightStart || "22:00") : "",
       salaryNightEnd: isFactory ? String(data.salaryNightEnd || "05:00") : "",
       salarySundayAllDay: isFactory ? data.salarySundayAllDay !== "no" : false,
-      color: data.color || sourceColors[(state.incomeSources || []).length % sourceColors.length],
+      color: data.color || sourceColors[userIncomeSources().length % sourceColors.length],
       currency: data.currency || "JPY",
       payRule: String(data.payRule || "").trim(),
       shiftSystem: isFactory ? String(data.shiftSystem || "nikoutai") : "",
@@ -5518,7 +5724,8 @@
       myBanName: isFactory ? String(data.myBanName || "").trim() : "",
       myBanColor: isFactory && banNaming === "colors" ? String(data.myBanColor || data.color || "#42a67a") : "",
       cycleStartDate: isFactory ? String(data.cycleStartDate || "") : "",
-      cycleStartPhase: isFactory ? String(data.cycleStartPhase || "day") : ""
+      cycleStartPhase: isFactory ? String(data.cycleStartPhase || "day") : "",
+      salaryProgressions: isFactory ? collectSalaryProgressions(form) : []
     });
     saveState();
     closeModal();
@@ -5529,7 +5736,9 @@
   function saveWorkIncome(form) {
     const data = formData(form);
     const source = incomeSourceById(data.sourceId);
+    const author = currentUserAuthor();
     const updated = upsertItem("workIncomes", data.id, {
+      ownerId: author.id,
       sourceId: data.sourceId,
       sourceName: source.name,
       sourceType: source.type,
@@ -5555,7 +5764,9 @@
   function saveWorkOverride(form) {
     const data = formData(form);
     const source = incomeSourceById(data.sourceId);
+    const author = currentUserAuthor();
     const updated = upsertItem("workScheduleOverrides", data.id, {
+      ownerId: author.id,
       sourceId: data.sourceId,
       sourceName: source.name,
       date: data.date,
@@ -5823,7 +6034,7 @@
   }
 
   function monthlyPaymentSourceOptions() {
-    return (state.incomeSources || [])
+    return userIncomeSources()
       .map((source) => `<option value="${source.id}">${escapeHtml(source.name)} - ${escapeHtml(sourceTypeLabel(source))}</option>`)
       .join("");
   }
@@ -7042,7 +7253,7 @@
   }
 
   function monthWorkIncomes(month) {
-    return (state.workIncomes || [])
+    return userWorkIncomes()
       .filter((item) => item.date && item.date.slice(0, 7) === month)
       .sort((a, b) => b.date.localeCompare(a.date));
   }
@@ -7741,7 +7952,7 @@
   }
 
   function incomeSourceById(id) {
-    return (state.incomeSources || []).find((source) => source.id === id) || {
+    return userIncomeSources().find((source) => source.id === id) || (state.incomeSources || []).find((source) => source.id === id) || {
       id: "",
       name: "Renda",
       type: "extra",
@@ -7854,8 +8065,33 @@
     return incomeSourceTypeMeta[type] || "Renda";
   }
 
+  function currentWorkOwnerId() {
+    return currentUserAuthor().id || "local";
+  }
+
+  function workItemOwnerId(item = {}) {
+    return item.ownerId || item.createdBy || "local";
+  }
+
+  function isCurrentUserWorkItem(item = {}) {
+    const ownerId = workItemOwnerId(item);
+    return ownerId === "local" || ownerId === currentWorkOwnerId();
+  }
+
+  function userIncomeSources() {
+    return (state.incomeSources || []).filter(isCurrentUserWorkItem);
+  }
+
+  function userWorkIncomes() {
+    return (state.workIncomes || []).filter(isCurrentUserWorkItem);
+  }
+
+  function userWorkScheduleOverrides() {
+    return (state.workScheduleOverrides || []).filter(isCurrentUserWorkItem);
+  }
+
   function factorySources() {
-    return (state.incomeSources || []).filter((source) => normalizedSourceType(source.type) === "factory");
+    return userIncomeSources().filter((source) => normalizedSourceType(source.type) === "factory");
   }
 
   function primaryFactorySource() {
@@ -7894,14 +8130,14 @@
 
   function estimateFactorySourceSalary(source, month = state.ui.selectedMonth) {
     const currency = source.currency || primaryCurrency();
-    const hourlyRate = number(source.salaryHourlyRate || source.hourlyRate);
+    const baseHourlyRate = number(source.salaryHourlyRate || source.hourlyRate);
     const teijiHours = number(source.salaryTeijiHours);
     const overtimeHours = number(source.salaryFixedOvertimeHours);
     const overtimeRate = number(source.salaryOvertimeRate) / 100;
     const nightRate = number(source.salaryNightRate) / 100;
     const sundayRate = number(source.salarySundayRate) / 100;
     const sundayAllDay = source.salarySundayAllDay !== false;
-    const configured = hourlyRate > 0 && teijiHours > 0;
+    const configured = (baseHourlyRate > 0 || normalizeSalaryProgressions(source.salaryProgressions).some((item) => item.hourlyRate > 0)) && teijiHours > 0;
     const base = {
       configured,
       currency,
@@ -7915,9 +8151,11 @@
     if (!configured) return base;
 
     return daysInMonth(month)
-      .map((date) => factoryScheduleDay(source, date))
-      .filter((day) => isWorkedScheduleDay(day))
-      .reduce((current, day) => {
+      .map((date) => ({ date, day: factoryScheduleDay(source, date) }))
+      .filter(({ day }) => isWorkedScheduleDay(day))
+      .reduce((current, { date, day }) => {
+        const hourlyRate = salaryHourlyRateForDate(source, date);
+        if (hourlyRate <= 0) return current;
         const shiftHours = shiftDurationHours(day.time);
         const paidTeijiHours = teijiHours || shiftHours;
         const totalShiftHours = Math.max(shiftHours, paidTeijiHours + overtimeHours);
@@ -7932,6 +8170,38 @@
         current.total = current.teiji + current.overtime + current.night + current.sunday;
         return current;
       }, base);
+  }
+
+  function salaryHourlyRateForDate(source, date) {
+    return activeSalaryProgressionForDate(source, date).hourlyRate;
+  }
+
+  function activeSalaryProgressionForDate(source, date) {
+    const baseHourlyRate = number(source.salaryHourlyRate || source.hourlyRate);
+    const target = parseLocalDate(date);
+    const targetTime = target ? startOfDay(target).getTime() : 0;
+    const progressions = normalizeSalaryProgressions(source.salaryProgressions).filter((item) => {
+      const effective = parseLocalDate(item.effectiveDate);
+      return effective && startOfDay(effective).getTime() <= targetTime;
+    });
+    const latest = progressions[progressions.length - 1];
+    return {
+      effectiveDate: latest?.effectiveDate || "",
+      hourlyRate: number(latest?.hourlyRate || baseHourlyRate),
+      note: latest?.note || (baseHourlyRate > 0 ? "Base" : "")
+    };
+  }
+
+  function salaryProgressionSummaryForMonth(source, month = state.ui.selectedMonth) {
+    if (normalizedSourceType(source?.type) !== "factory") return "";
+    const monthDays = daysInMonth(month);
+    if (!monthDays.length) return "";
+    const currency = source.currency || primaryCurrency();
+    const firstRate = salaryHourlyRateForDate(source, monthDays[0]);
+    const lastRate = salaryHourlyRateForDate(source, monthDays[monthDays.length - 1]);
+    if (firstRate <= 0 && lastRate <= 0) return "";
+    if (firstRate === lastRate) return `Valor hora do mes: ${formatMoneyWithPrimary(firstRate, currency, month)}`;
+    return `Valor hora do mes: ${formatMoneyWithPrimary(firstRate, currency, month)} -> ${formatMoneyWithPrimary(lastRate, currency, month)}`;
   }
 
   function shiftDurationHours(range) {
@@ -8124,7 +8394,7 @@
   }
 
   function workScheduleOverridesForSource(sourceId) {
-    return (state.workScheduleOverrides || []).filter((item) => item.sourceId === sourceId);
+    return userWorkScheduleOverrides().filter((item) => item.sourceId === sourceId);
   }
 
 
@@ -8139,6 +8409,37 @@
 
   function workOverrideTypeShortLabel(type) {
     return type === "paidOff" ? "Yukyu" : "Extra";
+  }
+
+  function addSalaryProgressionRow() {
+    const list = modalRoot.querySelector("[data-salary-progression-list]");
+    if (!list) return;
+    const emptyRows = Array.from(list.querySelectorAll(".salary-progression-row"))
+      .filter((row) => !row.querySelector("[name='progressionDate']")?.value && !row.querySelector("[name='progressionHourlyRate']")?.value);
+    if (emptyRows.length) {
+      emptyRows[0].querySelector("[name='progressionDate']")?.focus();
+      return;
+    }
+    list.insertAdjacentHTML("beforeend", renderSalaryProgressionRow({}));
+    list.lastElementChild?.querySelector("input")?.focus();
+  }
+
+  function removeSalaryProgressionRow(button) {
+    const row = button.closest(".salary-progression-row");
+    const list = button.closest("[data-salary-progression-list]");
+    if (!row || !list) return;
+    row.remove();
+    if (!list.querySelector(".salary-progression-row")) {
+      list.insertAdjacentHTML("beforeend", renderSalaryProgressionRow({}));
+    }
+  }
+
+  function collectSalaryProgressions(form) {
+    return normalizeSalaryProgressions(Array.from(form.querySelectorAll(".salary-progression-row")).map((row) => ({
+      effectiveDate: row.querySelector("[name='progressionDate']")?.value || "",
+      hourlyRate: row.querySelector("[name='progressionHourlyRate']")?.value || "",
+      note: row.querySelector("[name='progressionNote']")?.value || ""
+    })));
   }
 
   function updateIncomeSourceDynamicFields() {
