@@ -22,6 +22,43 @@
     japao: { label: "Japao", short: "JP", currency: "JPY", color: "#f5c84c" },
     global: { label: "Global", short: "GL", currency: "JPY", color: "#11110f" }
   };
+  const bankSuggestions = {
+    japao: ["Yuucho", "Rakuten Bank", "SBI Sumishin", "PayPay Bank", "MUFG", "SMBC", "Mizuho", "Seven Bank"],
+    brasil: ["Nubank", "Caixa", "Santander", "Itau", "Banco do Brasil", "Bradesco", "Inter", "C6 Bank"]
+  };
+  const bankAccountTypes = {
+    japao: {
+      futsu: "Futsu - conta normal",
+      savings: "Poupanca",
+      salary: "Conta salario",
+      other: "Outro"
+    },
+    brasil: {
+      checking: "Conta corrente",
+      savings: "Poupanca",
+      salary: "Conta salario",
+      payment: "Conta pagamento",
+      other: "Outro"
+    }
+  };
+  const receiptMethods = {
+    japao: {
+      salary: "Salario",
+      transfer: "Transferencia",
+      service: "Servico avulso",
+      cash: "Dinheiro",
+      other: "Outro"
+    },
+    brasil: {
+      pix: "Pix",
+      ted: "TED",
+      salary: "Salario",
+      transfer: "Transferencia",
+      service: "Servico avulso",
+      cash: "Dinheiro",
+      other: "Outro"
+    }
+  };
   const typeMeta = {
     income: { label: "Entrada", icon: "+", tone: "green" },
     expense: { label: "Despesa", icon: "-", tone: "red" },
@@ -40,7 +77,10 @@
     investments: "iv",
     creditCards: "cc",
     cardPurchases: "cp",
+    bankAccounts: "ba",
     subscriptions: "su",
+    financialGoals: "go",
+    goalContributions: "gc",
     cryptoAssets: "cr",
     housingCards: "hc",
     vehicleMaintenance: "vm",
@@ -161,7 +201,34 @@
     "0x2105": { name: "Base", symbol: "ETH" },
     "0xaa36a7": { name: "Sepolia", symbol: "ETH" }
   };
+  const goalTemplates = {
+    emergency: { label: "Reserva de emergencia", icon: "R", color: "#42a67a" },
+    travel: { label: "Viagem", icon: "V", color: "#4d7cff" },
+    property: { label: "Imovel", icon: "I", color: "#f0c38e" },
+    car: { label: "Carro", icon: "C", color: "#2f7c88" },
+    debt: { label: "Quitar divida", icon: "D", color: "#d95d4e" },
+    investment: { label: "Investimento", icon: "A", color: "#8f62ff" },
+    education: { label: "Educacao", icon: "E", color: "#f7cf4d" },
+    other: { label: "Outros", icon: "O", color: "#6f688f" }
+  };
+  const goalPriorities = {
+    high: "Alta prioridade",
+    medium: "Media prioridade",
+    low: "Baixa prioridade"
+  };
   const appNews = [
+    {
+      id: "bank-accounts-v87",
+      date: "2026-08-30",
+      title: "Contas bancarias por pais",
+      body: "Agora o app permite cadastrar contas bancarias no Brasil e no Japao, vincular recebimentos e pagamentos, e usar o saldo real das contas no card principal."
+    },
+    {
+      id: "financial-goals-v86",
+      date: "2026-08-30",
+      title: "Metas financeiras com aporte manual",
+      body: "O card de metas agora permite criar objetivos por moeda/pais, adicionar aportes manuais e acompanhar quanto precisa guardar por mes."
+    },
     {
       id: "salary-progression-calc-v83",
       date: "2026-08-23",
@@ -223,7 +290,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=85")
+      navigator.serviceWorker.register("./service-worker.js?v=87")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -296,7 +363,10 @@
     if (action === "delete-investment") deleteItem("investments", button.dataset.id, "Investimento removido.");
     if (action === "delete-credit-card") deleteItem("creditCards", button.dataset.id, "Cartao removido.");
     if (action === "delete-card-purchase") deleteItem("cardPurchases", button.dataset.id, "Compra removida.");
+    if (action === "delete-bank-account") deleteItem("bankAccounts", button.dataset.id, "Conta bancaria removida.");
     if (action === "delete-subscription") deleteItem("subscriptions", button.dataset.id, "Subscricao removida.");
+    if (action === "delete-goal") deleteFinancialGoal(button.dataset.id);
+    if (action === "delete-goal-contribution") deleteItem("goalContributions", button.dataset.id, "Aporte removido.");
     if (action === "delete-crypto") deleteItem("cryptoAssets", button.dataset.id, "Cripto removida.");
     if (action === "delete-housing-card") deleteItem("housingCards", button.dataset.id, "Moradia removida.");
     if (action === "delete-vehicle-maintenance") deleteItem("vehicleMaintenance", button.dataset.id, "Manutencao removida.");
@@ -338,7 +408,10 @@
     if (formType === "investment") saveInvestment(form);
     if (formType === "credit-card") saveCreditCard(form);
     if (formType === "card-purchase") saveCardPurchase(form);
+    if (formType === "bank-account") saveBankAccount(form);
     if (formType === "subscription") saveSubscription(form);
+    if (formType === "goal") saveFinancialGoal(form);
+    if (formType === "goal-contribution") saveGoalContribution(form);
     if (formType === "monthly-payment") saveMonthlyPayment(form);
     if (formType === "crypto") saveCryptoAsset(form);
     if (formType === "housing-card") saveHousingCard(form);
@@ -365,9 +438,14 @@
     if (event.target.id === "incomeSourceId") updateWorkIncomeCurrencyField();
     if (event.target.id === "commitmentCategory") updateCommitmentCategoryField();
     if (event.target.id === "commitmentType") updateCommitmentProviderField();
+    if (event.target.id === "bankAccountCountry") updateBankAccountCountryFields();
+    if (event.target.id === "country" && event.target.closest("[data-form='transaction']")) updateTransactionBankFields();
+    if (event.target.id === "type" && event.target.closest("[data-form='transaction']")) updateTransactionBankFields();
     if (event.target.id === "subscriptionPaymentMethod") updateSubscriptionCardField();
     if (event.target.id === "subscriptionServiceKey") updateSubscriptionCustomField();
     if (event.target.id === "subscriptionBillingCycle") updateSubscriptionCycleField();
+    if (event.target.id === "goalCountry") updateGoalCurrencyField();
+    if (event.target.id === "goalContributionGoalId") updateGoalContributionCurrencyField();
     if (event.target.id === "vehicleInsurancePaymentType") updateVehicleInsuranceCardField();
   });
 
@@ -916,7 +994,10 @@
       investments: Array.isArray(raw.investments) ? raw.investments : base.investments,
       creditCards: Array.isArray(raw.creditCards) ? raw.creditCards : base.creditCards,
       cardPurchases: Array.isArray(raw.cardPurchases) ? raw.cardPurchases : base.cardPurchases,
+      bankAccounts: normalizeBankAccounts(raw.bankAccounts, base.bankAccounts),
       subscriptions: Array.isArray(raw.subscriptions) ? raw.subscriptions : base.subscriptions,
+      financialGoals: normalizeFinancialGoals(raw.financialGoals, base.financialGoals),
+      goalContributions: normalizeGoalContributions(raw.goalContributions, base.goalContributions),
       cryptoAssets: normalizeCryptoAssets(raw.cryptoAssets, base.cryptoAssets, cryptoQuotes, settings.baseCurrency),
       housingCards: normalizeHousingCards(raw.housingCards, settings.baseCurrency),
       cryptoQuotes,
@@ -954,6 +1035,28 @@
     }));
   }
 
+  function normalizeBankAccounts(items, fallback = []) {
+    if (!Array.isArray(items)) return fallback;
+    return items
+      .map((item) => {
+        const country = countryMeta[item.country] && item.country !== "global" ? item.country : "japao";
+        const currency = sanitizeCurrency(item.currency, countryMeta[country]?.currency || PRIMARY_CURRENCY);
+        return {
+          ...item,
+          country,
+          bankName: String(item.bankName || item.provider || "").trim(),
+          nickname: String(item.nickname || item.name || "").trim(),
+          accountType: bankAccountTypeMeta(country, item.accountType) ? item.accountType : defaultBankAccountType(country),
+          accountLast4: String(item.accountLast4 || "").replace(/\D/g, "").slice(-4),
+          initialBalance: number(item.initialBalance ?? item.balance ?? item.currentBalance),
+          currency,
+          balanceDate: String(item.balanceDate || item.openingBalanceDate || dateInMonth(currentMonth(), new Date().getDate())).slice(0, 10),
+          active: item.active !== false
+        };
+      })
+      .filter((item) => item.bankName || item.nickname);
+  }
+
   function withCurrentWorkOwner(rawState) {
     const ownerId = currentWorkOwnerId();
     const stamp = (item) => {
@@ -983,6 +1086,43 @@
       }))
       .filter((item) => item.effectiveDate && item.hourlyRate > 0)
       .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+  }
+
+  function normalizeFinancialGoals(items, fallback = []) {
+    if (!Array.isArray(items)) return fallback;
+    return items
+      .map((item) => {
+        const templateKey = goalTemplates[item.templateKey] ? item.templateKey : "other";
+        const currency = sanitizeCurrency(item.currency, PRIMARY_CURRENCY);
+        return {
+          ...item,
+          templateKey,
+          country: goalCountryMeta(item.country) ? item.country : "global",
+          title: String(item.title || item.name || goalTemplates[templateKey].label).trim(),
+          customName: String(item.customName || "").trim(),
+          targetAmount: number(item.targetAmount || item.amount),
+          currency,
+          targetDate: String(item.targetDate || item.deadline || "").slice(0, 10),
+          priority: goalPriorities[item.priority] ? item.priority : "medium",
+          note: String(item.note || "").trim(),
+          active: item.active !== false
+        };
+      })
+      .filter((item) => item.title && item.targetAmount > 0);
+  }
+
+  function normalizeGoalContributions(items, fallback = []) {
+    if (!Array.isArray(items)) return fallback;
+    return items
+      .map((item) => ({
+        ...item,
+        goalId: String(item.goalId || "").trim(),
+        amount: number(item.amount),
+        currency: sanitizeCurrency(item.currency, PRIMARY_CURRENCY),
+        date: String(item.date || "").slice(0, 10) || dateInMonth(currentMonth(), new Date().getDate()),
+        note: String(item.note || "").trim()
+      }))
+      .filter((item) => item.goalId && item.amount > 0);
   }
 
   function normalizeVehicle(rawVehicle, baseVehicle) {
@@ -1280,7 +1420,10 @@
       investments: [],
       creditCards: [],
       cardPurchases: [],
+      bankAccounts: [],
       subscriptions: [],
+      financialGoals: [],
+      goalContributions: [],
       housingCards: [],
       cryptoAssets: [],
       cryptoQuotes: {
@@ -1915,7 +2058,8 @@
     const salaryValue = hideBalance
       ? "*****"
       : (breakdown.salaryEstimate.configured ? formatMoneyWithPrimary(breakdown.salaryEstimate.total, breakdown.salaryEstimate.currency, state.ui.selectedMonth) : "--");
-    const mainValue = hideBalance ? "¥ •••••" : formatMoneyWithPrimary(summary.remaining, summary.currency);
+    const mainBalance = dashboardMainBalance(summary);
+    const mainValue = hideBalance ? "¥ •••••" : formatMoneyWithPrimary(mainBalance.amount, mainBalance.currency);
     const receivedValue = hideBalance ? "•••••" : formatMoneyWithPrimary(breakdown.received, breakdown.currency);
     const payableValue = hideBalance ? "•••••" : payableLabel;
     return `
@@ -1926,6 +2070,7 @@
         <div class="balance-copy">
           <p class="hero-title">Saldo atual</p>
           <p class="hero-value">${mainValue}</p>
+          ${mainBalance.fromAccounts ? `<p class="row-meta balance-source-note">Soma das contas bancarias cadastradas</p>` : ""}
           <div class="overview-mini-grid">
             <div>
               <span>Recebido ate agora</span>
@@ -1999,6 +2144,58 @@
     `;
   }
 
+  function renderBankAccountsPanel(limit = null) {
+    const accounts = activeBankAccounts();
+    if (!accounts.length) {
+      return `
+        <div class="empty-action">
+          <p class="empty-state">Nenhuma conta bancaria cadastrada ainda.</p>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="bankAccount">Cadastrar conta bancaria</button>
+        </div>
+      `;
+    }
+    const displayAccounts = limit ? accounts.slice(0, limit) : accounts;
+    const totals = bankAccountCountryTotals();
+    return `
+      <div class="bank-account-summary-grid">
+        ${totals.map((item) => `
+          <div>
+            <span>${escapeHtml(item.label)}</span>
+            <strong>${formatMoneyWithPrimary(item.total, primaryCurrency())}</strong>
+          </div>
+        `).join("")}
+      </div>
+      <div class="bank-account-grid">
+        ${displayAccounts.map((account) => {
+          const balance = bankAccountBalance(account, state.ui.selectedMonth);
+          const author = authorLabel(account);
+          return `
+            <article class="bank-account-card">
+              <div class="bank-account-head">
+                <span class="bank-account-icon">${escapeHtml(countryMeta[account.country]?.short || "BK")}</span>
+                <div>
+                  <strong>${escapeHtml(bankAccountName(account))}</strong>
+                  <small>${escapeHtml(account.bankName)} - ${escapeHtml(bankAccountTypeLabel(account))}${account.accountLast4 ? ` - **** ${escapeHtml(account.accountLast4)}` : ""}</small>
+                </div>
+                <span class="chip ${account.country === "brasil" ? "green" : "gold"}">${escapeHtml(countryMeta[account.country]?.label || "Conta")}</span>
+              </div>
+              <div class="bank-account-balance">
+                <span>Saldo atual</span>
+                <strong>${formatMoneyWithPrimary(balance, account.currency)}</strong>
+                <small>Base ${formatShortDate(account.balanceDate)}</small>
+              </div>
+              ${author ? `<p class="row-meta">Adicionada por ${escapeHtml(author)}</p>` : ""}
+              <div class="row-actions">
+                <button class="small-action ghost" type="button" data-action="open-modal" data-modal="bankAccount" data-id="${account.id}">Editar</button>
+                <button class="small-action ghost" type="button" data-action="delete-bank-account" data-id="${account.id}">Excluir</button>
+              </div>
+            </article>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
   function dashboardBalanceBreakdown(summary = summarizeMonth(state.ui.selectedMonth, "global")) {
     const currency = summary.currency;
     const rate = latestRate(state.ui.selectedMonth);
@@ -2032,6 +2229,17 @@
 
   function renderAccounts() {
     return `
+      <section class="content-panel bank-accounts-panel">
+        <div class="panel-head">
+          <div>
+            <h2>Contas bancarias</h2>
+            <p class="row-meta">Saldos por banco, pais e tipo de conta.</p>
+          </div>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="bankAccount">Nova conta</button>
+        </div>
+        ${renderBankAccountsPanel()}
+      </section>
+
       <section class="split-grid">
         <article class="content-panel">
           <div class="panel-head">
@@ -3113,21 +3321,85 @@
   }
 
   function renderFinancialGoalsPanel() {
+    const goals = activeFinancialGoals();
+    const totalSaved = goals.reduce((total, goal) => total + goalProgress(goal).savedPrimary, 0);
     return `
       <div class="panel-head">
         <div>
           <h2>Metas Financeiras</h2>
-          <p class="row-meta">Reservas, objetivos e planos da familia</p>
+          <p class="row-meta">${goals.length ? `${goals.length} meta(s) ativas - ${formatMoneyWithPrimary(totalSaved, primaryCurrency())} guardados` : "Reservas, objetivos e planos da familia"}</p>
         </div>
-        <span class="chip gold">Em breve</span>
+        <button class="small-action" type="button" data-action="open-modal" data-modal="goal">Nova meta</button>
       </div>
-      <div class="goals-placeholder">
-        <div>
-          <span data-lucide="target" aria-hidden="true"></span>
-          <strong>Vamos montar suas metas aqui</strong>
-          <p>Ex: reserva de emergencia, viagem, quitar financiamento ou comprar um carro.</p>
+      ${goals.length ? `
+        <div class="goals-grid">
+          ${goals.map((goal) => renderFinancialGoalCard(goal)).join("")}
         </div>
-      </div>
+      ` : `
+        <div class="goals-placeholder">
+          <div>
+            <span data-lucide="target" aria-hidden="true"></span>
+            <strong>Crie sua primeira meta</strong>
+            <p>Use modelos prontos como reserva de emergencia, viagem, imovel ou cadastre uma meta particular.</p>
+            <button class="small-action" type="button" data-action="open-modal" data-modal="goal">Cadastrar meta</button>
+          </div>
+        </div>
+      `}
+    `;
+  }
+
+  function renderFinancialGoalCard(goal) {
+    const progress = goalProgress(goal);
+    const meta = goalTemplateMeta(goal.templateKey);
+    const percent = Math.min(100, Math.max(0, progress.percent));
+    const author = authorLabel(goal);
+    const contributions = goalContributionsForGoal(goal.id).slice(0, 2);
+    return `
+      <article class="goal-card" style="--goal-color:${escapeAttr(meta.color)}">
+        <div class="goal-card-head">
+          <span class="goal-icon">${escapeHtml(meta.icon)}</span>
+          <div class="goal-title-block">
+            <strong>${escapeHtml(goalName(goal))}</strong>
+            <small>${escapeHtml(goalCountryLabel(goal.country))} - ${escapeHtml(goalPriorities[goal.priority] || "Media prioridade")}</small>
+          </div>
+          <span class="goal-percent">${formatPercent(percent, 0)}</span>
+        </div>
+        <div class="goal-amount-line">
+          <div>
+            <span>Guardado</span>
+            <strong>${formatMoneyWithPrimary(progress.saved, goal.currency)}</strong>
+          </div>
+          <div>
+            <span>Falta</span>
+            <strong>${formatMoneyWithPrimary(progress.remaining, goal.currency)}</strong>
+          </div>
+        </div>
+        <div class="goal-progress-track" aria-label="Progresso da meta">
+          <span style="width:${percent > 0 ? Math.max(2, percent) : 0}%"></span>
+        </div>
+        <div class="goal-monthly-need">
+          <span>Guardar por mes</span>
+          <strong>${formatMoneyWithPrimary(progress.monthlyNeed, goal.currency)}</strong>
+          <small>Alvo ${formatMoneyWithPrimary(goal.targetAmount, goal.currency)} ate ${goal.targetDate ? formatShortDate(goal.targetDate) : "--"}</small>
+        </div>
+        ${contributions.length ? `
+          <div class="goal-contribution-mini-list">
+            ${contributions.map((item) => `
+              <div>
+                <span>${formatShortDate(item.date)}</span>
+                <strong>+ ${formatMoneyWithPrimary(item.amount, item.currency, item.date?.slice(0, 7) || state.ui.selectedMonth)}</strong>
+                <button class="link-action danger" type="button" data-action="delete-goal-contribution" data-id="${item.id}">Excluir</button>
+              </div>
+            `).join("")}
+          </div>
+        ` : ""}
+        <div class="goal-card-actions">
+          <button class="small-action" type="button" data-action="open-modal" data-modal="goalContribution" data-id="${goal.id}">Aporte</button>
+          <button class="small-action ghost" type="button" data-action="open-modal" data-modal="goal" data-id="${goal.id}">Editar</button>
+          <button class="small-action ghost" type="button" data-action="delete-goal" data-id="${goal.id}">Excluir</button>
+        </div>
+        ${author ? `<p class="row-meta">Criada por ${escapeHtml(author)}</p>` : ""}
+      </article>
     `;
   }
 
@@ -3867,6 +4139,15 @@
           const author = authorLabel(item);
           const noteText = normalizeLookupText(item.note || "");
           const paidNote = noteText.startsWith("pago") || noteText.includes("pago no app");
+          const account = bankAccountById(item.bankAccountId);
+          const methodLabel = transactionMethodLabel(item);
+          const accountMeta = [
+            formatShortDate(item.date),
+            countryMeta[item.country]?.label || "Global",
+            item.category,
+            account?.id ? bankAccountName(account) : "",
+            methodLabel
+          ].filter(Boolean).join(" - ");
           return `
             <div class="list-row ${paidNote ? "is-paid" : ""}">
               <span class="row-icon ${meta.tone}" ${iconStyle}>${item.icon || meta.icon}</span>
@@ -3874,7 +4155,7 @@
                 <p class="row-title">${escapeHtml(item.title)}${paidNote ? ` <span class="chip green inline-chip">Pago</span>` : ""}</p>
                 ${author ? `<p class="row-meta author-meta">Adicionado por ${escapeHtml(author)}</p>` : ""}
                 ${paidNote ? `<p class="row-meta paid-note">${escapeHtml(item.note)}</p>` : ""}
-                <p class="row-meta">${formatShortDate(item.date)} · ${countryMeta[item.country].label} · ${escapeHtml(item.category)}</p>
+                <p class="row-meta">${escapeHtml(accountMeta)}</p>
               </div>
               <div class="row-amount ${isIncome ? "income" : "expense"}">
                 ${isIncome ? "+" : "-"} ${formatMoneyWithPrimary(item.amount, item.currency, item.date?.slice(0, 7) || state.ui.selectedMonth)}
@@ -3927,6 +4208,9 @@
       investment: renderInvestmentModal,
       creditCard: renderCreditCardModal,
       cardPurchase: renderCardPurchaseModal,
+      bankAccount: renderBankAccountModal,
+      goal: renderFinancialGoalModal,
+      goalContribution: renderGoalContributionModal,
       crypto: renderCryptoModal,
       web3Wallet: renderWeb3WalletModal,
       housingCard: renderHousingCardModal,
@@ -3938,7 +4222,7 @@
       monthlyPayment: renderMonthlyPaymentModal,
       subscription: renderSubscriptionModal
     };
-    const modalData = type === "monthlyPayment" ? id : editableItem(type, id);
+    const modalData = type === "monthlyPayment" || type === "goalContribution" ? id : editableItem(type, id);
     const content = map[type] ? map[type](modalData) : "";
     modalRoot.innerHTML = `
       <div class="modal-backdrop">
@@ -3953,6 +4237,8 @@
     updateIncomeSourceDynamicFields();
     updateCommitmentCategoryField();
     updateCommitmentProviderField();
+    updateBankAccountCountryFields();
+    updateTransactionBankFields();
     updateSubscriptionCardField();
     updateSubscriptionCustomField();
     updateSubscriptionCycleField();
@@ -3970,7 +4256,9 @@
       { modal: "vehicle", icon: "V", title: "Cadastrar veiculo", meta: "Carro do Japao, Shaken, seguro e dados principais" },
       { modal: "housingCard", icon: "A", title: "Cadastrar moradia", meta: "Aluguel, luz, gas, agua e internet em um unico card" },
       { modal: "creditCard", icon: "C", title: "Cadastrar cartao", meta: "Cartao do Brasil ou Japao com bandeira e vencimento" },
+      { modal: "bankAccount", icon: "B", title: "Cadastrar conta bancaria", meta: "Banco, pais, tipo de conta e saldo atual" },
       { modal: "subscription", icon: "S", title: "Cadastrar subscricao", meta: "Streaming, apps e servicos recorrentes no Pix ou cartao" },
+      { modal: "goal", icon: "M", title: "Cadastrar meta", meta: "Reserva, viagem, imovel, carro ou objetivo particular" },
       { modal: "crypto", icon: "B", title: "Cadastrar cripto", meta: "Quantidade comprada, custo e acompanhamento de cotacao" },
       { modal: "web3Wallet", icon: "W", title: "Conectar carteira web3", meta: "MetaMask e carteiras EVM para ver endereco, rede e saldo" },
       { modal: "commitment", icon: "F", title: "Cadastrar contas", meta: "Despesas fixas, financiamentos, consorcios e recorrencias" },
@@ -4044,6 +4332,20 @@
           <div class="field">
             <label for="date">Data</label>
             <input id="date" name="date" type="date" required value="${escapeAttr(date)}" />
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field transaction-bank-account-field">
+            <label for="transactionBankAccountId">Conta bancaria</label>
+            <select id="transactionBankAccountId" name="bankAccountId">
+              ${bankAccountSelectOptions(activeCountry, item?.bankAccountId, "Sem conta vinculada")}
+            </select>
+          </div>
+          <div class="field transaction-method-field">
+            <label for="transactionReceiptMethod">${transactionType === "income" ? "Modo de recebimento" : "Forma de pagamento"}</label>
+            <select id="transactionReceiptMethod" name="receiptMethod">
+              ${receiptMethodOptions(activeCountry, item?.receiptMethod || item?.paymentMethod || (transactionType === "income" ? "salary" : "bank"), transactionType)}
+            </select>
           </div>
         </div>
         <div class="field">
@@ -4591,6 +4893,75 @@
     `;
   }
 
+  function renderBankAccountModal(item = null) {
+    const activeCountry = item?.country || (state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry);
+    const country = activeCountry === "brasil" ? "brasil" : "japao";
+    const selectedCurrency = item?.currency || countryMeta[country].currency;
+    const selectedType = item?.accountType || defaultBankAccountType(country);
+    const balanceDate = item?.balanceDate || dateInMonth(state.ui.selectedMonth || currentMonth(), new Date().getDate());
+    return `
+      <div class="modal-head">
+        <h2>${item ? "Editar conta bancaria" : "Nova conta bancaria"}</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="bank-account">
+        ${editHidden(item)}
+        <div class="two-cols">
+          <div class="field">
+            <label for="bankAccountCountry">Pais</label>
+            <select id="bankAccountCountry" name="country">
+              <option value="japao" ${selectedAttr("japao", country)}>Japao</option>
+              <option value="brasil" ${selectedAttr("brasil", country)}>Brasil</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="bankAccountType">Tipo de conta</label>
+            <select id="bankAccountType" name="accountType">
+              ${bankAccountTypeOptions(country, selectedType)}
+            </select>
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="bankName">Banco</label>
+            <input id="bankName" name="bankName" required list="bankNameOptions" placeholder="Ex: Yuucho, Nubank" value="${escapeAttr(item?.bankName || "")}" />
+            <datalist id="bankNameOptions">
+              ${bankNameOptions(country)}
+            </datalist>
+          </div>
+          <div class="field">
+            <label for="bankAccountNickname">Apelido</label>
+            <input id="bankAccountNickname" name="nickname" placeholder="Ex: Salario Japao" value="${escapeAttr(item?.nickname || "")}" />
+          </div>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="bankInitialBalance">Saldo nesta data</label>
+            <input id="bankInitialBalance" name="initialBalance" required type="number" step="0.01" value="${item ? number(item.initialBalance) : ""}" />
+          </div>
+          <div class="field">
+            <label for="bankAccountCurrency">Moeda</label>
+            <select id="bankAccountCurrency" name="currency">
+              ${currencyOptions(selectedCurrency)}
+            </select>
+          </div>
+          <div class="field">
+            <label for="bankBalanceDate">Data do saldo</label>
+            <input id="bankBalanceDate" name="balanceDate" required type="date" value="${escapeAttr(balanceDate)}" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="bankAccountLast4">Final da conta</label>
+          <input id="bankAccountLast4" name="accountLast4" inputmode="numeric" maxlength="4" placeholder="4 ultimos numeros" value="${escapeAttr(item?.accountLast4 || "")}" />
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar conta</button>
+        </div>
+      </form>
+    `;
+  }
+
   function renderSubscriptionModal(item = null) {
     const activeCountry = item?.country || (state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry);
     const selectedCurrency = item?.currency || countryMeta[activeCountry].currency;
@@ -4664,6 +5035,144 @@
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
           <button class="primary-button" type="submit">Salvar subscricao</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderFinancialGoalModal(item = null) {
+    const templateKey = goalTemplates[item?.templateKey] ? item.templateKey : "emergency";
+    const selectedCountry = goalCountryMeta(item?.country) ? item.country : "global";
+    const selectedCurrency = item?.currency || goalDefaultCurrency(selectedCountry);
+    const targetDate = item?.targetDate || dateInMonth(addMonths(state.ui.selectedMonth || currentMonth(), 12), 1);
+    const saved = item ? goalProgress(item).saved : 0;
+    return `
+      <div class="modal-head">
+        <h2>${item ? "Editar meta" : "Nova meta"}</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="goal">
+        ${editHidden(item)}
+        <div class="two-cols">
+          <div class="field">
+            <label for="goalTemplate">Modelo</label>
+            <select id="goalTemplate" name="templateKey">
+              ${goalTemplateOptions(templateKey)}
+            </select>
+          </div>
+          <div class="field">
+            <label for="goalTitle">Nome da meta</label>
+            <input id="goalTitle" name="title" required placeholder="Ex: Viagem ao Brasil" value="${escapeAttr(item?.title || "")}" />
+          </div>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="goalCountry">Pais da meta</label>
+            <select id="goalCountry" name="country">
+              ${goalCountryOptions(selectedCountry)}
+            </select>
+          </div>
+          <div class="field">
+            <label for="goalCurrency">Moeda</label>
+            <select id="goalCurrency" name="currency">
+              ${currencyOptions(selectedCurrency)}
+            </select>
+          </div>
+          <div class="field">
+            <label for="goalPriority">Prioridade</label>
+            <select id="goalPriority" name="priority">
+              ${Object.entries(goalPriorities).map(([key, label]) => `<option value="${key}" ${selectedAttr(key, item?.priority || "medium")}>${escapeHtml(label)}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="goalTargetAmount">Valor alvo</label>
+            <input id="goalTargetAmount" name="targetAmount" required type="number" min="0" step="0.01" value="${item ? number(item.targetAmount) : ""}" />
+          </div>
+          <div class="field">
+            <label for="goalTargetDate">Data alvo</label>
+            <input id="goalTargetDate" name="targetDate" required type="date" value="${escapeAttr(targetDate)}" />
+          </div>
+          ${item ? `
+            <div class="field">
+              <label>Guardado</label>
+              <div class="readonly-field">${formatMoneyWithPrimary(saved, selectedCurrency)}</div>
+            </div>
+          ` : `
+            <div class="field">
+              <label for="goalInitialAmount">Valor ja guardado</label>
+              <input id="goalInitialAmount" name="initialAmount" type="number" min="0" step="0.01" value="" />
+            </div>
+          `}
+        </div>
+        <div class="field">
+          <label for="goalNote">Observacao</label>
+          <textarea id="goalNote" name="note">${escapeHtml(item?.note || "")}</textarea>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar meta</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderGoalContributionModal(goalId = "") {
+    const goals = activeFinancialGoals();
+    const selectedGoal = findItem("financialGoals", goalId) || goals[0];
+    if (!goals.length) {
+      return `
+        <div class="modal-head">
+          <h2>Novo aporte</h2>
+          <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+        </div>
+        <div class="form-grid">
+          <p class="empty-state">Cadastre uma meta antes de adicionar aportes.</p>
+          <div class="form-actions">
+            <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+            <button class="primary-button" type="button" data-action="open-modal" data-modal="goal">Cadastrar meta</button>
+          </div>
+        </div>
+      `;
+    }
+    return `
+      <div class="modal-head">
+        <h2>Novo aporte</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="goal-contribution">
+        <div class="two-cols">
+          <div class="field">
+            <label for="goalContributionGoalId">Meta</label>
+            <select id="goalContributionGoalId" name="goalId" required>
+              ${goals.map((goal) => `<option value="${goal.id}" data-currency="${escapeAttr(goal.currency)}" ${selectedAttr(goal.id, selectedGoal?.id)}>${escapeHtml(goalName(goal))} - ${escapeHtml(goalCountryLabel(goal.country))}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="goalContributionDate">Data</label>
+            <input id="goalContributionDate" name="date" required type="date" value="${escapeAttr(dateInMonth(state.ui.selectedMonth || currentMonth(), new Date().getDate()))}" />
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="goalContributionAmount">Valor aportado</label>
+            <input id="goalContributionAmount" name="amount" required type="number" min="0" step="0.01" value="" />
+          </div>
+          <div class="field">
+            <label for="goalContributionCurrency">Moeda</label>
+            <select id="goalContributionCurrency" name="currency">
+              ${currencyOptions(selectedGoal?.currency || primaryCurrency())}
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="goalContributionNote">Observacao</label>
+          <textarea id="goalContributionNote" name="note"></textarea>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar aporte</button>
         </div>
       </form>
     `;
@@ -5307,6 +5816,12 @@
             </select>
           </div>
         </div>
+        <div class="field">
+          <label for="monthlyPaymentBankAccountId">Conta usada</label>
+          <select id="monthlyPaymentBankAccountId" name="bankAccountId">
+            ${bankAccountSelectOptions(target.country, "", "Sem conta vinculada")}
+          </select>
+        </div>
         <div class="two-cols">
           <div class="field">
             <label for="monthlyPaymentDate">Data do pagamento</label>
@@ -5375,6 +5890,20 @@
             </select>
           </div>
         </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="incomeBankAccountId">Conta de destino</label>
+            <select id="incomeBankAccountId" name="bankAccountId">
+              ${bankAccountSelectOptions("japao", item?.bankAccountId, "Sem conta vinculada")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="incomeReceiptMethod">Modo de recebimento</label>
+            <select id="incomeReceiptMethod" name="receiptMethod">
+              ${receiptMethodOptions("japao", item?.receiptMethod || "salary", "income")}
+            </select>
+          </div>
+        </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
           <button class="primary-button" type="submit">Salvar recebimento</button>
@@ -5405,6 +5934,8 @@
       category: data.category.trim(),
       amount: number(data.amount),
       currency: data.currency,
+      bankAccountId: data.bankAccountId || "",
+      receiptMethod: data.receiptMethod || "",
       note: data.note.trim()
     }, true);
     state.ui.selectedMonth = data.date.slice(0, 7);
@@ -5569,6 +6100,26 @@
     showToast(updated ? "Compra atualizada." : "Compra salva no cartao.");
   }
 
+  function saveBankAccount(form) {
+    const data = formData(form);
+    const country = data.country === "brasil" ? "brasil" : "japao";
+    const updated = upsertItem("bankAccounts", data.id, {
+      country,
+      bankName: String(data.bankName || "").trim(),
+      nickname: String(data.nickname || "").trim(),
+      accountType: bankAccountTypeMeta(country, data.accountType) ? data.accountType : defaultBankAccountType(country),
+      accountLast4: String(data.accountLast4 || "").replace(/\D/g, "").slice(-4),
+      initialBalance: number(data.initialBalance),
+      currency: sanitizeCurrency(data.currency, countryMeta[country].currency),
+      balanceDate: data.balanceDate || dateInMonth(state.ui.selectedMonth || currentMonth(), new Date().getDate()),
+      active: true
+    });
+    saveState();
+    closeModal();
+    render();
+    showToast(updated ? "Conta bancaria atualizada." : "Conta bancaria salva.");
+  }
+
   function saveSubscription(form) {
     const data = formData(form);
     const previous = findItem("subscriptions", data.id);
@@ -5599,6 +6150,75 @@
     closeModal();
     render();
     showToast(updated ? "Subscricao atualizada." : "Subscricao salva.");
+  }
+
+  function saveFinancialGoal(form) {
+    const data = formData(form);
+    const templateKey = goalTemplates[data.templateKey] ? data.templateKey : "other";
+    const goalId = data.id || uid(collectionPrefixes.financialGoals);
+    const title = String(data.title || "").trim() || goalTemplates[templateKey].label;
+    const country = goalCountryMeta(data.country) ? data.country : "global";
+    const currency = sanitizeCurrency(data.currency, goalDefaultCurrency(country));
+    const updated = upsertItem("financialGoals", goalId, {
+      templateKey,
+      country,
+      title,
+      customName: templateKey === "other" ? title : "",
+      targetAmount: number(data.targetAmount),
+      currency,
+      targetDate: data.targetDate || dateInMonth(addMonths(state.ui.selectedMonth || currentMonth(), 12), 1),
+      priority: goalPriorities[data.priority] ? data.priority : "medium",
+      note: String(data.note || "").trim(),
+      active: true
+    }, true);
+
+    const initialAmount = number(data.initialAmount);
+    if (!updated && initialAmount > 0) {
+      upsertItem("goalContributions", "", {
+        goalId,
+        amount: initialAmount,
+        currency,
+        date: dateInMonth(state.ui.selectedMonth || currentMonth(), new Date().getDate()),
+        note: "Aporte inicial"
+      }, true);
+    }
+
+    saveState();
+    closeModal();
+    render();
+    showToast(updated ? "Meta atualizada." : "Meta criada.");
+  }
+
+  function saveGoalContribution(form) {
+    const data = formData(form);
+    const goal = findItem("financialGoals", data.goalId);
+    if (!goal) {
+      showToast("Meta nao encontrada.");
+      return;
+    }
+    upsertItem("goalContributions", "", {
+      goalId: goal.id,
+      amount: number(data.amount),
+      currency: sanitizeCurrency(data.currency, goal.currency),
+      date: data.date || dateInMonth(state.ui.selectedMonth || currentMonth(), new Date().getDate()),
+      note: String(data.note || "").trim()
+    }, true);
+    saveState();
+    closeModal();
+    render();
+    showToast("Aporte salvo.");
+  }
+
+  function deleteFinancialGoal(id) {
+    const goal = findItem("financialGoals", id);
+    if (!goal) return;
+    const ok = window.confirm("Excluir esta meta e seus aportes?");
+    if (!ok) return;
+    state.financialGoals = state.financialGoals.filter((item) => item.id !== id);
+    state.goalContributions = state.goalContributions.filter((item) => item.goalId !== id);
+    saveState();
+    render();
+    showToast("Meta removida.");
   }
 
   function saveCryptoAsset(form) {
@@ -5768,6 +6388,8 @@
       amount: number(data.amount),
       currency: data.currency || source.currency || "JPY",
       date: data.date,
+      bankAccountId: data.bankAccountId || "",
+      receiptMethod: data.receiptMethod || "salary",
       periodStart: "",
       periodEnd: "",
       workDays: 0,
@@ -5828,6 +6450,7 @@
       paidAt: new Date().toISOString(),
       method: data.paymentMethod || "balance",
       sourceId: data.sourceId || "",
+      bankAccountId: data.bankAccountId || "",
       note: String(data.note || "").trim()
     };
 
@@ -5841,6 +6464,8 @@
       category: target.category,
       amount: number(target.amount),
       currency: target.currency,
+      bankAccountId: data.bankAccountId || "",
+      paymentMethod: data.paymentMethod || "balance",
       note: monthlyPaymentNote(target, data),
       createdAt: new Date().toISOString(),
       createdBy: author.id,
@@ -6065,10 +6690,12 @@
   function monthlyPaymentNote(target, data) {
     const method = monthlyPaymentMethodLabel(data.paymentMethod);
     const source = data.sourceId ? incomeSourceById(data.sourceId) : null;
+    const account = data.bankAccountId ? bankAccountById(data.bankAccountId) : null;
     const pieces = [
       "Pago no app",
       method ? `via ${method}` : "",
       source?.id ? `origem ${source.name}` : "",
+      account?.id ? `conta ${bankAccountName(account)}` : "",
       data.note ? String(data.note).trim() : ""
     ].filter(Boolean);
     return pieces.join(" - ");
@@ -6080,6 +6707,7 @@
       extra: "ganho extra",
       pix: "Pix",
       bank: "debito em conta",
+      card: "cartao",
       cash: "dinheiro",
       other: "outro"
     };
@@ -7630,6 +8258,7 @@
     if (country !== "global" && country !== "japao") return [];
     return monthWorkIncomes(month).map((item) => {
       const source = incomeSourceById(item.sourceId);
+      const account = bankAccountById(item.bankAccountId);
       return {
         id: item.id,
         country: "japao",
@@ -7641,7 +8270,7 @@
         date: item.date,
         status: "Entrada",
         tone: "green",
-        meta: "Pagamento recebido",
+        meta: account?.id ? `Recebido em ${bankAccountName(account)}` : "Pagamento recebido",
         kind: "income",
         titleColor: source.color
       };
@@ -8573,6 +9202,46 @@
     if (!show) input.value = "";
   }
 
+  function updateGoalCurrencyField() {
+    const countrySelect = modalRoot.querySelector("#goalCountry");
+    const currencySelect = modalRoot.querySelector("#goalCurrency");
+    if (!countrySelect || !currencySelect) return;
+    currencySelect.value = goalDefaultCurrency(countrySelect.value);
+  }
+
+  function updateGoalContributionCurrencyField() {
+    const goalSelect = modalRoot.querySelector("#goalContributionGoalId");
+    const currencySelect = modalRoot.querySelector("#goalContributionCurrency");
+    if (!goalSelect || !currencySelect) return;
+    const currency = goalSelect.selectedOptions?.[0]?.dataset?.currency;
+    if (currency) currencySelect.value = currency;
+  }
+
+  function updateBankAccountCountryFields() {
+    const countrySelect = modalRoot.querySelector("#bankAccountCountry");
+    const typeSelect = modalRoot.querySelector("#bankAccountType");
+    const currencySelect = modalRoot.querySelector("#bankAccountCurrency");
+    const datalist = modalRoot.querySelector("#bankNameOptions");
+    if (!countrySelect) return;
+    const country = countrySelect.value === "brasil" ? "brasil" : "japao";
+    if (typeSelect) typeSelect.innerHTML = bankAccountTypeOptions(country, typeSelect.value);
+    if (currencySelect) currencySelect.value = countryMeta[country].currency;
+    if (datalist) datalist.innerHTML = bankNameOptions(country);
+  }
+
+  function updateTransactionBankFields() {
+    const form = modalRoot.querySelector("[data-form='transaction']");
+    if (!form) return;
+    const country = form.elements.country?.value || "japao";
+    const type = form.elements.type?.value || "expense";
+    const accountSelect = form.elements.bankAccountId;
+    const methodSelect = form.elements.receiptMethod;
+    const methodLabel = form.querySelector(".transaction-method-field label");
+    if (accountSelect) accountSelect.innerHTML = bankAccountSelectOptions(country, accountSelect.value, "Sem conta vinculada");
+    if (methodSelect) methodSelect.innerHTML = receiptMethodOptions(country, methodSelect.value, type);
+    if (methodLabel) methodLabel.textContent = type === "income" ? "Modo de recebimento" : "Forma de pagamento";
+  }
+
   function normalizeVehicleInsurancePaymentType(vehicle = {}) {
     const explicit = String(vehicle.insurancePaymentType || "").toLowerCase();
     if (["bank", "card", "cash"].includes(explicit)) return explicit;
@@ -8675,7 +9344,9 @@
           amount: number(item.amount),
           currency: item.currency || source.currency || "JPY",
           date: item.date,
-          note: "Pagamento recebido",
+          bankAccountId: item.bankAccountId || "",
+          receiptMethod: item.receiptMethod || "salary",
+          note: `Pagamento recebido${item.receiptMethod ? ` - ${receiptMethodLabel(item.receiptMethod)}` : ""}`,
           color: source.color,
           icon: "+"
         };
@@ -8765,6 +9436,245 @@
 
   function inCountryScope(country) {
     return state.ui.activeCountry === "global" || state.ui.activeCountry === country;
+  }
+
+  function activeBankAccounts() {
+    return (state.bankAccounts || [])
+      .filter((account) => account.active !== false)
+      .slice()
+      .sort((a, b) => {
+        const countryDiff = String(a.country || "").localeCompare(String(b.country || ""));
+        if (countryDiff) return countryDiff;
+        return bankAccountName(a).localeCompare(bankAccountName(b));
+      });
+  }
+
+  function bankAccountById(id) {
+    return (state.bankAccounts || []).find((account) => account.id === id) || null;
+  }
+
+  function bankAccountName(account) {
+    return String(account?.nickname || account?.bankName || "Conta bancaria").trim();
+  }
+
+  function defaultBankAccountType(country) {
+    return country === "brasil" ? "checking" : "futsu";
+  }
+
+  function bankAccountTypeMeta(country, type) {
+    return bankAccountTypes[country]?.[type] || "";
+  }
+
+  function bankAccountTypeLabel(account) {
+    return bankAccountTypeMeta(account?.country, account?.accountType) || "Conta";
+  }
+
+  function bankAccountTypeOptions(country, selected) {
+    const activeCountry = country === "brasil" ? "brasil" : "japao";
+    const active = bankAccountTypeMeta(activeCountry, selected) ? selected : defaultBankAccountType(activeCountry);
+    return Object.entries(bankAccountTypes[activeCountry])
+      .map(([key, label]) => `<option value="${key}" ${selectedAttr(key, active)}>${escapeHtml(label)}</option>`)
+      .join("");
+  }
+
+  function bankNameOptions(country) {
+    const activeCountry = country === "brasil" ? "brasil" : "japao";
+    return (bankSuggestions[activeCountry] || [])
+      .map((name) => `<option value="${escapeAttr(name)}"></option>`)
+      .join("");
+  }
+
+  function bankAccountSelectOptions(country, selected, emptyLabel = "Sem conta vinculada") {
+    const scoped = activeBankAccounts().filter((account) => !country || country === "global" || account.country === country);
+    const selectedAccount = selected ? bankAccountById(selected) : null;
+    const options = [
+      `<option value="">${escapeHtml(emptyLabel)}</option>`,
+      ...scoped.map((account) => `<option value="${account.id}" ${selectedAttr(account.id, selected)}>${escapeHtml(bankAccountName(account))} - ${escapeHtml(account.bankName)} - ${escapeHtml(countryMeta[account.country]?.short || "")}</option>`)
+    ];
+    if (selectedAccount && !scoped.some((account) => account.id === selectedAccount.id)) {
+      options.push(`<option value="${selectedAccount.id}" selected>${escapeHtml(bankAccountName(selectedAccount))} - ${escapeHtml(selectedAccount.bankName)}</option>`);
+    }
+    return options.join("");
+  }
+
+  function receiptMethodOptions(country, selected, flowType = "income") {
+    const activeCountry = country === "brasil" ? "brasil" : "japao";
+    const paymentMethods = activeCountry === "brasil"
+      ? { pix: "Pix", ted: "TED", bank: "Debito em conta", card: "Cartao", cash: "Dinheiro", other: "Outro" }
+      : { bank: "Debito em conta", transfer: "Transferencia", card: "Cartao", cash: "Dinheiro", other: "Outro" };
+    const methods = flowType === "income" ? receiptMethods[activeCountry] : paymentMethods;
+    const active = methods[selected] ? selected : (flowType === "income" ? (activeCountry === "brasil" ? "pix" : "salary") : "bank");
+    return Object.entries(methods)
+      .map(([key, label]) => `<option value="${key}" ${selectedAttr(key, active)}>${escapeHtml(label)}</option>`)
+      .join("");
+  }
+
+  function receiptMethodLabel(method) {
+    return receiptMethods.japao[method]
+      || receiptMethods.brasil[method]
+      || monthlyPaymentMethodLabel(method)
+      || "";
+  }
+
+  function transactionMethodLabel(item) {
+    const method = item?.receiptMethod || item?.paymentMethod || "";
+    return method ? receiptMethodLabel(method) : "";
+  }
+
+  function bankAccountBalance(account, month = state.ui.selectedMonth) {
+    if (!account) return 0;
+    const cutoff = dateInMonth(month || currentMonth(), 31);
+    const balanceDate = account.balanceDate || dateInMonth(currentMonth(), new Date().getDate());
+    if (balanceDate > cutoff) return 0;
+    const currency = sanitizeCurrency(account.currency, countryMeta[account.country]?.currency || primaryCurrency());
+    let balance = number(account.initialBalance);
+    const applyMovement = (amount, movementCurrency, date, direction) => {
+      if (!date || date <= balanceDate || date > cutoff) return;
+      balance += direction * convert(amount, movementCurrency, currency, latestRate(date.slice(0, 7)));
+    };
+
+    (state.transactions || [])
+      .filter((item) => item.bankAccountId === account.id)
+      .forEach((item) => {
+        if (item.type === "income") applyMovement(item.amount, item.currency, item.date, 1);
+        if (allOutflowTypes.includes(item.type)) applyMovement(item.amount, item.currency, item.date, -1);
+      });
+
+    (state.workIncomes || [])
+      .filter((item) => item.bankAccountId === account.id)
+      .forEach((item) => applyMovement(item.amount, item.currency, item.date, 1));
+
+    return round(balance, currency === "JPY" ? 0 : 2);
+  }
+
+  function bankAccountsTotal(currency = primaryCurrency(), month = state.ui.selectedMonth) {
+    const rate = latestRate(month);
+    return activeBankAccounts().reduce((total, account) => {
+      return total + convert(bankAccountBalance(account, month), account.currency, currency, rate);
+    }, 0);
+  }
+
+  function bankAccountCountryTotals() {
+    const groups = ["japao", "brasil"];
+    return groups
+      .map((country) => ({
+        country,
+        label: countryMeta[country]?.label || country,
+        total: activeBankAccounts()
+          .filter((account) => account.country === country)
+          .reduce((total, account) => total + convert(bankAccountBalance(account, state.ui.selectedMonth), account.currency, primaryCurrency(), latestRate(state.ui.selectedMonth)), 0)
+      }))
+      .filter((item) => item.total || activeBankAccounts().some((account) => account.country === item.country));
+  }
+
+  function dashboardMainBalance(summary) {
+    if (!activeBankAccounts().length) {
+      return {
+        amount: summary.remaining,
+        currency: summary.currency,
+        fromAccounts: false
+      };
+    }
+    return {
+      amount: bankAccountsTotal(primaryCurrency(), state.ui.selectedMonth),
+      currency: primaryCurrency(),
+      fromAccounts: true
+    };
+  }
+
+  function goalTemplateMeta(templateKey) {
+    return goalTemplates[templateKey] || goalTemplates.other;
+  }
+
+  function goalTemplateOptions(selected) {
+    const active = goalTemplates[selected] ? selected : "emergency";
+    return Object.entries(goalTemplates)
+      .map(([key, meta]) => `<option value="${key}" ${selectedAttr(key, active)}>${escapeHtml(meta.label)}</option>`)
+      .join("");
+  }
+
+  function goalCountryMeta(country) {
+    const countries = {
+      global: { label: "Global", currency: PRIMARY_CURRENCY },
+      japao: { label: "Japao", currency: "JPY" },
+      brasil: { label: "Brasil", currency: "BRL" },
+      eua: { label: "Estados Unidos", currency: "USD" },
+      europa: { label: "Europa", currency: "EUR" },
+      outro: { label: "Outro pais", currency: PRIMARY_CURRENCY }
+    };
+    return countries[country] || null;
+  }
+
+  function goalCountryOptions(selected) {
+    const active = goalCountryMeta(selected) ? selected : "global";
+    return ["global", "japao", "brasil", "eua", "europa", "outro"]
+      .map((key) => {
+        const meta = goalCountryMeta(key);
+        return `<option value="${key}" ${selectedAttr(key, active)}>${escapeHtml(meta.label)}</option>`;
+      })
+      .join("");
+  }
+
+  function goalCountryLabel(country) {
+    return goalCountryMeta(country)?.label || "Global";
+  }
+
+  function goalDefaultCurrency(country) {
+    if (country === "global" || country === "outro") return primaryCurrency();
+    return goalCountryMeta(country)?.currency || primaryCurrency();
+  }
+
+  function goalName(goal) {
+    return String(goal?.title || goal?.customName || goalTemplateMeta(goal?.templateKey).label).trim();
+  }
+
+  function activeFinancialGoals() {
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    return (state.financialGoals || [])
+      .filter((goal) => goal.active !== false)
+      .slice()
+      .sort((a, b) => {
+        const priorityDiff = (priorityOrder[a.priority] ?? 1) - (priorityOrder[b.priority] ?? 1);
+        if (priorityDiff) return priorityDiff;
+        return String(a.targetDate || "9999-12-31").localeCompare(String(b.targetDate || "9999-12-31"));
+      });
+  }
+
+  function goalContributionsForGoal(goalId) {
+    return (state.goalContributions || [])
+      .filter((item) => item.goalId === goalId)
+      .slice()
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  }
+
+  function goalProgress(goal) {
+    const currency = sanitizeCurrency(goal?.currency, primaryCurrency());
+    const target = number(goal?.targetAmount);
+    const saved = goalContributionsForGoal(goal?.id).reduce((total, item) => {
+      const month = item.date?.slice(0, 7) || state.ui.selectedMonth;
+      return total + convert(item.amount, item.currency, currency, latestRate(month));
+    }, 0);
+    const remaining = Math.max(0, target - saved);
+    const percent = target > 0 ? round((saved / target) * 100, 2) : 0;
+    const monthlyNeed = remaining > 0 ? round(remaining / goalMonthsRemaining(goal), 2) : 0;
+    const savedPrimary = convert(saved, currency, primaryCurrency(), latestRate(state.ui.selectedMonth));
+    return {
+      target,
+      saved,
+      remaining,
+      percent,
+      monthlyNeed,
+      savedPrimary
+    };
+  }
+
+  function goalMonthsRemaining(goal) {
+    const selectedMonth = state.ui.selectedMonth || currentMonth();
+    const targetMonth = String(goal?.targetDate || selectedMonth).slice(0, 7);
+    const [fromYear, fromMonth] = selectedMonth.split("-").map(Number);
+    const [toYear, toMonth] = targetMonth.split("-").map(Number);
+    if (!fromYear || !fromMonth || !toYear || !toMonth) return 1;
+    return Math.max(1, (toYear * 12 + toMonth) - (fromYear * 12 + fromMonth) + 1);
   }
 
   function isCommitmentPaid(id, month) {
@@ -9162,6 +10072,8 @@
       investment: "investments",
       creditCard: "creditCards",
       cardPurchase: "cardPurchases",
+      bankAccount: "bankAccounts",
+      goal: "financialGoals",
       subscription: "subscriptions",
       crypto: "cryptoAssets",
       housingCard: "housingCards",

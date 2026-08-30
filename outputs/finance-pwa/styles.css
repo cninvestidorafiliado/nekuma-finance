@@ -937,6 +937,318 @@ h3 {
   line-height: 1.4;
 }
 
+.goals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.goal-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(16, 35, 31, 0.12);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 88% 8%, rgba(216, 255, 114, 0.24), transparent 30%),
+    linear-gradient(145deg, rgba(255, 253, 247, 0.94), rgba(249, 255, 239, 0.68));
+  box-shadow: inset 4px 0 0 var(--goal-color), 0 12px 32px rgba(49, 44, 81, 0.08);
+}
+
+.goal-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.goal-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 15px;
+  color: var(--ink);
+  background: linear-gradient(135deg, rgba(216, 255, 114, 0.92), rgba(240, 195, 142, 0.72));
+  box-shadow: inset 0 0 0 1px rgba(16, 35, 31, 0.08);
+  font-weight: 950;
+}
+
+.goal-title-block {
+  min-width: 0;
+}
+
+.goal-title-block strong,
+.goal-title-block small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal-title-block strong {
+  color: var(--ink);
+  font-size: 0.98rem;
+}
+
+.goal-title-block small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.goal-percent {
+  padding: 7px 9px;
+  border-radius: 999px;
+  color: #08784b;
+  background: rgba(216, 255, 114, 0.45);
+  font-size: 0.78rem;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.goal-amount-line {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.goal-amount-line > div,
+.goal-monthly-need {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(16, 35, 31, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 253, 247, 0.72);
+}
+
+.goal-amount-line span,
+.goal-monthly-need span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.goal-amount-line strong,
+.goal-monthly-need strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.08;
+}
+
+.goal-progress-track {
+  height: 13px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(16, 35, 31, 0.11);
+  box-shadow: inset 0 1px 4px rgba(16, 35, 31, 0.14);
+}
+
+.goal-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--goal-color), #d8ff72 74%, #f0c38e);
+  box-shadow: 0 0 14px rgba(66, 166, 122, 0.24);
+}
+
+.goal-monthly-need {
+  background:
+    radial-gradient(circle at 94% 4%, rgba(216, 255, 114, 0.28), transparent 34%),
+    rgba(242, 250, 235, 0.74);
+}
+
+.goal-monthly-need small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.goal-monthly-need .money-converted,
+.goal-amount-line .money-converted,
+.goal-contribution-mini-list .money-converted {
+  display: inline;
+  margin-left: 4px;
+}
+
+.bank-accounts-panel {
+  background:
+    radial-gradient(circle at 94% 8%, rgba(86, 124, 155, 0.18), transparent 30%),
+    rgba(255, 253, 247, 0.84);
+}
+
+.bank-account-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.bank-account-summary-grid > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(16, 35, 31, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 253, 247, 0.72);
+}
+
+.bank-account-summary-grid span,
+.bank-account-balance span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.bank-account-summary-grid strong,
+.bank-account-balance strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 1.16rem;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+
+.bank-account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.bank-account-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid rgba(16, 35, 31, 0.12);
+  border-radius: 20px;
+  background:
+    linear-gradient(145deg, rgba(255, 253, 247, 0.95), rgba(239, 248, 241, 0.72));
+  box-shadow: 0 12px 30px rgba(49, 44, 81, 0.08);
+}
+
+.bank-account-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+
+.bank-account-head > div {
+  min-width: 0;
+}
+
+.bank-account-head strong,
+.bank-account-head small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bank-account-head strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.bank-account-head small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.bank-account-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 14px;
+  color: var(--paper);
+  background: linear-gradient(145deg, var(--green), #2f4157);
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.bank-account-balance {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(16, 35, 31, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 250, 240, 0.72);
+}
+
+.bank-account-balance small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.balance-source-note {
+  margin-top: -8px;
+  color: rgba(255, 250, 240, 0.64);
+}
+
+.goal-contribution-mini-list {
+  display: grid;
+  gap: 6px;
+}
+
+.goal-contribution-mini-list > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 12px;
+  background: rgba(16, 35, 31, 0.04);
+}
+
+.goal-contribution-mini-list span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.goal-contribution-mini-list strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.goal-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.link-action {
+  border: 0;
+  color: var(--ink);
+  background: transparent;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.link-action.danger {
+  color: var(--red);
+}
+
 .due-alert-list {
   display: grid;
   gap: 8px;
@@ -4759,6 +5071,9 @@ h1 {
   .cards-wallet,
   .desktop-card-stack,
   .mobile-card-list,
+  .goals-grid,
+  .bank-account-grid,
+  .bank-account-summary-grid,
   .subscription-home-carousel,
   .subscription-home-track,
   .subscription-home-page,
@@ -4841,6 +5156,46 @@ h1 {
 
   .paypal-total strong {
     font-size: clamp(1.75rem, 10vw, 2.35rem);
+  }
+
+  .goals-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bank-account-summary-grid,
+  .bank-account-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bank-account-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .bank-account-head .chip {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .goal-card {
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .goal-amount-line {
+    grid-template-columns: 1fr;
+  }
+
+  .goal-card-actions .small-action {
+    flex: 1 1 0;
+  }
+
+  .goal-contribution-mini-list > div {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .goal-contribution-mini-list .link-action {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 
   .dashboard-cards-panel .desktop-card-stack {
