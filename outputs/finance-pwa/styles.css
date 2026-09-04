@@ -1374,6 +1374,60 @@ h3 {
   overflow-wrap: anywhere;
 }
 
+.salary-formula {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  max-width: fit-content;
+  margin-top: 8px;
+}
+
+.salary-formula.has-bonus {
+  gap: 6px 8px;
+}
+
+.salary-formula div {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.salary-formula em {
+  display: block;
+  margin-bottom: 2px;
+  color: rgba(18, 49, 79, 0.58);
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: lowercase;
+}
+
+.salary-formula strong {
+  display: block;
+  color: #12314f;
+  font-size: clamp(0.78rem, 2.8vw, 1.02rem);
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.salary-formula b {
+  padding-bottom: 1px;
+  color: rgba(18, 49, 79, 0.58);
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.salary-total-converted {
+  margin-top: 5px;
+  color: rgba(18, 49, 79, 0.66);
+  font-size: 0.7rem;
+  font-weight: 850;
+  line-height: 1.1;
+}
+
 .salary-estimate-card small {
   color: rgba(233, 246, 255, 0.68);
   font-weight: 750;
@@ -4135,10 +4189,15 @@ canvas {
   grid-template-columns: minmax(130px, 0.8fr) minmax(130px, 0.8fr) minmax(160px, 1fr) auto;
   gap: 8px;
   align-items: end;
+  min-width: 0;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 250, 244, 0.82);
+}
+
+.salary-bonus-row {
+  grid-template-columns: minmax(120px, 0.85fr) minmax(110px, 0.6fr) minmax(130px, 0.7fr) minmax(150px, 0.8fr) auto;
 }
 
 .salary-progression-remove {
@@ -4839,11 +4898,14 @@ canvas {
 .form-grid {
   display: grid;
   gap: 11px;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .field {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .field.is-wide {
@@ -4985,12 +5047,18 @@ canvas {
 
 .modal {
   width: min(100%, 680px);
+  max-width: calc(100vw - 32px);
   max-height: min(88vh, 760px);
   overflow: auto;
+  overflow-x: hidden;
   padding: 16px;
   border-radius: var(--radius);
   background: var(--paper);
   box-shadow: var(--shadow);
+}
+
+.modal-incomeSource {
+  width: min(100%, 860px);
 }
 
 .modal-head {

@@ -112,6 +112,14 @@
     extra: "Renda Extra",
     other: "Outros"
   };
+  const salaryBonusFrequencyMeta = {
+    weekly: { label: "Semanal", months: 0, days: 7 },
+    monthly: { label: "Mensal", months: 1 },
+    bimonthly: { label: "Bimestral", months: 2 },
+    quarterly: { label: "Trimestral", months: 3 },
+    semiannual: { label: "Semestral", months: 6 },
+    annual: { label: "Anual", months: 12 }
+  };
   const commitmentCategoryMeta = {
     imovel: "Imovel",
     veiculo: "Veiculo",
@@ -221,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "auth-onboarding-v97",
-      date: "2026-09-04",
-      title: "Nova entrada do app",
-      body: "A tela de acesso agora tem uma apresentacao inicial separada, login para quem ja tem cadastro e primeiro acesso para novas contas."
+      id: "work-calendar-sunday-start-v101",
+      date: "2026-09-05",
+      title: "Calendario de turnos ajustado",
+      body: "O calendario de turnos agora segue o padrao visual com a semana iniciando no domingo."
     },
     {
       id: "bank-accounts-v87",
@@ -301,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=97")
+      navigator.serviceWorker.register("./service-worker.js?v=101")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -327,11 +335,6 @@
   });
 
   document.addEventListener("click", (event) => {
-    if (event.target.classList && event.target.classList.contains("modal-backdrop")) {
-      closeModal();
-      return;
-    }
-
     const button = event.target.closest("[data-action]");
     if (!button) return;
 
@@ -409,6 +412,8 @@
     if (action === "mark-all-app-news-read") markAllAppNewsRead();
     if (action === "add-salary-progression-step") addSalaryProgressionRow();
     if (action === "remove-salary-progression-step") removeSalaryProgressionRow(button);
+    if (action === "add-salary-bonus-step") addSalaryBonusRow();
+    if (action === "remove-salary-bonus-step") removeSalaryBonusRow(button);
     if (action === "dismiss-salary-receipt") closeModal();
     if (action === "dismiss-due-alert") closeModal();
     if (action === "copy-invite-code") copyInviteCode();
@@ -470,6 +475,14 @@
     if (event.target.id === "goalCountry") updateGoalCurrencyField();
     if (event.target.id === "goalContributionGoalId") updateGoalContributionCurrencyField();
     if (event.target.id === "vehicleInsurancePaymentType") updateVehicleInsuranceCardField();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    const form = event.target.closest?.("form[data-form='income-source']");
+    if (!form) return;
+    if (event.target.matches("textarea, button, [type='submit']")) return;
+    event.preventDefault();
   });
 
   window.addEventListener("resize", debounce(drawVisibleCharts, 120));
@@ -690,7 +703,7 @@
       const mergedCrypto = mergeCryptoAssetsWithLocal(remoteState.cryptoAssets, state.cryptoAssets);
       const mergedLocalData = mergeLocalCollections(remoteState, state, ["incomeSources", "workIncomes", "workScheduleOverrides"]);
       shouldRewriteRemoteState = cryptoAssetsWereNormalized(data.state.cryptoAssets, remoteState.cryptoAssets) || mergedCrypto.changed || mergedLocalData.changed;
-      state = { ...remoteState, ...mergedLocalData.collections, cryptoAssets: mergedCrypto.items };
+      state = { ...remoteState, ...mergedLocalData.collections, cryptoAssets: mergedCrypto.items, deletedItems: mergeDeletedItems(remoteState.deletedItems, state.deletedItems) };
     } else if (!createIfEmpty) {
       state = createInitialState();
     }
@@ -950,7 +963,7 @@
       const remoteState = normalizeState(data.state);
       const mergedCrypto = mergeCryptoAssetsWithLocal(remoteState.cryptoAssets, state.cryptoAssets);
       const mergedLocalData = mergeLocalCollections(remoteState, state, ["incomeSources", "workIncomes", "workScheduleOverrides"]);
-      state = { ...remoteState, ...mergedLocalData.collections, cryptoAssets: mergedCrypto.items };
+      state = { ...remoteState, ...mergedLocalData.collections, cryptoAssets: mergedCrypto.items, deletedItems: mergeDeletedItems(remoteState.deletedItems, state.deletedItems) };
       state.settings.dataMode = "online";
       if (remoteSession.household?.name) state.settings.familyName = remoteSession.household.name;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -1036,7 +1049,8 @@
       incomeSources: normalizeIncomeSources(raw.incomeSources, base.incomeSources),
       workIncomes: normalizeWorkItems(raw.workIncomes, base.workIncomes),
       workScheduleOverrides: normalizeWorkItems(raw.workScheduleOverrides, base.workScheduleOverrides),
-      paidCommitments: raw.paidCommitments || {}
+      paidCommitments: raw.paidCommitments || {},
+      deletedItems: normalizeDeletedItems(raw.deletedItems || base.deletedItems)
     };
     normalized.ui.activeCountry = "global";
     if (normalized.ui.selectedDashboardAccountId && !normalized.bankAccounts.some((account) => account.id === normalized.ui.selectedDashboardAccountId && account.active !== false)) {
@@ -1054,7 +1068,10 @@
       ...item,
       ownerId: item.ownerId || item.createdBy || "",
       salaryPayDay: number(item.salaryPayDay || item.payDay || item.paymentDay),
-      salaryProgressions: normalizeSalaryProgressions(item.salaryProgressions)
+      salaryMonthlyOvertimeHours: number(item.salaryMonthlyOvertimeHours),
+      salarySaturdayRate: number(item.salarySaturdayRate),
+      salaryProgressions: normalizeSalaryProgressions(item.salaryProgressions),
+      salaryBonuses: normalizeSalaryBonuses(item.salaryBonuses)
     }));
   }
 
@@ -1123,6 +1140,46 @@
       }))
       .filter((item) => item.effectiveDate && item.hourlyRate > 0)
       .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+  }
+
+  function normalizeSalaryBonuses(items) {
+    if (!Array.isArray(items)) return [];
+    return items
+      .map((item) => ({
+        id: item.id || uid("sb"),
+        name: String(item.name || item.type || "Bonus").trim(),
+        amount: number(item.amount || item.value),
+        frequency: salaryBonusFrequencyMeta[item.frequency] ? item.frequency : "monthly",
+        nextPaymentDate: String(item.nextPaymentDate || item.date || "").slice(0, 10),
+        note: String(item.note || "").trim()
+      }))
+      .filter((item) => item.name && item.amount > 0 && item.nextPaymentDate)
+      .sort((a, b) => a.nextPaymentDate.localeCompare(b.nextPaymentDate));
+  }
+
+  function normalizeDeletedItems(items = {}) {
+    if (!items || typeof items !== "object") return {};
+    return Object.entries(items).reduce((result, [collection, ids]) => {
+      if (!ids || typeof ids !== "object") return result;
+      result[collection] = Object.entries(ids).reduce((map, [id, deletedAt]) => {
+        if (id && deletedAt) map[id] = String(deletedAt);
+        return map;
+      }, {});
+      return result;
+    }, {});
+  }
+
+  function mergeDeletedItems(remoteDeleted = {}, localDeleted = {}) {
+    const result = normalizeDeletedItems(remoteDeleted);
+    Object.entries(normalizeDeletedItems(localDeleted)).forEach(([collection, ids]) => {
+      result[collection] = { ...(result[collection] || {}) };
+      Object.entries(ids).forEach(([id, deletedAt]) => {
+        const remoteTime = Date.parse(result[collection][id] || "") || 0;
+        const localTime = Date.parse(deletedAt || "") || 0;
+        if (!remoteTime || localTime >= remoteTime) result[collection][id] = deletedAt;
+      });
+    });
+    return result;
   }
 
   function normalizeFinancialGoals(items, fallback = []) {
@@ -1358,9 +1415,22 @@
   function mergeCollectionWithLocal(remoteItems = [], localItems = [], collection = "") {
     const remoteList = Array.isArray(remoteItems) ? remoteItems : [];
     const localList = Array.isArray(localItems) ? localItems : [];
+    const deleted = state.deletedItems?.[collection] || {};
     const localById = new Map(localList.map((item) => [item?.id, item]).filter(([id]) => Boolean(id)));
     let changed = false;
-    const merged = remoteList.map((remoteItem) => {
+    const merged = remoteList
+      .filter((remoteItem) => {
+        const deletedAt = deleted[remoteItem?.id];
+        if (!deletedAt) return true;
+        const deleteTime = Date.parse(deletedAt) || 0;
+        const remoteTime = itemSyncTime(remoteItem);
+        if (deleteTime && (!remoteTime || deleteTime >= remoteTime)) {
+          changed = true;
+          return false;
+        }
+        return true;
+      })
+      .map((remoteItem) => {
       const localItem = localById.get(remoteItem?.id);
       if (shouldPreferLocalItem(remoteItem, localItem, collection)) {
         changed = true;
@@ -1518,7 +1588,8 @@
       incomeSources: [],
       workIncomes: [],
       workScheduleOverrides: [],
-      paidCommitments: {}
+      paidCommitments: {},
+      deletedItems: {}
     };
   }
 
@@ -2319,7 +2390,7 @@
         ${cards.map((card) => `
           <article class="salary-estimate-card balance-salary-card ${card.paid ? "is-paid" : ""}" ${salaryCardStyleAttrs(card)}>
             <span><i data-lucide="${card.paid ? "check-circle-2" : "wallet"}" aria-hidden="true"></i>Salario bruto previsto</span>
-            <strong>${hideBalance ? "*****" : formatMoneyWithPrimary(card.amount, card.currency, card.month)}</strong>
+            ${renderSalaryFormula(card, hideBalance)}
             <div class="salary-card-footer">
               <small>${escapeHtml(card.title)}</small>
               ${card.canConfirm ? `
@@ -2329,6 +2400,40 @@
           </article>
         `).join("")}
       </div>
+    `;
+  }
+
+  function renderSalaryFormula(card, hideBalance) {
+    if (card.kind !== "factory") {
+      return `<strong>${hideBalance ? "*****" : formatMoneyWithPrimary(card.amount, card.currency, card.month)}</strong>`;
+    }
+    const teiji = number(card.teiji);
+    const extras = number(card.zangyou);
+    const bonus = number(card.bonus);
+    const total = number(card.amount);
+    const hasBonus = bonus > 0;
+    if (hideBalance) {
+      return `
+        <div class="salary-formula ${hasBonus ? "has-bonus" : ""}">
+          <div><em>teiji</em><strong>*****</strong></div>
+          <b>+</b>
+          <div><em>zangyou</em><strong>*****</strong></div>
+          ${hasBonus ? `<b>+</b><div><em>bonus</em><strong>*****</strong></div>` : ""}
+          <b>=</b>
+          <div><em>total</em><strong>*****</strong></div>
+        </div>
+      `;
+    }
+    return `
+      <div class="salary-formula ${hasBonus ? "has-bonus" : ""}">
+        <div><em>teiji</em><strong>${formatMoney(teiji, card.currency)}</strong></div>
+        <b>+</b>
+        <div><em>zangyou</em><strong>${formatMoney(extras, card.currency)}</strong></div>
+        ${hasBonus ? `<b>+</b><div><em>bonus</em><strong>${formatMoney(bonus, card.currency)}</strong></div>` : ""}
+        <b>=</b>
+        <div><em>total</em><strong>${formatMoney(total, card.currency)}</strong></div>
+      </div>
+      <div class="salary-total-converted">${formatMoneyWithPrimary(total, card.currency, card.month)}</div>
     `;
   }
 
@@ -2345,6 +2450,9 @@
           id: source.id,
           title: source.name || "Fabrica",
           amount: estimate.total,
+          teiji: estimate.teiji,
+          zangyou: estimate.overtime + estimate.night + estimate.sunday + estimate.saturday,
+          bonus: estimate.bonus,
           currency: estimate.currency,
           month,
           date,
@@ -2357,6 +2465,7 @@
       .filter(Boolean);
 
     const plannedCards = monthPlannedWorkIncomes(month)
+      .filter((item) => activeIncomeSourceById(item.sourceId))
       .filter((item) => normalizedSourceType(incomeSourceById(item.sourceId).type) !== "factory")
       .map((item) => {
         const source = incomeSourceById(item.sourceId);
@@ -4336,7 +4445,7 @@
         <span><strong>${counts.sundayWork}</strong> domingos</span>
       </div>
       <div class="work-calendar-weekdays" aria-hidden="true">
-        ${["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((day) => `<span>${day}</span>`).join("")}
+        ${["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"].map((day) => `<span>${day}</span>`).join("")}
       </div>
       <div class="work-calendar-grid">
         ${renderWorkCalendarBlanks(month)}
@@ -4357,8 +4466,8 @@
 
   function renderWorkCalendarBlanks(month) {
     const first = parseLocalDate(dateInMonth(month, 1));
-    const mondayIndex = (first.getDay() + 6) % 7;
-    return Array.from({ length: mondayIndex }, () => `<span class="work-day-blank"></span>`).join("");
+    const sundayIndex = first.getDay();
+    return Array.from({ length: sundayIndex }, () => `<span class="work-day-blank"></span>`).join("");
   }
 
   function renderWorkOverrideList(source) {
@@ -4599,7 +4708,7 @@
     const content = map[type] ? map[type](modalData) : "";
     modalRoot.innerHTML = `
       <div class="modal-backdrop">
-        <div class="modal" role="dialog" aria-modal="true" aria-label="Formulario">
+        <div class="modal modal-${escapeAttr(type)}" role="dialog" aria-modal="true" aria-label="Formulario">
           ${content}
         </div>
       </div>
@@ -5903,10 +6012,6 @@
             </select>
           </div>
         </div>
-        <div class="field">
-          <label for="sourcePayRule">Agenda de pagamento</label>
-          <input id="sourcePayRule" name="payRule" placeholder="Ex: toda quarta, toda terca, dia 25" value="${escapeAttr(item?.payRule || "")}" />
-        </div>
         <div class="factory-source-fields ${sourceType === "factory" ? "" : "is-hidden"}">
           <div class="form-section-title">
             <strong>Escala da fabrica</strong>
@@ -5936,6 +6041,10 @@
           </div>
           <div class="three-cols">
             <div class="field">
+              <label for="salaryMonthlyOvertimeHours">Hora extra no mes</label>
+              <input id="salaryMonthlyOvertimeHours" name="salaryMonthlyOvertimeHours" inputmode="decimal" placeholder="Ex: 70" value="${escapeAttr(item?.salaryMonthlyOvertimeHours || "")}" />
+            </div>
+            <div class="field">
               <label for="salaryOvertimeRate">Hora extra %</label>
               <input id="salaryOvertimeRate" name="salaryOvertimeRate" inputmode="decimal" placeholder="Ex: 25" value="${escapeAttr(item?.salaryOvertimeRate || "")}" />
             </div>
@@ -5947,6 +6056,10 @@
               <label for="salarySundayRate">Domingo %</label>
               <input id="salarySundayRate" name="salarySundayRate" inputmode="decimal" placeholder="Ex: 35" value="${escapeAttr(item?.salarySundayRate || "")}" />
             </div>
+          </div>
+          <div class="field">
+            <label for="salarySaturdayRate">Sabado %</label>
+            <input id="salarySaturdayRate" name="salarySaturdayRate" inputmode="decimal" placeholder="Ex: 25" value="${escapeAttr(item?.salarySaturdayRate || "")}" />
           </div>
           <div class="three-cols">
             <div class="field">
@@ -5965,24 +6078,14 @@
               </select>
             </div>
           </div>
-          <div class="salary-progression-card">
-            <div class="form-section-title compact salary-progression-head">
-              <div>
-                <strong>Progressao salarial</strong>
-                <span>Use quando o valor hora muda a partir de uma data.</span>
-              </div>
-              <button class="small-action ghost" type="button" data-action="add-salary-progression-step">+</button>
-            </div>
-            <div class="salary-progression-list" data-salary-progression-list>
-              ${(salaryProgressions.length ? salaryProgressions : [{}]).map((row) => renderSalaryProgressionRow(row)).join("")}
-            </div>
-          </div>
           <div class="two-cols">
             <div class="field">
               <label for="shiftSystem">Sistema de turnos</label>
               <select id="shiftSystem" name="shiftSystem">
                 <option value="nikoutai" ${selectedAttr("nikoutai", schedule.shiftSystem)}>Nikoutai</option>
                 <option value="sankoutai" ${selectedAttr("sankoutai", schedule.shiftSystem)}>Sankoutai</option>
+                <option value="day" ${selectedAttr("day", schedule.shiftSystem)}>Diurno</option>
+                <option value="night" ${selectedAttr("night", schedule.shiftSystem)}>Noturno</option>
               </select>
             </div>
             <div class="field">
@@ -6076,6 +6179,30 @@
               </select>
             </div>
           </div>
+          <div class="salary-progression-card salary-bonus-card">
+            <div class="form-section-title compact salary-progression-head">
+              <div>
+                <strong>Bonus</strong>
+                <span>Adicione valores recorrentes conforme a regra da empresa.</span>
+              </div>
+              <button class="small-action ghost" type="button" data-action="add-salary-bonus-step">+</button>
+            </div>
+            <div class="salary-progression-list" data-salary-bonus-list>
+              ${(normalizeSalaryBonuses(item?.salaryBonuses || []).length ? normalizeSalaryBonuses(item?.salaryBonuses || []) : [{}]).map((row) => renderSalaryBonusRow(row)).join("")}
+            </div>
+          </div>
+          <div class="salary-progression-card">
+            <div class="form-section-title compact salary-progression-head">
+              <div>
+                <strong>Progressao salarial</strong>
+                <span>Use quando o valor hora muda a partir de uma data.</span>
+              </div>
+              <button class="small-action ghost" type="button" data-action="add-salary-progression-step">+</button>
+            </div>
+            <div class="salary-progression-list" data-salary-progression-list>
+              ${(salaryProgressions.length ? salaryProgressions : [{}]).map((row) => renderSalaryProgressionRow(row)).join("")}
+            </div>
+          </div>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -6101,6 +6228,33 @@
           <input name="progressionNote" placeholder="Ex: apos 6 meses" value="${escapeAttr(row.note || "")}" />
         </div>
         <button class="small-action ghost salary-progression-remove" type="button" data-action="remove-salary-progression-step" aria-label="Remover progressao">Remover</button>
+      </div>
+    `;
+  }
+
+  function renderSalaryBonusRow(row = {}) {
+    const frequency = salaryBonusFrequencyMeta[row.frequency] ? row.frequency : "monthly";
+    return `
+      <div class="salary-progression-row salary-bonus-row">
+        <div class="field">
+          <label>Nome do bonus</label>
+          <input name="bonusName" placeholder="Ex: Premio, produtividade" value="${escapeAttr(row.name || "")}" />
+        </div>
+        <div class="field">
+          <label>Valor</label>
+          <input name="bonusAmount" inputmode="decimal" placeholder="Ex: 30000" value="${escapeAttr(row.amount || "")}" />
+        </div>
+        <div class="field">
+          <label>Frequencia</label>
+          <select name="bonusFrequency">
+            ${Object.entries(salaryBonusFrequencyMeta).map(([value, meta]) => `<option value="${value}" ${selectedAttr(value, frequency)}>${escapeHtml(meta.label)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label>Proximo pagamento</label>
+          <input name="bonusNextPaymentDate" type="date" value="${escapeAttr(row.nextPaymentDate || "")}" />
+        </div>
+        <button class="small-action ghost salary-progression-remove" type="button" data-action="remove-salary-bonus-step" aria-label="Remover bonus">Remover</button>
       </div>
     `;
   }
@@ -6858,9 +7012,11 @@
       salaryHourlyRate: isFactory ? number(data.salaryHourlyRate) : 0,
       salaryTeijiHours: isFactory ? number(data.salaryTeijiHours) : 0,
       salaryFixedOvertimeHours: isFactory ? number(data.salaryFixedOvertimeHours) : 0,
+      salaryMonthlyOvertimeHours: isFactory ? number(data.salaryMonthlyOvertimeHours) : 0,
       salaryOvertimeRate: isFactory ? number(data.salaryOvertimeRate) : 0,
       salaryNightRate: isFactory ? number(data.salaryNightRate) : 0,
       salarySundayRate: isFactory ? number(data.salarySundayRate) : 0,
+      salarySaturdayRate: isFactory ? number(data.salarySaturdayRate) : 0,
       salaryNightStart: isFactory ? String(data.salaryNightStart || "22:00") : "",
       salaryNightEnd: isFactory ? String(data.salaryNightEnd || "05:00") : "",
       salarySundayAllDay: isFactory ? data.salarySundayAllDay !== "no" : false,
@@ -6868,7 +7024,7 @@
       color: data.color || sourceColors[userIncomeSources().length % sourceColors.length],
       currency: data.currency || "JPY",
       payRule: String(data.payRule || "").trim(),
-      shiftSystem: isFactory ? String(data.shiftSystem || "nikoutai") : "",
+      shiftSystem: isFactory ? normalizeShiftSystem(data.shiftSystem) : "",
       schedulePattern: isFactory ? String(data.schedulePattern || "4x2") : "",
       hirukinStart: isFactory ? String(data.hirukinStart || "08:00") : "",
       hirukinEnd: isFactory ? String(data.hirukinEnd || "17:00") : "",
@@ -6884,6 +7040,7 @@
       myBanColor: isFactory && banNaming === "colors" ? String(data.myBanColor || data.color || "#42a67a") : "",
       cycleStartDate: isFactory ? String(data.cycleStartDate || "") : "",
       cycleStartPhase: isFactory ? String(data.cycleStartPhase || "day") : "",
+      salaryBonuses: isFactory ? collectSalaryBonuses(form) : [],
       salaryProgressions: isFactory ? collectSalaryProgressions(form) : []
     });
     saveState();
@@ -7320,12 +7477,27 @@
     if (!item) return;
     const ok = window.confirm("Excluir este item?");
     if (!ok) return;
+    const deletedAt = new Date().toISOString();
     state[collection] = current.filter((entry) => entry.id !== id);
+    state.deletedItems = normalizeDeletedItems(state.deletedItems);
+    state.deletedItems[collection] = { ...(state.deletedItems[collection] || {}), [id]: deletedAt };
+    if (collection === "incomeSources") {
+      ["workIncomes", "workScheduleOverrides"].forEach((linkedCollection) => {
+        const linkedItems = Array.isArray(state[linkedCollection]) ? state[linkedCollection] : [];
+        const linkedDeleted = linkedItems.filter((entry) => entry.sourceId === id);
+        if (!linkedDeleted.length) return;
+        state[linkedCollection] = linkedItems.filter((entry) => entry.sourceId !== id);
+        state.deletedItems[linkedCollection] = { ...(state.deletedItems[linkedCollection] || {}) };
+        linkedDeleted.forEach((entry) => {
+          if (entry.id) state.deletedItems[linkedCollection][entry.id] = deletedAt;
+        });
+      });
+    }
     if (collection === "bankAccounts" && state.ui.selectedDashboardAccountId === id) {
       const fallback = activeBankAccounts()[0];
       state.ui.selectedDashboardAccountId = fallback?.id || "";
     }
-    saveState();
+    saveState({ remoteNow: true });
     render();
     showToast(message);
   }
@@ -9247,6 +9419,11 @@
     };
   }
 
+  function activeIncomeSourceById(id) {
+    if (!id) return null;
+    return userIncomeSources().find((source) => source.id === id) || null;
+  }
+
   function subscriptionMeta(item) {
     return subscriptionCatalog[item?.serviceKey] || subscriptionCatalog.other;
   }
@@ -9414,6 +9591,8 @@
       overtime: 0,
       night: 0,
       sunday: 0,
+      saturday: 0,
+      bonus: 0,
       workDays: 0
     };
     if (!sources.length) return empty;
@@ -9426,6 +9605,8 @@
       current.overtime += convert(estimate.overtime, estimate.currency, targetCurrency, rate);
       current.night += convert(estimate.night, estimate.currency, targetCurrency, rate);
       current.sunday += convert(estimate.sunday, estimate.currency, targetCurrency, rate);
+      current.saturday += convert(estimate.saturday, estimate.currency, targetCurrency, rate);
+      current.bonus += convert(estimate.bonus, estimate.currency, targetCurrency, rate);
       current.workDays += estimate.workDays;
       return current;
     }, { ...empty, currency: targetCurrency });
@@ -9437,12 +9618,20 @@
     const currency = source.currency || primaryCurrency();
     const baseHourlyRate = number(source.salaryHourlyRate || source.hourlyRate);
     const teijiHours = number(source.salaryTeijiHours);
-    const overtimeHours = number(source.salaryFixedOvertimeHours);
+    const dailyOvertimeHours = number(source.salaryFixedOvertimeHours);
+    const monthlyOvertimeHours = number(source.salaryMonthlyOvertimeHours);
     const overtimeRate = number(source.salaryOvertimeRate) / 100;
     const nightRate = number(source.salaryNightRate) / 100;
     const sundayRate = number(source.salarySundayRate) / 100;
+    const saturdayRate = number(source.salarySaturdayRate) / 100;
     const sundayAllDay = source.salarySundayAllDay !== false;
-    const configured = (baseHourlyRate > 0 || normalizeSalaryProgressions(source.salaryProgressions).some((item) => item.hourlyRate > 0)) && teijiHours > 0;
+    const hasHourlyConfig = (baseHourlyRate > 0 || normalizeSalaryProgressions(source.salaryProgressions).some((item) => item.hourlyRate > 0)) && teijiHours > 0;
+    const hasBonusConfig = salaryBonusesForMonth(source, month).some((item) => item.amount > 0);
+    const configured = hasHourlyConfig || hasBonusConfig;
+    const workedDays = daysInMonth(month)
+      .map((date) => ({ date, day: factoryScheduleDay(source, date) }))
+      .filter(({ day }) => isWorkedScheduleDay(day));
+    const monthlyOvertimePerDay = monthlyOvertimeHours > 0 && workedDays.length ? monthlyOvertimeHours / workedDays.length : 0;
     const base = {
       configured,
       currency,
@@ -9451,34 +9640,80 @@
       overtime: 0,
       night: 0,
       sunday: 0,
+      saturday: 0,
+      bonus: 0,
       workDays: 0
     };
     if (!configured) return base;
+    if (!hasHourlyConfig) {
+      base.bonus = salaryBonusesForMonth(source, month).reduce((total, item) => total + item.amount, 0);
+      base.total = base.bonus;
+      return base;
+    }
 
-    return daysInMonth(month)
-      .map((date) => ({ date, day: factoryScheduleDay(source, date) }))
-      .filter(({ day }) => isWorkedScheduleDay(day))
+    const salary = workedDays
       .reduce((current, { date, day }) => {
         const hourlyRate = salaryHourlyRateForDate(source, date);
         if (hourlyRate <= 0) return current;
         const shiftHours = shiftDurationHours(day.time);
         const paidTeijiHours = teijiHours || shiftHours;
+        const overtimeHours = monthlyOvertimeHours > 0 ? monthlyOvertimePerDay : dailyOvertimeHours;
         const totalShiftHours = Math.max(shiftHours, paidTeijiHours + overtimeHours);
         const nightHours = shiftNightHours(day.time, source.salaryNightStart || "22:00", source.salaryNightEnd || "05:00");
         const sundayHours = day.isSundayWork && sundayAllDay ? totalShiftHours : 0;
+        const saturdayHours = parseLocalDate(date).getDay() === 6 ? totalShiftHours : 0;
 
         current.workDays += 1;
         current.teiji += hourlyRate * paidTeijiHours;
         current.overtime += hourlyRate * overtimeHours * (1 + overtimeRate);
         current.night += hourlyRate * nightHours * nightRate;
         current.sunday += hourlyRate * sundayHours * sundayRate;
-        current.total = current.teiji + current.overtime + current.night + current.sunday;
+        current.saturday += hourlyRate * saturdayHours * saturdayRate;
+        current.total = current.teiji + current.overtime + current.night + current.sunday + current.saturday + current.bonus;
         return current;
       }, base);
+
+    salary.bonus = salaryBonusesForMonth(source, month).reduce((total, item) => total + item.amount, 0);
+    salary.total = salary.teiji + salary.overtime + salary.night + salary.sunday + salary.saturday + salary.bonus;
+    return salary;
   }
 
   function salaryHourlyRateForDate(source, date) {
     return activeSalaryProgressionForDate(source, date).hourlyRate;
+  }
+
+  function salaryBonusesForMonth(source, month) {
+    return normalizeSalaryBonuses(source.salaryBonuses).flatMap((bonus) => {
+      const occurrences = salaryBonusOccurrencesInMonth(bonus, month);
+      return Array.from({ length: occurrences }, () => ({
+        ...bonus,
+        amount: number(bonus.amount)
+      }));
+    });
+  }
+
+  function salaryBonusOccurrencesInMonth(bonus, month) {
+    const start = parseLocalDate(bonus.nextPaymentDate);
+    if (!start) return 0;
+    const monthStart = parseLocalDate(dateInMonth(month, 1));
+    const monthEnd = parseLocalDate(dateInMonth(month, 31));
+    if (monthEnd < start) return 0;
+
+    if (bonus.frequency === "weekly") {
+      let count = 0;
+      const current = new Date(start);
+      while (current < monthStart) current.setDate(current.getDate() + 7);
+      while (current <= monthEnd) {
+        count += 1;
+        current.setDate(current.getDate() + 7);
+      }
+      return count;
+    }
+
+    const meta = salaryBonusFrequencyMeta[bonus.frequency] || salaryBonusFrequencyMeta.monthly;
+    const interval = meta.months || 1;
+    const diff = monthDiff(bonus.nextPaymentDate.slice(0, 7), month);
+    return diff >= 0 && diff % interval === 0 ? 1 : 0;
   }
 
   function activeSalaryProgressionForDate(source, date) {
@@ -9545,8 +9780,9 @@
     const names = String(source.banNames || defaultBanNames(naming, source.banCount || 3)).trim();
     const firstName = names.split(",").map((name) => name.trim()).filter(Boolean)[0] || "Verde";
     const color = source.myBanColor || source.color || (normalizeLookupText(source.myBanName || firstName).includes("azul") ? "#567c9b" : "#42a67a");
+    const shiftSystem = normalizeShiftSystem(source.shiftSystem || "nikoutai");
     return {
-      shiftSystem: source.shiftSystem || "nikoutai",
+      shiftSystem,
       pattern: source.schedulePattern || "4x2",
       hirukinStart: source.hirukinStart || "08:00",
       hirukinEnd: source.hirukinEnd || "17:00",
@@ -9561,8 +9797,14 @@
       myBanName: source.myBanName || firstName,
       myBanColor: color,
       cycleStartDate: source.cycleStartDate || "",
-      cycleStartPhase: source.cycleStartPhase || (source.shiftSystem === "sankoutai" ? "shift1" : "day")
+      cycleStartPhase: source.cycleStartPhase || (shiftSystem === "sankoutai" ? "shift1" : shiftSystem === "night" ? "night" : "day")
     };
+  }
+
+  function normalizeShiftSystem(value) {
+    const normalized = String(value || "").toLowerCase();
+    if (["nikoutai", "sankoutai", "day", "night"].includes(normalized)) return normalized;
+    return "nikoutai";
   }
 
   function defaultBanNames(naming, count = 3) {
@@ -9573,7 +9815,13 @@
   }
 
   function scheduleLabel(schedule) {
-    const shift = schedule.shiftSystem === "sankoutai" ? "Sankoutai" : "Nikoutai";
+    const labels = {
+      nikoutai: "Nikoutai",
+      sankoutai: "Sankoutai",
+      day: "Diurno",
+      night: "Noturno"
+    };
+    const shift = labels[normalizeShiftSystem(schedule.shiftSystem)] || "Nikoutai";
     return `${shift} - ${schedule.pattern} - ban ${schedule.myBanName || "principal"}`;
   }
 
@@ -9632,6 +9880,13 @@
         ...Array.from({ length: workDays }, () => factoryShiftSlot(order[(startIndex + phaseIndex) % order.length], schedule)),
         ...Array.from({ length: offDays }, () => factoryOffSlot())
       ]);
+    }
+
+    if (schedule.shiftSystem === "day" || schedule.shiftSystem === "night") {
+      return [
+        ...Array.from({ length: workDays }, () => factoryShiftSlot(schedule.shiftSystem, schedule)),
+        ...Array.from({ length: offDays }, () => factoryOffSlot())
+      ];
     }
 
     const first = schedule.cycleStartPhase === "night" ? "night" : "day";
@@ -9708,7 +9963,7 @@
   function addSalaryProgressionRow() {
     const list = modalRoot.querySelector("[data-salary-progression-list]");
     if (!list) return;
-    const emptyRows = Array.from(list.querySelectorAll(".salary-progression-row"))
+    const emptyRows = Array.from(list.querySelectorAll(".salary-progression-row:not(.salary-bonus-row)"))
       .filter((row) => !row.querySelector("[name='progressionDate']")?.value && !row.querySelector("[name='progressionHourlyRate']")?.value);
     if (emptyRows.length) {
       emptyRows[0].querySelector("[name='progressionDate']")?.focus();
@@ -9729,10 +9984,42 @@
   }
 
   function collectSalaryProgressions(form) {
-    return normalizeSalaryProgressions(Array.from(form.querySelectorAll(".salary-progression-row")).map((row) => ({
+    return normalizeSalaryProgressions(Array.from(form.querySelectorAll("[data-salary-progression-list] .salary-progression-row")).map((row) => ({
       effectiveDate: row.querySelector("[name='progressionDate']")?.value || "",
       hourlyRate: row.querySelector("[name='progressionHourlyRate']")?.value || "",
       note: row.querySelector("[name='progressionNote']")?.value || ""
+    })));
+  }
+
+  function addSalaryBonusRow() {
+    const list = modalRoot.querySelector("[data-salary-bonus-list]");
+    if (!list) return;
+    const emptyRows = Array.from(list.querySelectorAll(".salary-bonus-row"))
+      .filter((row) => !row.querySelector("[name='bonusName']")?.value && !row.querySelector("[name='bonusAmount']")?.value);
+    if (emptyRows.length) {
+      emptyRows[0].querySelector("[name='bonusName']")?.focus();
+      return;
+    }
+    list.insertAdjacentHTML("beforeend", renderSalaryBonusRow({}));
+    list.lastElementChild?.querySelector("input")?.focus();
+  }
+
+  function removeSalaryBonusRow(button) {
+    const row = button.closest(".salary-bonus-row");
+    const list = button.closest("[data-salary-bonus-list]");
+    if (!row || !list) return;
+    row.remove();
+    if (!list.querySelector(".salary-bonus-row")) {
+      list.insertAdjacentHTML("beforeend", renderSalaryBonusRow({}));
+    }
+  }
+
+  function collectSalaryBonuses(form) {
+    return normalizeSalaryBonuses(Array.from(form.querySelectorAll(".salary-bonus-row")).map((row) => ({
+      name: row.querySelector("[name='bonusName']")?.value || "",
+      amount: row.querySelector("[name='bonusAmount']")?.value || "",
+      frequency: row.querySelector("[name='bonusFrequency']")?.value || "monthly",
+      nextPaymentDate: row.querySelector("[name='bonusNextPaymentDate']")?.value || ""
     })));
   }
 
@@ -9754,7 +10041,7 @@
     const nikoutai = modalRoot.querySelector(".factory-nikoutai-fields");
     const sankoutai = modalRoot.querySelector(".factory-sankoutai-fields");
     if (shiftSystem && nikoutai && sankoutai) {
-      const isSankoutai = shiftSystem.value === "sankoutai";
+      const isSankoutai = normalizeShiftSystem(shiftSystem.value) === "sankoutai";
       nikoutai.classList.toggle("is-hidden", isSankoutai);
       sankoutai.classList.toggle("is-hidden", !isSankoutai);
     }
