@@ -6,6 +6,7 @@
   const DUE_ALERT_KEY = "nekuma-finance-due-alert-key";
   const SALARY_RECEIPT_ALERT_KEY = "nekuma-finance-salary-receipt-alert-key";
   const APP_NEWS_READ_KEY = "nekuma-finance-news-read";
+  const RESTORE_SCROLL_KEY = "nekuma-finance-restore-scroll";
   const LEGACY_STORAGE_KEYS = ["ponte-financeira-state-v1", "ponte-financeira-state-v2"];
   const PRIMARY_CURRENCY = "JPY";
   const DEFAULT_SECONDARY_CURRENCY = "BRL";
@@ -220,10 +221,10 @@
   };
   const appNews = [
     {
-      id: "account-calendar-polish-v92",
+      id: "dashboard-card-compact-v95",
       date: "2026-09-04",
-      title: "Novo card principal de contas",
-      body: "O topo do app agora separa salario previsto, saldo da conta em card colorido com arraste lateral, e mini cards independentes para contas a pagar e pago no mes."
+      title: "Cards mais compactos",
+      body: "Ajustamos scroll, cartoes, veiculo e moradia para ocupar menos tela, com moradia podendo apontar a conta bancaria do debito."
     },
     {
       id: "bank-accounts-v87",
@@ -299,7 +300,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=92")
+      navigator.serviceWorker.register("./service-worker.js?v=95")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -483,11 +484,13 @@
     persistLocalState();
     if (!remoteStore.enabled) {
       render();
+      restoreSavedScrollPosition();
       refreshPaypalBalance(false);
       return;
     }
 
     render();
+    restoreSavedScrollPosition();
     try {
       const { data, error } = await remoteStore.client.auth.getSession();
       if (error) throw error;
@@ -502,7 +505,7 @@
       await loadRemoteState();
       remoteSession.status = "ready";
       startRemoteAutoSync();
-      render();
+      renderKeepingScroll();
       refreshPaypalBalance(false);
     } catch (error) {
       remoteSession.status = "error";
@@ -837,11 +840,11 @@
         await loadRemoteStateForHousehold(remoteSession.householdId, false);
       }
       await loadRemoteHouseholdMembers();
-      render();
+      renderKeepingScroll();
       showToast("Sincronizado.");
     } catch (error) {
       remoteSession.error = error.message || "Falha ao sincronizar.";
-      render();
+      renderKeepingScroll();
     }
   }
 
@@ -866,10 +869,11 @@
       await forcePwaUpdate();
       const url = new URL(window.location.href);
       url.searchParams.set("refresh", `manual-${Date.now()}`);
+      saveScrollPositionForRestore();
       window.location.replace(url.toString());
     } catch (error) {
       remoteSession.error = error.message || "Falha ao atualizar.";
-      render();
+      renderKeepingScroll();
       const remaining = Math.max(0, 3000 - (Date.now() - startedAt));
       setTimeout(() => {
         if (splash) {
@@ -946,7 +950,7 @@
       remoteSession.lastSyncedAt = data.updated_at || new Date().toISOString();
       if (mergedCrypto.changed || mergedLocalData.changed) await flushRemoteState();
       await loadRemoteHouseholdMembers();
-      render();
+      renderKeepingScroll();
       if (reason !== "timer") showToast("Dados atualizados da nuvem.");
     } finally {
       remotePullInFlight = false;
@@ -1218,7 +1222,8 @@
         currency: sanitizeCurrency(item.currency, fallbackCurrency),
         dueDay: item.dueDay ? clamp(Math.round(number(item.dueDay)), 1, 31) : 1,
         paymentMethod: housingPaymentMethodMeta[item.paymentMethod] ? item.paymentMethod : "bank",
-        cardId: item.cardId || ""
+        cardId: item.cardId || "",
+        bankAccountId: item.bankAccountId || ""
       };
     });
   }
@@ -1591,10 +1596,41 @@
 
     refreshIcons();
     setupDashboardAccountCarousel();
+    setupCreditCardHomeCarousel();
     requestAnimationFrame(drawVisibleCharts);
     scheduleFxRefresh(false);
     scheduleCryptoRefresh(false);
     setTimeout(showDueAlertIfNeeded, 250);
+  }
+
+  function renderKeepingScroll() {
+    const scroll = { x: window.scrollX || 0, y: window.scrollY || 0 };
+    render();
+    requestAnimationFrame(() => {
+      window.scrollTo(scroll.x, scroll.y);
+      setTimeout(() => window.scrollTo(scroll.x, scroll.y), 80);
+    });
+  }
+
+  function saveScrollPositionForRestore() {
+    sessionStorage.setItem(RESTORE_SCROLL_KEY, JSON.stringify({
+      x: window.scrollX || 0,
+      y: window.scrollY || 0,
+      at: Date.now()
+    }));
+  }
+
+  function restoreSavedScrollPosition() {
+    try {
+      const raw = sessionStorage.getItem(RESTORE_SCROLL_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(RESTORE_SCROLL_KEY);
+      const scroll = JSON.parse(raw);
+      if (!scroll || Date.now() - Number(scroll.at || 0) > 30000) return;
+      requestAnimationFrame(() => window.scrollTo(Number(scroll.x) || 0, Number(scroll.y) || 0));
+    } catch (error) {
+      sessionStorage.removeItem(RESTORE_SCROLL_KEY);
+    }
   }
 
   function refreshIcons() {
@@ -1613,7 +1649,7 @@
     const cards = Array.from(carousel.querySelectorAll(".account-swipe-card"));
     const selectedCard = cards.find((card) => card.dataset.id === state.ui.selectedDashboardAccountId);
     if (selectedCard) {
-      requestAnimationFrame(() => selectedCard.scrollIntoView({ block: "nearest", inline: "start" }));
+      requestAnimationFrame(() => carousel.scrollTo({ left: selectedCard.offsetLeft - carousel.offsetLeft, behavior: "auto" }));
     } else {
       markDashboardCarouselFocus(carousel);
     }
@@ -1625,9 +1661,54 @@
         if (!nextId || state.ui.selectedDashboardAccountId === nextId) return;
         state.ui.selectedDashboardAccountId = nextId;
         persistLocalState();
-        render();
+        renderKeepingScroll();
       }, 180);
     }, { passive: true });
+  }
+
+  function setupCreditCardHomeCarousel() {
+    const carousel = document.querySelector(".card-mini-carousel");
+    if (!carousel) return;
+    const cards = Array.from(carousel.querySelectorAll(".card-mini"));
+    const activeIndex = normalizeCardCarouselIndex(cards.length);
+    const selectedCard = cards[activeIndex];
+    if (selectedCard) {
+      requestAnimationFrame(() => carousel.scrollTo({ left: selectedCard.offsetLeft - carousel.offsetLeft, behavior: "auto" }));
+    }
+    carousel.addEventListener("scroll", () => {
+      clearTimeout(dashboardCarouselTimer);
+      dashboardCarouselTimer = setTimeout(() => {
+        const next = nearestCreditCardMini(carousel);
+        if (!next) return;
+        const index = Number(next.dataset.index || 0);
+        if (state.ui.activeCardIndex === index) return;
+        state.ui.activeCardIndex = index;
+        persistLocalState();
+        updateCreditCardMiniFocus(carousel);
+      }, 160);
+    }, { passive: true });
+  }
+
+  function nearestCreditCardMini(carousel) {
+    const cards = Array.from(carousel.querySelectorAll(".card-mini"));
+    if (!cards.length) return null;
+    const carouselRect = carousel.getBoundingClientRect();
+    const targetX = carouselRect.left + carouselRect.width * 0.5;
+    return cards.reduce((best, card) => {
+      const rect = card.getBoundingClientRect();
+      const distance = Math.abs((rect.left + rect.width / 2) - targetX);
+      return !best || distance < best.distance ? { card, distance } : best;
+    }, null)?.card || null;
+  }
+
+  function updateCreditCardMiniFocus(carousel) {
+    const index = normalizeCardCarouselIndex(carousel.querySelectorAll(".card-mini").length);
+    carousel.querySelectorAll(".card-mini").forEach((card) => {
+      card.classList.toggle("is-active", Number(card.dataset.index || 0) === index);
+    });
+    carousel.closest(".card-mini-widget")?.querySelectorAll(".carousel-dot").forEach((dot) => {
+      dot.classList.toggle("is-active", Number(dot.dataset.index || 0) === index);
+    });
   }
 
   function nearestDashboardAccountCard(carousel) {
@@ -1786,21 +1867,21 @@
             <p class="mini-label">Dolar / Real</p>
             <strong>${quotes.usdBrl ? formatFxRate(quotes.usdBrl, 4) : "--"}</strong>
           </div>
-          <span class="chip green">USD</span>
+          ${renderFxChangeChip(quotes.usdBrlChange)}
         </article>
         <article class="fx-card">
           <div>
             <p class="mini-label">Dolar / Iene</p>
             <strong>${usdJpy ? formatYenRate(usdJpy) : "--"}</strong>
           </div>
-          <span class="chip gold">JPY</span>
+          ${renderFxChangeChip(quotes.usdJpyChange)}
         </article>
         <article class="fx-card crypto-rate-card">
           <div>
             <p class="mini-label">BTC / Dolar</p>
             <strong>${btcUsd ? formatUsdRate(btcUsd) : "--"}</strong>
           </div>
-          <span class="chip blue">BTC</span>
+          ${renderFxChangeChip(quotes.btcUsdChange)}
         </article>
         <article class="fx-card fx-status-card">
           <div>
@@ -1846,7 +1927,7 @@
     if (!account) return;
     state.ui.selectedDashboardAccountId = account.id;
     persistLocalState();
-    render();
+    renderKeepingScroll();
   }
 
   function renderVisibilityToggle(panel, hidden, label) {
@@ -1862,6 +1943,14 @@
         <span data-lucide="${hidden ? "eye-off" : "eye"}" aria-hidden="true"></span>
       </button>
     `;
+  }
+
+  function renderFxChangeChip(value) {
+    const change = Number(value);
+    const hasValue = Number.isFinite(change);
+    const tone = !hasValue ? "neutral" : change >= 0 ? "positive" : "negative";
+    const arrow = !hasValue ? "" : change >= 0 ? "↑" : "↓";
+    return `<span class="fx-change-pill ${tone}">${hasValue ? `${change >= 0 ? "+" : ""}${formatPercent(Math.abs(change))} ${arrow}` : "--"}</span>`;
   }
 
   function renderHiddenDetails(title, detail) {
@@ -2091,8 +2180,7 @@
             <h2>Meus Cartoes</h2>
             <button class="small-action" type="button" data-action="open-modal" data-modal="creditCard">Novo</button>
           </div>
-          <div class="desktop-card-stack">${renderCreditCardStackPanel()}</div>
-          <div class="mobile-card-list">${renderCreditCardsPanel(3)}</div>
+          ${renderCreditCardHomePanel()}
         </article>
 
         <article class="content-panel vehicle-panel">
@@ -2379,7 +2467,7 @@
     const currency = sanitizeCurrency(account.currency, primaryCurrency());
     const rate = latestRate(state.ui.selectedMonth);
     const payables = dashboardUpcomingFinancialItems(99)
-      .filter((item) => item.country === account.country)
+      .filter((item) => item.bankAccountId ? item.bankAccountId === account.id : item.country === account.country)
       .reduce((total, item) => total + convert(item.amount, item.currency, currency, rate), 0);
     return {
       currency,
@@ -3147,7 +3235,7 @@
           const paid = isCardBillPaid(item.id, state.ui.selectedMonth);
           const usage = item.limitAmount ? clamp(Math.round((bill.total / item.limitAmount) * 100), 0, 999) : 0;
           return `
-            <div class="credit-card-tile ${item.country === "brasil" ? "br-card" : "jp-card"} ${cardVisualStyle(item)}">
+            <div class="credit-card-tile ${item.country === "brasil" ? "br-card" : "jp-card"} ${cardVisualStyle(item)}" ${cardStyleAttrs(item)}>
               <div class="flag-badge ${item.country === "brasil" ? "br" : "jp"}">${country.short}</div>
               <div class="card-topline">
                 <span class="card-chip" aria-hidden="true"></span>
@@ -3183,6 +3271,57 @@
     `;
   }
 
+  function renderCreditCardHomePanel() {
+    const cards = state.creditCards || [];
+    if (!cards.length) {
+      return `
+        <div class="card-mini-empty">
+          <p class="empty-state">Nenhum cartao cadastrado.</p>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="creditCard">Cadastrar cartao</button>
+        </div>
+      `;
+    }
+
+    const total = cards.length;
+    const activeIndex = normalizeCardCarouselIndex(total);
+    const wallet = cardWalletSummary(cards);
+    return `
+      <div class="card-mini-widget">
+        <div class="card-mini-carousel" aria-label="Cartoes cadastrados">
+          ${cards.map((card, index) => renderCreditCardMiniCard(card, index, activeIndex, total)).join("")}
+        </div>
+        ${total > 1 ? `
+          <div class="carousel-dots card-mini-dots" aria-hidden="true">
+            ${cards.map((card, index) => `<button class="carousel-dot ${index === activeIndex ? "is-active" : ""}" type="button" data-action="card-carousel-select" data-index="${index}" data-total="${total}" title="${escapeAttr(card.nickname || card.issuer || "Cartao")}"></button>`).join("")}
+          </div>
+        ` : ""}
+        <div class="card-mini-total">${formatMoney(wallet.total, wallet.currency)}</div>
+      </div>
+    `;
+  }
+
+  function renderCreditCardMiniCard(card, index, activeIndex, total) {
+    const bill = creditCardMonthBill(card, state.ui.selectedMonth);
+    const active = index === activeIndex;
+    return `
+      <button
+        class="card-mini ${active ? "is-active" : ""} ${card.country === "brasil" ? "br-card" : "jp-card"} ${cardVisualStyle(card)}"
+        type="button"
+        data-action="card-carousel-select"
+        data-index="${index}"
+        data-total="${total}"
+        ${cardStyleAttrs(card)}
+        aria-label="${active ? "Cartao atual" : "Selecionar cartao"}"
+      >
+        <span class="card-mini-brand">${escapeHtml(cardNetworkLabel(card))}</span>
+        <span class="card-mini-name">${escapeHtml(card.nickname || card.issuer || "Cartao")}</span>
+        <span class="card-mini-bill">${formatMoneyWithPrimary(bill.total, card.currency, state.ui.selectedMonth)}</span>
+        <span class="card-mini-last4">****${escapeHtml(card.last4 || "0000")}</span>
+        <span class="card-mini-wave" aria-hidden="true"><i data-lucide="contactless"></i></span>
+      </button>
+    `;
+  }
+
   function renderCreditCardStackPanel() {
     const cards = state.creditCards || [];
     if (!cards.length) {
@@ -3215,7 +3354,7 @@
                 data-action="card-carousel-select"
                 data-index="${index}"
                 data-total="${total}"
-                style="--stack-y:${58 - offset * 28}px;--stack-x:${offset * 16}px;--stack-scale:${(1 - offset * 0.045).toFixed(3)};--stack-z:${20 - offset};--stack-opacity:${(1 - offset * 0.08).toFixed(2)}"
+                style="--stack-y:${58 - offset * 28}px;--stack-x:${offset * 16}px;--stack-scale:${(1 - offset * 0.045).toFixed(3)};--stack-z:${20 - offset};--stack-opacity:${(1 - offset * 0.08).toFixed(2)};--card-color:${escapeAttr(sanitizeColor(card.color, card.country === "brasil" ? "#2563eb" : "#0f9f6e"))};--card-color-rgb:${escapeAttr(hexToRgbValues(sanitizeColor(card.color, card.country === "brasil" ? "#2563eb" : "#0f9f6e")))}"
                 aria-label="${isActive ? "Cartao atual" : "Trazer cartao para frente"}"
               >
                 <span class="flag-badge ${card.country === "brasil" ? "br" : "jp"}">${country.short}</span>
@@ -3263,15 +3402,15 @@
     if (total <= 1) return;
     const current = normalizeCardCarouselIndex(total);
     state.ui.activeCardIndex = (current + delta + total) % total;
-    saveState();
-    render();
+    persistLocalState();
+    renderKeepingScroll();
   }
 
   function selectCardCarousel(index, total) {
     if (!total) return;
     state.ui.activeCardIndex = clamp(Math.round(index), 0, total - 1);
-    saveState();
-    render();
+    persistLocalState();
+    renderKeepingScroll();
   }
 
   function normalizeCardCarouselIndex(total) {
@@ -3287,6 +3426,7 @@
   }
 
   function cardVisualStyle(card) {
+    if (card?.color) return "style-custom";
     const text = normalizeLookupText(`${card?.issuer || ""} ${card?.nickname || ""} ${card?.brand || ""}`);
     if (text.includes("nubank")) return "style-nubank";
     if (text.includes("santander")) return "style-santander";
@@ -3297,6 +3437,11 @@
     if (text.includes("visa")) return "style-visa";
     if (text.includes("mastercard")) return "style-mastercard";
     return card?.country === "brasil" ? "style-brasil" : "style-japao";
+  }
+
+  function cardStyleAttrs(card) {
+    const color = sanitizeColor(card?.color, card?.country === "brasil" ? "#2563eb" : "#0f9f6e");
+    return `style="--card-color:${escapeAttr(color)};--card-color-rgb:${escapeAttr(hexToRgbValues(color))}"`;
   }
 
   function cardNetworkLabel(card) {
@@ -3626,7 +3771,9 @@
           ${rows.length ? rows.map((item) => {
             const cardLabel = item.paymentMethod === "card"
               ? creditCardById(item.cardId)?.nickname || creditCardById(item.cardId)?.issuer || "cartao"
-              : housingPaymentMethodLabel(item.paymentMethod);
+              : item.paymentMethod === "bank" && item.bankAccountId
+                ? bankAccountName(bankAccountById(item.bankAccountId))
+                : housingPaymentMethodLabel(item.paymentMethod);
             return `
               <div class="housing-item ${item.paid ? "is-paid" : ""}">
                 <span class="row-icon ${item.paid ? "green" : "blue"}">${escapeHtml(item.icon)}</span>
@@ -4933,6 +5080,10 @@
             </select>
           </div>
         </div>
+        <div class="field">
+          <label for="cardColor">Cor do cartao</label>
+          <input id="cardColor" name="color" type="color" value="${escapeAttr(item?.color || (activeCountry === "brasil" ? "#2563eb" : "#0f9f6e"))}" />
+        </div>
         <div class="two-cols">
           <div class="field">
             <label for="cardIssuer">Banco/emissor</label>
@@ -5467,6 +5618,7 @@
     const selectedCurrency = item?.currency || countryMeta[activeCountry]?.currency || primaryCurrency();
     const services = normalizeHousingItems(item?.items, selectedCurrency);
     const cards = state.creditCards || [];
+    const bankAccounts = activeBankAccounts();
     return `
       <div class="modal-head">
         <h2>${item ? "Editar moradia" : "Nova moradia"}</h2>
@@ -5488,7 +5640,7 @@
           </select>
         </div>
         <div class="housing-form-list">
-          ${services.map((service) => renderHousingServiceFormRow(service, cards)).join("")}
+          ${services.map((service) => renderHousingServiceFormRow(service, cards, bankAccounts, activeCountry)).join("")}
         </div>
         ${!cards.length ? `<p class="empty-state">Para pagar algum item no cartao, cadastre um cartao primeiro.</p>` : ""}
         <div class="form-actions">
@@ -5499,8 +5651,9 @@
     `;
   }
 
-  function renderHousingServiceFormRow(service, cards) {
+  function renderHousingServiceFormRow(service, cards, bankAccounts, country) {
     const key = service.key;
+    const scopedAccounts = bankAccounts.filter((account) => account.country === country);
     return `
       <div class="housing-form-row">
         <label class="housing-service-toggle">
@@ -5519,6 +5672,12 @@
           <label for="${key}PaymentMethod">Pagamento</label>
           <select id="${key}PaymentMethod" name="${key}PaymentMethod">
             ${Object.entries(housingPaymentMethodMeta).map(([value, label]) => `<option value="${value}" ${selectedAttr(value, service.paymentMethod)}>${label}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label for="${key}BankAccountId">Conta debito</label>
+          <select id="${key}BankAccountId" name="${key}BankAccountId">
+            ${bankAccountSelectOptions(country, service.bankAccountId, scopedAccounts.length ? "Escolha a conta" : "Sem conta cadastrada")}
           </select>
         </div>
         <div class="field">
@@ -6360,6 +6519,7 @@
       issuer: data.issuer.trim(),
       nickname: data.nickname.trim(),
       brand: data.brand,
+      color: sanitizeColor(data.color, data.country === "brasil" ? "#2563eb" : "#0f9f6e"),
       last4: String(data.last4 || "").replace(/\D/g, "").slice(-4),
       limitAmount: number(data.limitAmount),
       billAmount: number(data.billAmount),
@@ -6555,6 +6715,7 @@
           ? data[`${template.key}PaymentMethod`]
           : "bank";
         const cardId = paymentMethod === "card" ? data[`${template.key}CardId`] || "" : "";
+        const bankAccountId = paymentMethod === "bank" ? data[`${template.key}BankAccountId`] || "" : "";
         if (paymentMethod === "card" && !cardId && data[`${template.key}Active`]) {
           throw new Error(`Selecione o cartao de ${template.label}.`);
         }
@@ -6566,7 +6727,8 @@
           currency,
           dueDay: clamp(Math.round(number(data[`${template.key}DueDay`])), 1, 31),
           paymentMethod,
-          cardId
+          cardId,
+          bankAccountId
         };
       });
       const updated = upsertItem("housingCards", data.id, {
@@ -6948,6 +7110,7 @@
       category: "Moradia",
       amount: number(item.amount),
       currency: item.currency,
+      bankAccountId: item.paymentMethod === "bank" ? item.bankAccountId || "" : "",
       note: `Pago via ${housingPaymentMethodLabel(item.paymentMethod)}`,
       createdAt: new Date().toISOString(),
       createdBy: author.id,
@@ -7831,7 +7994,12 @@
         usdEur: quotes.usdEur,
         eurBrl: quotes.eurBrl,
         eurJpy: quotes.eurJpy,
+        usdBrlChange: Number(quotes.usdBrlChange || 0),
+        jpyBrlChange: Number(quotes.jpyBrlChange || 0),
+        usdJpyChange: Number(quotes.usdJpyChange || 0),
+        eurBrlChange: Number(quotes.eurBrlChange || 0),
         btcUsd: quotes.btcUsd || state.fxQuotes?.btcUsd || 0,
+        btcUsdChange: Number(quotes.btcUsdChange || 0),
         source: quotes.source,
         ratesDate: quotes.date || "",
         updatedAt: new Date().toISOString(),
@@ -7920,10 +8088,13 @@
 
   async function fetchFxQuotes() {
     const fiat = await fetchFiatFxQuotes();
-    const btcUsd = await fetchBtcUsdQuote().catch(() => Number(state.fxQuotes?.btcUsd || 0));
+    const btc = await fetchBtcUsdQuote().catch(() => ({
+      btcUsd: Number(state.fxQuotes?.btcUsd || 0),
+      btcUsdChange: Number(state.fxQuotes?.btcUsdChange || 0)
+    }));
     return {
       ...fiat,
-      btcUsd
+      ...btc
     };
   }
 
@@ -7953,6 +8124,10 @@
       usdEur,
       eurBrl,
       eurJpy,
+      usdBrlChange: Number(data.USDBRL?.pctChange || 0),
+      jpyBrlChange: Number(data.JPYBRL?.pctChange || 0),
+      usdJpyChange: Number(data.USDJPY?.pctChange || 0),
+      eurBrlChange: Number(data.EURBRL?.pctChange || 0),
       source: "AwesomeAPI",
       date: data.USDBRL?.create_date || data.USDJPY?.create_date || data.JPYBRL?.create_date || data.EURBRL?.create_date || ""
     };
@@ -7973,18 +8148,25 @@
       usdEur: eur,
       eurBrl: brl / eur,
       eurJpy: jpy / eur,
+      usdBrlChange: Number(state.fxQuotes?.usdBrlChange || 0),
+      jpyBrlChange: Number(state.fxQuotes?.jpyBrlChange || 0),
+      usdJpyChange: Number(state.fxQuotes?.usdJpyChange || 0),
+      eurBrlChange: Number(state.fxQuotes?.eurBrlChange || 0),
       source: "Open ER",
       date: data.time_last_update_utc || data.time_last_update_unix || ""
     };
   }
 
   async function fetchBtcUsdQuote() {
-    const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", { cache: "no-store" });
+    const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true", { cache: "no-store" });
     if (!response.ok) throw new Error("Falha na cotacao BTC");
     const data = await response.json();
     const btcUsd = Number(data.bitcoin?.usd || 0);
     if (!btcUsd) throw new Error("Cotacao BTC vazia");
-    return btcUsd;
+    return {
+      btcUsd,
+      btcUsdChange: Number(data.bitcoin?.usd_24h_change || 0)
+    };
   }
 
   function fxStatusText() {
@@ -8420,6 +8602,7 @@
           id: `housing:${card.id}`,
           housingId: card.id,
           country: card.country,
+          bankAccountId: summary.bankAccountId,
           type: "expense",
           title: `Aluguel - ${card.name || "Moradia"}`,
           category: "Moradia",
@@ -8453,6 +8636,7 @@
       currency,
       total,
       totalOpen,
+      bankAccountId: firstOpen?.bankAccountId || rent?.bankAccountId || firstRow?.bankAccountId || "",
       openCount: openRows.length,
       paid: Boolean(rows.length) && openRows.length === 0,
       date: rent?.date || firstOpen?.date || firstRow?.date || dateInMonth(month, 1)

@@ -523,6 +523,37 @@ h3 {
   white-space: nowrap;
 }
 
+.fx-change-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(49, 44, 81, 0.08);
+  font-size: 0.78rem;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.fx-change-pill.positive {
+  color: #077246;
+  background: linear-gradient(135deg, rgba(176, 255, 126, 0.78), rgba(93, 236, 175, 0.72));
+}
+
+.fx-change-pill.negative {
+  color: #9f2d25;
+  background: linear-gradient(135deg, rgba(255, 218, 203, 0.9), rgba(255, 132, 116, 0.42));
+}
+
+.fx-change-pill.neutral {
+  color: var(--muted);
+  background: rgba(49, 44, 81, 0.08);
+}
+
 .fx-status-card {
   grid-column: auto;
   min-height: 56px;
@@ -876,7 +907,7 @@ h3 {
   gap: 12px;
   width: 100%;
   max-width: 100%;
-  padding: 4px 12px 14px 2px;
+  padding: 4px 2px 12px 2px;
   overflow-x: auto;
   touch-action: pan-x;
   scrollbar-width: none;
@@ -925,14 +956,14 @@ h3 {
   position: relative;
   isolation: isolate;
   display: grid;
-  flex: 0 0 calc(100% - 10px);
+  flex: 0 0 100%;
   gap: 20px;
   min-width: 0;
-  min-height: 220px;
-  padding: 24px;
+  min-height: 198px;
+  padding: 20px;
   overflow: hidden;
   border: 0;
-  border-radius: 30px;
+  border-radius: 24px;
   color: var(--paper);
   background:
     linear-gradient(145deg, rgba(var(--account-color-rgb), 0.72), rgba(7, 26, 22, 0.94) 58%, rgba(6, 18, 31, 0.96)),
@@ -1316,10 +1347,10 @@ h3 {
 .metric-card,
 .content-panel,
 .list-card {
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: var(--radius);
   background: rgba(255, 250, 240, 0.82);
-  box-shadow: 0 10px 28px rgba(40, 33, 20, 0.06);
+  box-shadow: 0 14px 34px rgba(40, 33, 20, 0.08);
 }
 
 .metric-card {
@@ -1348,7 +1379,7 @@ h3 {
 .money-converted {
   display: block;
   margin-top: 2px;
-  color: var(--muted);
+  color: #527066;
   font-size: 0.72rem;
   font-weight: 800;
   line-height: 1.15;
@@ -2316,11 +2347,12 @@ canvas {
 
 .housing-card {
   display: grid;
-  gap: 10px;
+  gap: 9px;
   padding: 12px;
-  border: 1px solid rgba(49, 44, 81, 0.12);
+  border: 0;
   border-radius: var(--radius);
   background: rgba(255, 250, 244, 0.74);
+  box-shadow: 0 12px 28px rgba(40, 33, 20, 0.07);
 }
 
 .housing-card-head,
@@ -2338,10 +2370,11 @@ canvas {
 }
 
 .housing-total {
-  padding: 10px;
-  border: 1px solid rgba(49, 44, 81, 0.08);
+  padding: 9px 10px;
+  border: 0;
   border-radius: var(--radius);
   background: var(--paper);
+  box-shadow: inset 0 0 0 1px rgba(49, 44, 81, 0.05);
 }
 
 .housing-total span,
@@ -2360,18 +2393,33 @@ canvas {
 
 .housing-items {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .housing-item {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 10px;
-  padding: 9px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-height: 108px;
+  padding: 10px;
+  border: 0;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.48);
+  box-shadow: inset 0 0 0 1px rgba(49, 44, 81, 0.06);
+}
+
+.housing-item .row-amount {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  text-align: left;
+  white-space: normal;
+}
+
+.housing-item .row-actions {
+  margin-top: 6px;
+  justify-content: flex-start;
 }
 
 .housing-item.is-paid {
@@ -2385,7 +2433,7 @@ canvas {
 
 .housing-form-row {
   display: grid;
-  grid-template-columns: minmax(92px, 0.8fr) repeat(4, minmax(0, 1fr));
+  grid-template-columns: minmax(92px, 0.8fr) repeat(5, minmax(0, 1fr));
   gap: 8px;
   align-items: end;
   padding: 10px;
@@ -2413,29 +2461,30 @@ canvas {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) minmax(150px, auto) auto;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-  padding: 12px;
-  border: 1px solid rgba(86, 124, 155, 0.24);
+  gap: 10px;
+  margin-bottom: 0;
+  padding: 10px;
+  border: 0;
   border-radius: var(--radius);
   background:
     radial-gradient(circle at 90% 18%, rgba(245, 200, 76, 0.34), transparent 24%),
     var(--paper);
+  box-shadow: 0 12px 28px rgba(40, 33, 20, 0.07);
 }
 
 .vehicle-visual {
   display: grid;
-  width: 78px;
-  height: 58px;
+  width: 64px;
+  height: 48px;
   place-items: center;
-  border-radius: 18px;
+  border-radius: 16px;
   background: linear-gradient(135deg, #fff4d8, #f0c38e);
 }
 
 .vehicle-image {
   position: relative;
-  width: 64px;
-  height: 36px;
+  width: 54px;
+  height: 32px;
 }
 
 .vehicle-car-body,
@@ -2685,6 +2734,14 @@ canvas {
     linear-gradient(135deg, #08221b 0%, #15694a 48%, #0a3155 100%);
 }
 
+.stack-card.style-custom,
+.credit-card-tile.style-custom {
+  background:
+    radial-gradient(circle at 82% 18%, rgba(255, 255, 255, 0.24), transparent 24%),
+    linear-gradient(135deg, rgba(var(--card-color-rgb), 0.96), rgba(30, 42, 74, 0.92) 58%, rgba(9, 25, 31, 0.96)),
+    var(--card-color);
+}
+
 .stack-card::before {
   content: "";
   position: absolute;
@@ -2805,6 +2862,144 @@ canvas {
   min-height: 180px;
 }
 
+.card-mini-widget {
+  display: grid;
+  gap: 10px;
+}
+
+.card-mini-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 70px;
+  padding: 10px 12px;
+  border-radius: 18px;
+  background: rgba(255, 253, 247, 0.7);
+  box-shadow: 0 14px 34px rgba(7, 31, 25, 0.07);
+}
+
+.card-mini-empty .empty-state {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.card-mini-carousel {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 2px 2px 4px;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+
+.card-mini-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.card-mini {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "label last4"
+    "name wave"
+    "amount wave";
+  align-items: center;
+  gap: 4px 12px;
+  flex: 0 0 100%;
+  min-height: 82px;
+  padding: 11px 13px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 18px;
+  color: #fffdf7;
+  text-align: left;
+  background:
+    linear-gradient(135deg, rgba(var(--card-color-rgb), 0.85), rgba(134, 70, 225, 0.78)),
+    var(--card-color);
+  box-shadow: 0 18px 38px rgba(var(--card-color-rgb), 0.22), 0 14px 30px rgba(7, 31, 25, 0.12);
+  scroll-snap-align: start;
+}
+
+.card-mini::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.22), transparent 30%),
+    radial-gradient(circle at 84% 110%, rgba(255, 255, 255, 0.14), transparent 34%),
+    linear-gradient(120deg, rgba(255, 255, 255, 0.12) 0 18%, transparent 18% 42%, rgba(255, 255, 255, 0.08) 42% 58%, transparent 58%);
+  pointer-events: none;
+}
+
+.card-mini > * {
+  position: relative;
+  z-index: 1;
+}
+
+.card-mini-brand {
+  grid-area: label;
+  color: rgba(255, 253, 247, 0.82);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.card-mini-name {
+  grid-area: name;
+  color: #fffdf7;
+  font-size: 0.86rem;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-mini-bill {
+  grid-area: amount;
+  color: #fffdf7;
+  font-size: 0.96rem;
+  font-weight: 950;
+  overflow-wrap: anywhere;
+}
+
+.card-mini-last4 {
+  grid-area: last4;
+  color: rgba(255, 253, 247, 0.86);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.card-mini-wave {
+  grid-area: wave;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.card-mini-wave svg {
+  width: 18px;
+  height: 18px;
+}
+
+.card-mini-dots {
+  margin-top: -2px;
+}
+
+.card-mini-total {
+  color: var(--ink);
+  font-size: clamp(1.72rem, 6.5vw, 2.35rem);
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
+}
+
 @media (min-width: 760px) {
   .dashboard-card-vehicle-grid {
     grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
@@ -2812,7 +3007,7 @@ canvas {
   }
 
   .dashboard-card-vehicle-grid > .content-panel {
-    min-height: 336px;
+    min-height: 248px;
   }
 
   .desktop-card-stack {
@@ -3709,7 +3904,7 @@ canvas {
 }
 
 .work-day-cell strong {
-  font-size: 1.02rem;
+  font-size: 0.96rem;
   line-height: 1;
 }
 
@@ -4862,6 +5057,12 @@ h1 {
   backdrop-filter: blur(18px);
 }
 
+.content-panel,
+.metric-card,
+.list-card {
+  border: 0;
+}
+
 .content-panel {
   position: relative;
   overflow: hidden;
@@ -5269,6 +5470,14 @@ h1 {
     linear-gradient(135deg, #08221b 0%, #15694a 48%, #0a3155 100%);
 }
 
+.stack-card.style-custom,
+.credit-card-tile.style-custom {
+  background:
+    radial-gradient(circle at 82% 18%, rgba(255, 255, 255, 0.24), transparent 24%),
+    linear-gradient(135deg, rgba(var(--card-color-rgb), 0.96), rgba(30, 42, 74, 0.92) 58%, rgba(9, 25, 31, 0.96)),
+    var(--card-color);
+}
+
 @media (min-width: 760px) {
   .app-shell {
     padding-right: 20px;
@@ -5444,11 +5653,11 @@ h1 {
 
   .account-swipe-carousel {
     gap: 10px;
-    padding-right: 12px;
+    padding-right: 2px;
   }
 
   .account-swipe-card {
-    flex-basis: calc(100% - 10px);
+    flex-basis: 100%;
     min-height: 172px;
     padding: 14px;
     gap: 12px;
@@ -5756,6 +5965,46 @@ h1 {
 
   .card-actions {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .crypto-panel.is-compact .crypto-token-list,
+  .crypto-panel.is-compact .hidden-details-note {
+    display: none;
+  }
+
+  .dashboard-cards-panel {
+    min-height: auto;
+  }
+
+  .card-mini-empty {
+    min-height: 68px;
+    padding: 10px 12px;
+  }
+
+  .card-mini {
+    flex-basis: 100%;
+    min-height: 78px;
+  }
+
+  .card-mini-total {
+    font-size: clamp(1.75rem, 10vw, 2.4rem);
+  }
+}
+
+@media (max-width: 420px) {
+  .card-mini-empty {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .card-mini-empty .small-action {
+    width: fit-content;
+  }
+
+  .card-mini {
+    padding: 11px 12px;
   }
 }
 
