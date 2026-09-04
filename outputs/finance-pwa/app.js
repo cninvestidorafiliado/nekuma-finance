@@ -282,6 +282,7 @@
   let dashboardCarouselTimer = null;
   let dashboardMonthAnchored = "";
   let lastLocalChangeAt = 0;
+  let authView = "welcome";
   cleanupLegacyStorage();
   let state = loadState();
   const remoteStore = createRemoteStore();
@@ -336,6 +337,12 @@
 
     const action = button.dataset.action;
     if (action === "none") return;
+    if (action === "set-auth-view") {
+      authView = button.dataset.view || "welcome";
+      remoteSession.error = "";
+      render();
+    }
+
     if (action === "set-tab") {
       state.ui.activeTab = button.dataset.tab;
       if (state.ui.activeTab === "dashboard") state.ui.selectedMonth = currentMonth();
@@ -1762,18 +1769,19 @@
   function renderAuthGate() {
     const isLoading = remoteSession.status === "loading";
     const canSignup = remoteStore.config.enableSignup !== false;
+    const view = authView === "login" || authView === "signup" ? authView : "welcome";
     return `
-      <section class="auth-panel">
-        <article class="auth-visual" aria-hidden="true">
+      <section class="auth-panel auth-panel-${view}">
+        <article class="auth-visual">
           <img class="auth-brand-mark" src="./assets/nekuma-logo-192.png" alt="" />
           <div>
             <p class="auth-kicker">Nekuma Finance</p>
-            <h2>Um aplicativo financeiro completo. Dois paises em um so lugar.</h2>
+            <h2>Seu dinheiro no Japao e no Brasil, em uma tela mais clara.</h2>
           </div>
           <div class="auth-preview-card">
-            <span>Total do mes</span>
-            <strong>¥ 0</strong>
-            <small>Online com Supabase</small>
+            <span>Carteira do mes</span>
+            <strong>¥ 248,500</strong>
+            <small>Contas, salario, cripto e familia sincronizados</small>
           </div>
           <div class="auth-swatches">
             <span style="background:#312C51"></span>
@@ -1784,62 +1792,103 @@
         </article>
 
         <article class="auth-card">
-          <div class="auth-card-head">
-            <div>
-              <p class="auth-kicker">Login</p>
-              <h2>Entrar na conta</h2>
-            </div>
-            <span class="chip green">Online</span>
-          </div>
           ${remoteSession.error ? `<p class="auth-error">${escapeHtml(remoteSession.error)}</p>` : ""}
-          ${isLoading ? `<p class="empty-state">Conectando...</p>` : `
-            <form class="form-grid" data-form="auth-login">
-              <div class="field">
-                <label for="loginEmail">Email</label>
-                <input id="loginEmail" name="email" type="email" autocomplete="email" required />
-              </div>
-              <div class="field">
-                <label for="loginPassword">Senha</label>
-                <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
-              </div>
-              <div class="field">
-                <label for="loginInviteCode">Codigo da familia</label>
-                <input id="loginInviteCode" name="inviteCode" inputmode="text" autocomplete="off" placeholder="Opcional para entrar na familia existente" />
-              </div>
-              <button class="primary-button" type="submit">Entrar</button>
-            </form>
-          `}
-
-          ${canSignup ? `
-            <div class="auth-divider"><span>Criar acesso</span></div>
-            <div class="auth-card-head compact">
-              <div>
-                <p class="auth-kicker">Cadastro</p>
-                <h2>Nova familia</h2>
-              </div>
-            </div>
-            <form class="form-grid" data-form="auth-signup">
-              <div class="field">
-                <label for="signupFamily">Nome da familia</label>
-                <input id="signupFamily" name="familyName" value="${escapeAttr(state.settings.familyName)}" placeholder="Use se estiver criando uma nova familia" />
-              </div>
-              <div class="field">
-                <label for="signupEmail">Email</label>
-                <input id="signupEmail" name="email" type="email" autocomplete="email" required />
-              </div>
-              <div class="field">
-                <label for="signupPassword">Senha</label>
-                <input id="signupPassword" name="password" type="password" autocomplete="new-password" minlength="6" required />
-              </div>
-              <div class="field">
-                <label for="signupInviteCode">Codigo da familia</label>
-                <input id="signupInviteCode" name="inviteCode" inputmode="text" autocomplete="off" placeholder="Opcional para entrar na familia existente" />
-              </div>
-              <button class="secondary-button" type="submit">Criar login</button>
-            </form>
-          ` : ""}
+          ${isLoading ? `<p class="empty-state">Conectando...</p>` : view === "login" ? renderAuthLoginForm() : view === "signup" ? renderAuthSignupForm(canSignup) : renderAuthWelcome(canSignup)}
         </article>
       </section>
+    `;
+  }
+
+  function renderAuthWelcome(canSignup) {
+    return `
+      <div class="auth-card-head">
+        <div>
+          <p class="auth-kicker">Primeira tela</p>
+          <h2>Bem-vindo ao Nekuma</h2>
+        </div>
+        <span class="chip green">Online</span>
+      </div>
+      <p class="auth-lead">Organize contas, salarios, cartoes, moradia, cripto e metas em uma experiencia feita para a vida entre paises.</p>
+      <div class="auth-choice-grid">
+        <button class="auth-choice primary" type="button" data-action="set-auth-view" data-view="login">
+          <span data-lucide="log-in" aria-hidden="true"></span>
+          <strong>Ja tenho cadastro</strong>
+          <small>Entrar com email e senha</small>
+        </button>
+        ${canSignup ? `
+          <button class="auth-choice" type="button" data-action="set-auth-view" data-view="signup">
+            <span data-lucide="sparkles" aria-hidden="true"></span>
+            <strong>Primeiro acesso</strong>
+            <small>Criar uma nova conta</small>
+          </button>
+        ` : ""}
+      </div>
+      <div class="auth-feature-list">
+        <span><i data-lucide="shield-check" aria-hidden="true"></i> Dados protegidos</span>
+        <span><i data-lucide="users" aria-hidden="true"></i> Vinculo familiar</span>
+        <span><i data-lucide="globe-2" aria-hidden="true"></i> Brasil e Japao</span>
+      </div>
+    `;
+  }
+
+  function renderAuthLoginForm() {
+    return `
+      <div class="auth-card-head">
+        <div>
+          <p class="auth-kicker">Login</p>
+          <h2>Entrar na conta</h2>
+        </div>
+        <button class="small-action ghost" type="button" data-action="set-auth-view" data-view="welcome">Voltar</button>
+      </div>
+      <form class="form-grid" data-form="auth-login">
+        <div class="field">
+          <label for="loginEmail">Email</label>
+          <input id="loginEmail" name="email" type="email" autocomplete="email" required />
+        </div>
+        <div class="field">
+          <label for="loginPassword">Senha</label>
+          <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
+        </div>
+        <div class="field">
+          <label for="loginInviteCode">Codigo da familia</label>
+          <input id="loginInviteCode" name="inviteCode" inputmode="text" autocomplete="off" placeholder="Opcional para entrar na familia existente" />
+        </div>
+        <button class="primary-button" type="submit">Entrar</button>
+      </form>
+      <button class="link-action auth-back-link" type="button" data-action="set-auth-view" data-view="signup">Criar uma conta</button>
+    `;
+  }
+
+  function renderAuthSignupForm(canSignup) {
+    if (!canSignup) return renderAuthWelcome(false);
+    return `
+      <div class="auth-card-head">
+        <div>
+          <p class="auth-kicker">Cadastro</p>
+          <h2>Primeiro acesso</h2>
+        </div>
+        <button class="small-action ghost" type="button" data-action="set-auth-view" data-view="welcome">Voltar</button>
+      </div>
+      <form class="form-grid" data-form="auth-signup">
+        <div class="field">
+          <label for="signupFamily">Nome da familia</label>
+          <input id="signupFamily" name="familyName" value="${escapeAttr(state.settings.familyName)}" placeholder="Use se estiver criando uma nova familia" />
+        </div>
+        <div class="field">
+          <label for="signupEmail">Email</label>
+          <input id="signupEmail" name="email" type="email" autocomplete="email" required />
+        </div>
+        <div class="field">
+          <label for="signupPassword">Senha</label>
+          <input id="signupPassword" name="password" type="password" autocomplete="new-password" minlength="6" required />
+        </div>
+        <div class="field">
+          <label for="signupInviteCode">Codigo da familia</label>
+          <input id="signupInviteCode" name="inviteCode" inputmode="text" autocomplete="off" placeholder="Opcional para entrar na familia existente" />
+        </div>
+        <button class="primary-button" type="submit">Criar login</button>
+      </form>
+      <button class="link-action auth-back-link" type="button" data-action="set-auth-view" data-view="login">Ja tenho cadastro</button>
     `;
   }
 
