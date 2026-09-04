@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "salary-formula-responsive-v103",
+      id: "salary-payment-account-v104",
       date: "2026-09-05",
-      title: "Formula do salario alinhada",
-      body: "O calculo do salario bruto previsto ficou alinhado no computador e mais compacto no celular, com total em destaque."
+      title: "Salario ligado a conta",
+      body: "O salario previsto agora considera pagamento no mes seguinte ao trabalhado e pode ser vinculado a uma conta bancaria de destino."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=103")
+      navigator.serviceWorker.register("./service-worker.js?v=104")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -2445,15 +2445,17 @@
   }
 
   function dashboardSalaryCards(month = state.ui.selectedMonth) {
+    const paymentMonth = month;
+    const workMonth = addMonths(paymentMonth, -1);
     const factoryCards = factorySources()
       .map((source) => {
-        const estimate = estimateFactorySourceSalary(source, month);
+        const estimate = estimateFactorySourceSalary(source, workMonth);
         if (!estimate.configured) return null;
-        const paid = isFactorySalaryPaid(source.id, month);
-        const date = factorySalaryDueDate(source, month);
+        const paid = isFactorySalaryPaid(source.id, workMonth);
+        const date = factorySalaryDueDate(source, paymentMonth);
         return {
           kind: "factory",
-          ref: `factory:${source.id}:${month}`,
+          ref: `factory:${source.id}:${workMonth}:${paymentMonth}`,
           id: source.id,
           title: source.name || "Fabrica",
           amount: estimate.total,
@@ -2461,7 +2463,8 @@
           zangyou: estimate.overtime + estimate.night + estimate.sunday + estimate.saturday,
           bonus: estimate.bonus,
           currency: estimate.currency,
-          month,
+          month: workMonth,
+          paymentMonth,
           date,
           color: source.color,
           paid,
@@ -6032,6 +6035,12 @@
             <label for="salaryPayDay">Dia do pagamento</label>
             <input id="salaryPayDay" name="salaryPayDay" inputmode="numeric" placeholder="Ex: 25" value="${escapeAttr(item?.salaryPayDay || "")}" />
           </div>
+          <div class="field">
+            <label for="sourceBankAccountId">Conta para receber salario</label>
+            <select id="sourceBankAccountId" name="bankAccountId">
+              ${bankAccountSelectOptions("global", item?.bankAccountId || "", activeBankAccounts().length ? "Escolha a conta" : "Cadastre uma conta primeiro")}
+            </select>
+          </div>
           <div class="three-cols">
             <div class="field">
               <label for="salaryHourlyRate">Valor hora</label>
@@ -6325,14 +6334,15 @@
   }
 
   function salaryReceiptTargetFromRef(ref = "") {
-    const [kind, sourceId, refMonth] = String(ref || "").split(":");
+    const [kind, sourceId, refMonth, refPaymentMonth] = String(ref || "").split(":");
     if (kind === "factory" && sourceId) {
       const source = incomeSourceById(sourceId);
       if (!source.id || normalizedSourceType(source.type) !== "factory") return null;
-      const month = refMonth || state.ui.selectedMonth;
-      const estimate = estimateFactorySourceSalary(source, month);
+      const workMonth = refMonth || addMonths(state.ui.selectedMonth, -1);
+      const paymentMonth = refPaymentMonth || addMonths(workMonth, 1);
+      const estimate = estimateFactorySourceSalary(source, workMonth);
       if (!estimate.configured) return null;
-      const date = factorySalaryDueDate(source, month);
+      const date = factorySalaryDueDate(source, paymentMonth);
       return {
         kind,
         id: source.id,
@@ -6341,10 +6351,11 @@
         category: "Salario bruto previsto",
         amount: round(estimate.total, estimate.currency === "JPY" ? 0 : 2),
         currency: estimate.currency,
-        month,
+        month: workMonth,
+        paymentMonth,
         date,
         bankAccountId: source.bankAccountId || "",
-        paid: isFactorySalaryPaid(source.id, month)
+        paid: isFactorySalaryPaid(source.id, workMonth)
       };
     }
 
@@ -6393,6 +6404,7 @@
       `;
     }
     const preferredAccountId = target.bankAccountId || preferredIncomeBankAccountId();
+    const preferredAccount = bankAccountById(preferredAccountId);
     return `
       <div class="modal-head">
         <h2>Confirmar recebimento</h2>
@@ -6425,7 +6437,7 @@
           <div class="field">
             <label for="salaryReceiptBankAccountId">Conta de destino</label>
             <select id="salaryReceiptBankAccountId" name="bankAccountId">
-              ${bankAccountSelectOptions("japao", preferredAccountId, "Sem conta vinculada")}
+              ${bankAccountSelectOptions(preferredAccount?.country || "global", preferredAccountId, "Sem conta vinculada")}
             </select>
           </div>
         </div>
@@ -7028,6 +7040,7 @@
       salaryNightEnd: isFactory ? String(data.salaryNightEnd || "05:00") : "",
       salarySundayAllDay: isFactory ? data.salarySundayAllDay !== "no" : false,
       salaryPayDay: isFactory && number(data.salaryPayDay) ? clamp(Math.round(number(data.salaryPayDay)), 1, 31) : 0,
+      bankAccountId: isFactory ? data.bankAccountId || "" : "",
       color: data.color || sourceColors[userIncomeSources().length % sourceColors.length],
       currency: data.currency || "JPY",
       payRule: String(data.payRule || "").trim(),
@@ -7120,7 +7133,8 @@
         receivedAt: now,
         bankAccountId,
         amount,
-        currency
+        currency,
+        paymentMonth: target.paymentMonth || date.slice(0, 7)
       };
       state.transactions.unshift({
         id: uid("tx"),
