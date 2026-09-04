@@ -221,10 +221,10 @@
   };
   const appNews = [
     {
-      id: "dashboard-card-compact-v95",
+      id: "housing-shadow-polish-v96",
       date: "2026-09-04",
-      title: "Cards mais compactos",
-      body: "Ajustamos scroll, cartoes, veiculo e moradia para ocupar menos tela, com moradia podendo apontar a conta bancaria do debito."
+      title: "Acabamento dos cards",
+      body: "Reduzimos a sombra geral dos cards e alinhamos o botao de pagamento da moradia junto dos valores."
     },
     {
       id: "bank-accounts-v87",
@@ -300,7 +300,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=95")
+      navigator.serviceWorker.register("./service-worker.js?v=96")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
