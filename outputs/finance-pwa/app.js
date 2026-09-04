@@ -221,10 +221,10 @@
   };
   const appNews = [
     {
-      id: "housing-shadow-polish-v96",
+      id: "auth-onboarding-v97",
       date: "2026-09-04",
-      title: "Acabamento dos cards",
-      body: "Reduzimos a sombra geral dos cards e alinhamos o botao de pagamento da moradia junto dos valores."
+      title: "Nova entrada do app",
+      body: "A tela de acesso agora tem uma apresentacao inicial separada, login para quem ja tem cadastro e primeiro acesso para novas contas."
     },
     {
       id: "bank-accounts-v87",
@@ -301,7 +301,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=96")
+      navigator.serviceWorker.register("./service-worker.js?v=97")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
