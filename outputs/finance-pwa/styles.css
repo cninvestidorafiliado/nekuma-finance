@@ -595,6 +595,35 @@ h3 {
   color: var(--paper);
 }
 
+.balance-redesign {
+  gap: 12px;
+  padding: 0;
+  color: var(--ink);
+}
+
+.balance-overview.balance-redesign {
+  grid-template-columns: 1fr;
+  min-height: auto;
+  padding: 0;
+}
+
+.balance-redesign .balance-copy {
+  grid-row: auto;
+}
+
+.balance-redesign .balance-copy {
+  gap: 10px;
+}
+
+.balance-redesign .balance-salary-card {
+  grid-column: auto;
+  align-self: stretch;
+}
+
+.balance-redesign .balance-salary-card {
+  color: #12314f;
+}
+
 .balance-privacy-action {
   position: absolute;
   top: 14px;
@@ -762,6 +791,365 @@ h3 {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+.overview-duo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.overview-mini-card {
+  min-width: 0;
+  padding: 14px;
+  border: 0;
+  border-radius: 22px;
+  background: rgba(255, 253, 247, 0.86);
+  box-shadow: 0 14px 34px rgba(7, 31, 25, 0.08);
+}
+
+.overview-mini-card span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.overview-mini-card span svg,
+.salary-estimate-card span svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.overview-mini-card strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: clamp(1.18rem, 4.8vw, 1.65rem);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.overview-mini-card.payable {
+  background:
+    radial-gradient(circle at 92% 10%, rgba(217, 93, 78, 0.13), transparent 28%),
+    rgba(255, 253, 247, 0.9);
+}
+
+.overview-mini-card.paid {
+  background:
+    radial-gradient(circle at 92% 10%, rgba(66, 166, 122, 0.16), transparent 28%),
+    rgba(255, 253, 247, 0.9);
+}
+
+.account-carousel-block {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.account-carousel-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.account-carousel-title span {
+  color: rgba(255, 250, 240, 0.72);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.account-carousel-title small {
+  color: rgba(255, 250, 240, 0.54);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.account-swipe-carousel {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  max-width: 100%;
+  padding: 4px 12px 14px 2px;
+  overflow-x: auto;
+  touch-action: pan-x;
+  scrollbar-width: none;
+  scroll-padding-inline: 2px;
+  scroll-snap-type: x mandatory;
+  perspective: 900px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.account-swipe-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.account-swipe-carousel.single-card {
+  padding-right: 2px;
+  overflow: visible;
+}
+
+.account-swipe-carousel.single-card .account-swipe-card {
+  flex-basis: 100%;
+}
+
+.account-carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px 2px 0;
+}
+
+.account-carousel-dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(16, 35, 31, 0.18);
+  box-shadow: none;
+}
+
+.account-carousel-dot.is-active {
+  width: 22px;
+  background: rgba(16, 35, 31, 0.5);
+}
+
+.account-swipe-card {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  flex: 0 0 calc(100% - 10px);
+  gap: 20px;
+  min-width: 0;
+  min-height: 220px;
+  padding: 24px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 30px;
+  color: var(--paper);
+  background:
+    linear-gradient(145deg, rgba(var(--account-color-rgb), 0.72), rgba(7, 26, 22, 0.94) 58%, rgba(6, 18, 31, 0.96)),
+    var(--account-color);
+  box-shadow: 0 20px 48px rgba(7, 31, 25, 0.18);
+  cursor: pointer;
+  opacity: 0.72;
+  scroll-snap-align: start;
+  transform: scale(0.94) translateY(6px) rotateY(-3deg);
+  transform-origin: center left;
+  transition: transform 0.28s ease, opacity 0.28s ease, box-shadow 0.28s ease, filter 0.28s ease;
+}
+
+.account-swipe-card:focus-visible {
+  outline: 3px solid rgba(255, 250, 240, 0.72);
+  outline-offset: 3px;
+}
+
+.account-swipe-card::before,
+.account-swipe-card::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.account-swipe-card::before {
+  top: -58px;
+  right: -34px;
+  width: 150px;
+  height: 150px;
+  border: 34px solid rgba(255, 255, 255, 0.18);
+  background: rgba(var(--account-color-rgb), 0.42);
+}
+
+.account-swipe-card::after {
+  left: -48px;
+  bottom: -54px;
+  width: 142px;
+  height: 142px;
+  background:
+    radial-gradient(circle at 38% 38%, rgba(255, 255, 255, 0.18), transparent 36%),
+    rgba(var(--account-color-rgb), 0.42);
+}
+
+.account-swipe-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.account-swipe-card.is-active {
+  opacity: 1;
+  filter: saturate(1.08);
+  box-shadow: 0 24px 64px rgba(var(--account-color-rgb), 0.28), 0 18px 44px rgba(7, 31, 25, 0.2);
+  transform: scale(1) translateY(0) rotateY(0);
+}
+
+.account-swipe-top,
+.account-swipe-balance,
+.account-swipe-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.account-country-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 58%;
+  padding: 8px 10px;
+  border-radius: 999px;
+  color: var(--paper);
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(10px);
+  font-size: 0.74rem;
+  font-weight: 950;
+}
+
+.country-flag {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 12px rgba(7, 31, 25, 0.16);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.account-swipe-top > strong {
+  min-width: 0;
+  color: rgba(255, 250, 240, 0.88);
+  font-size: 0.88rem;
+  text-align: right;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.account-swipe-balance {
+  align-items: end;
+}
+
+.account-swipe-balance > div,
+.account-swipe-name,
+.account-swipe-foot > div {
+  min-width: 0;
+}
+
+.account-swipe-balance span,
+.account-swipe-foot span {
+  display: block;
+  color: rgba(255, 250, 240, 0.66);
+  font-size: 0.7rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.account-swipe-balance strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--paper);
+  font-size: clamp(2.55rem, 9vw, 4.45rem);
+  line-height: 0.96;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.account-swipe-balance .money-converted {
+  display: block;
+  margin-top: 8px;
+  color: rgba(255, 250, 240, 0.72);
+  font-size: 0.98rem;
+}
+
+.account-swipe-card .visibility-toggle {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-color: rgba(255, 250, 240, 0.18);
+  color: var(--paper);
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(10px);
+}
+
+.account-swipe-name strong,
+.account-swipe-name small,
+.account-swipe-foot strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-swipe-name strong {
+  color: var(--paper);
+  font-size: 1rem;
+  line-height: 1.1;
+}
+
+.account-swipe-name small {
+  margin-top: 3px;
+  color: rgba(255, 250, 240, 0.62);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.account-swipe-footline {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  margin-top: auto;
+}
+
+.account-swipe-footline strong,
+.account-swipe-footline span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-swipe-footline strong {
+  max-width: 48%;
+  color: var(--paper);
+  font-size: 1rem;
+}
+
+.account-swipe-footline span {
+  color: rgba(255, 250, 240, 0.68);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-align: right;
+}
+
+.account-swipe-foot {
+  display: grid;
+  grid-template-columns: 0.82fr 1fr 1fr;
+  align-items: end;
+}
+
+.account-swipe-foot strong {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 0.82rem;
+  line-height: 1.08;
+}
+
 .balance-pie-wrap {
   position: relative;
   min-height: 230px;
@@ -796,21 +1184,44 @@ h3 {
   font-weight: 950;
 }
 
+.salary-card-row {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 2px 12px 2px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+
+.salary-card-row::-webkit-scrollbar {
+  display: none;
+}
+
 .salary-estimate-card {
   display: grid;
   gap: 4px;
   align-self: end;
+  flex: 0 0 calc(50% - 5px);
   min-width: 0;
   padding: 13px 15px;
-  border: 1px solid rgba(120, 190, 255, 0.28);
+  border: 0;
   border-radius: var(--radius);
   background:
-    radial-gradient(circle at 86% 18%, rgba(124, 196, 255, 0.32), transparent 34%),
+    radial-gradient(circle at 86% 18%, rgba(var(--salary-color-rgb, 124, 196, 255), 0.22), transparent 34%),
     linear-gradient(135deg, rgba(30, 97, 184, 0.36), rgba(14, 48, 92, 0.24));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  box-shadow: 0 14px 34px rgba(86, 124, 155, 0.16);
+  scroll-snap-align: start;
+}
+
+.salary-card-row.single-card .salary-estimate-card {
+  flex-basis: 100%;
 }
 
 .salary-estimate-card span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: rgba(233, 246, 255, 0.72);
   font-size: 0.72rem;
   font-weight: 850;
@@ -827,6 +1238,73 @@ h3 {
 .salary-estimate-card small {
   color: rgba(233, 246, 255, 0.68);
   font-weight: 750;
+}
+
+.salary-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.salary-card-footer small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.salary-card-footer em {
+  flex: 0 0 auto;
+  color: rgba(18, 49, 79, 0.62);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.salary-confirm-button {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid rgba(var(--salary-color-rgb, 86, 124, 155), 0.28);
+  border-radius: 999px;
+  color: #12314f;
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 0.7rem;
+  font-weight: 950;
+}
+
+.balance-salary-card {
+  min-height: auto;
+  padding: 12px 14px;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 94% 8%, rgba(var(--salary-color-rgb, 120, 190, 255), 0.22), transparent 30%),
+    linear-gradient(135deg, rgba(231, 244, 255, 0.96), rgba(214, 232, 255, 0.74));
+  box-shadow: 0 16px 38px rgba(86, 124, 155, 0.16);
+}
+
+.balance-salary-card span {
+  color: rgba(18, 49, 79, 0.66);
+}
+
+.balance-salary-card strong {
+  color: #12314f;
+  font-size: clamp(1.18rem, 4vw, 1.58rem);
+}
+
+.balance-salary-card small {
+  color: rgba(18, 49, 79, 0.58);
+}
+
+.balance-salary-card.is-paid {
+  background:
+    radial-gradient(circle at 94% 8%, rgba(66, 166, 122, 0.18), transparent 30%),
+    linear-gradient(135deg, rgba(237, 249, 239, 0.96), rgba(218, 241, 226, 0.8));
+}
+
+.balance-salary-card.is-paid .salary-card-footer em {
+  color: #16815b;
 }
 
 .kpi-grid {
@@ -3164,9 +3642,10 @@ canvas {
 }
 
 .work-ban-chip {
-  border: 1px solid color-mix(in srgb, var(--ban-color), #ffffff 48%);
-  background: color-mix(in srgb, var(--ban-color), #fff8e9 72%);
+  border: 0;
+  background: color-mix(in srgb, var(--ban-color), #ffffff 68%);
   color: var(--ink);
+  box-shadow: 0 10px 24px rgba(7, 31, 25, 0.1);
 }
 
 .work-calendar-summary {
@@ -3179,13 +3658,14 @@ canvas {
 .work-calendar-summary span {
   min-width: 0;
   padding: 9px 10px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.48);
+  border: 0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
   color: var(--muted);
   font-size: 0.74rem;
   font-weight: 850;
   text-align: center;
+  box-shadow: 0 10px 26px rgba(7, 31, 25, 0.07);
 }
 
 .work-calendar-summary strong {
@@ -3198,7 +3678,7 @@ canvas {
 .work-calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  gap: 8px;
 }
 
 .work-calendar-weekdays {
@@ -3212,8 +3692,8 @@ canvas {
 
 .work-day-cell,
 .work-day-blank {
-  min-height: 64px;
-  border-radius: 16px;
+  min-height: 58px;
+  border-radius: 999px;
 }
 
 .work-day-cell {
@@ -3221,10 +3701,11 @@ canvas {
   align-content: center;
   gap: 2px;
   padding: 8px 6px;
-  border: 1px solid rgba(49, 44, 81, 0.1);
-  background: rgba(255, 255, 255, 0.42);
+  border: 0;
+  background: rgba(255, 255, 255, 0.7);
   color: var(--ink);
   text-align: center;
+  box-shadow: 0 10px 24px rgba(7, 31, 25, 0.07);
 }
 
 .work-day-cell strong {
@@ -3245,15 +3726,17 @@ canvas {
 }
 
 .work-day-cell.is-day {
-  border-color: color-mix(in srgb, var(--ban-color), #ffffff 45%);
-  background: color-mix(in srgb, var(--ban-color), #fff8e9 78%);
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ban-color), transparent 70%);
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.4), transparent 36%),
+    linear-gradient(135deg, color-mix(in srgb, var(--ban-color), #19d98b 42%), #10b981);
+  color: #ffffff;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--ban-color), transparent 72%);
 }
 
 .work-day-cell.is-night {
-  border-color: rgba(49, 44, 81, 0.18);
-  background: linear-gradient(135deg, #16352b, #48426d);
+  background: linear-gradient(135deg, #12352f, #323765 72%);
   color: var(--paper);
+  box-shadow: 0 12px 28px rgba(49, 55, 101, 0.22);
 }
 
 .work-day-cell.is-night small {
@@ -3261,25 +3744,25 @@ canvas {
 }
 
 .work-day-cell.is-swing {
-  border-color: rgba(245, 200, 76, 0.55);
-  background: #fff3bf;
+  background: linear-gradient(135deg, #fff06b, #ffbb55);
+  color: #28322d;
 }
 
 .work-day-cell.is-off {
-  border-style: dashed;
-  background: rgba(233, 234, 225, 0.54);
+  background: rgba(245, 246, 240, 0.72);
   color: color-mix(in srgb, var(--ink), #ffffff 30%);
+  box-shadow: inset 0 0 0 1px rgba(16, 35, 31, 0.05);
 }
 
 .work-day-cell.is-forced-off {
-  border-color: rgba(217, 93, 78, 0.28);
-  background: #fff0ec;
-  color: #7a332d;
+  background: linear-gradient(135deg, #ffefe9, #ffd6cd);
+  color: #8d332d;
 }
 
 .work-day-cell.is-sunday-work {
-  border-color: #d4a43d;
-  box-shadow: inset 0 0 0 2px rgba(245, 200, 76, 0.72), 0 8px 22px rgba(212, 164, 61, 0.18);
+  outline: 3px solid #f2b632;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgba(242, 182, 50, 0.18), 0 14px 30px rgba(212, 164, 61, 0.25);
 }
 
 .work-day-cell.is-empty {
@@ -4476,6 +4959,20 @@ h1 {
   box-shadow: 0 34px 90px rgba(7, 31, 25, 0.28);
 }
 
+.content-panel.overview-card.balance-section-card {
+  padding: 0;
+  border: 0;
+  overflow: visible;
+  color: var(--ink);
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.content-panel.overview-card.balance-section-card::before {
+  display: none;
+}
+
 .content-panel.overview-card.has-bank-account {
   border-color: rgba(var(--account-color-rgb), 0.38);
   background:
@@ -4884,6 +5381,135 @@ h1 {
     padding: 14px;
   }
 
+  .balance-overview.has-account-carousel {
+    gap: 12px;
+    padding: 12px 0 14px 12px;
+  }
+
+  .balance-overview.has-account-carousel .balance-copy {
+    gap: 10px;
+  }
+
+  .account-carousel-title,
+  .balance-overview.has-account-carousel .overview-mini-grid {
+    padding-right: 12px;
+  }
+
+  .balance-overview.has-account-carousel .overview-mini-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .balance-overview.has-account-carousel .overview-mini-grid div {
+    padding: 7px;
+  }
+
+  .balance-overview.has-account-carousel .overview-mini-grid span {
+    font-size: 0.56rem;
+  }
+
+  .balance-overview.has-account-carousel .overview-mini-grid strong {
+    font-size: 0.78rem;
+  }
+
+  .balance-overview.has-account-carousel .overview-mini-grid .money-converted {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.58rem;
+  }
+
+  .overview-duo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .overview-mini-card {
+    padding: 11px;
+    border-radius: 18px;
+  }
+
+  .overview-mini-card span {
+    font-size: 0.58rem;
+  }
+
+  .overview-mini-card strong {
+    font-size: 0.9rem;
+  }
+
+  .overview-mini-card .money-converted {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.62rem;
+  }
+
+  .account-swipe-carousel {
+    gap: 10px;
+    padding-right: 12px;
+  }
+
+  .account-swipe-card {
+    flex-basis: calc(100% - 10px);
+    min-height: 172px;
+    padding: 14px;
+    gap: 12px;
+    border-radius: 20px;
+  }
+
+  .account-country-pill {
+    max-width: 62%;
+    padding: 7px 9px;
+    font-size: 0.68rem;
+  }
+
+  .account-swipe-top > strong {
+    font-size: 0.78rem;
+  }
+
+  .account-swipe-balance strong {
+    font-size: clamp(1.72rem, 9.4vw, 2.18rem);
+  }
+
+  .account-swipe-balance .money-converted {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.78rem;
+  }
+
+  .account-swipe-card .visibility-toggle {
+    width: 34px;
+    height: 34px;
+  }
+
+  .account-swipe-name strong {
+    font-size: 0.92rem;
+  }
+
+  .account-swipe-footline {
+    gap: 8px;
+  }
+
+  .account-swipe-footline strong {
+    max-width: 44%;
+    font-size: 0.84rem;
+  }
+
+  .account-swipe-footline span {
+    font-size: 0.66rem;
+  }
+
+  .account-swipe-foot {
+    grid-template-columns: 0.76fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  .account-swipe-foot span {
+    font-size: 0.6rem;
+  }
+
+  .account-swipe-foot strong {
+    font-size: 0.7rem;
+  }
+
   .overview-mini-grid {
     grid-template-columns: 1fr;
   }
@@ -5241,6 +5867,135 @@ h1 {
     gap: 14px;
     min-height: auto;
     padding: 16px;
+  }
+
+  .balance-overview.has-account-carousel {
+    gap: 12px;
+    padding: 12px 0 14px 12px;
+  }
+
+  .balance-overview.has-account-carousel .balance-copy {
+    gap: 10px;
+  }
+
+  .account-carousel-title,
+  .balance-overview.has-account-carousel .overview-mini-grid {
+    padding-right: 12px;
+  }
+
+  .balance-overview.has-account-carousel .overview-mini-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .balance-overview.has-account-carousel .overview-mini-grid div {
+    padding: 7px;
+  }
+
+  .balance-overview.has-account-carousel .overview-mini-grid span {
+    font-size: 0.56rem;
+  }
+
+  .balance-overview.has-account-carousel .overview-mini-grid strong {
+    font-size: 0.78rem;
+  }
+
+  .balance-overview.has-account-carousel .overview-mini-grid .money-converted {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.58rem;
+  }
+
+  .overview-duo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .overview-mini-card {
+    padding: 11px;
+    border-radius: 18px;
+  }
+
+  .overview-mini-card span {
+    font-size: 0.58rem;
+  }
+
+  .overview-mini-card strong {
+    font-size: 0.9rem;
+  }
+
+  .overview-mini-card .money-converted {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.62rem;
+  }
+
+  .account-swipe-carousel {
+    gap: 10px;
+    padding-right: 12px;
+  }
+
+  .account-swipe-card {
+    flex-basis: calc(100% - 10px);
+    min-height: 172px;
+    padding: 14px;
+    gap: 12px;
+    border-radius: 20px;
+  }
+
+  .account-country-pill {
+    max-width: 62%;
+    padding: 7px 9px;
+    font-size: 0.68rem;
+  }
+
+  .account-swipe-top > strong {
+    font-size: 0.78rem;
+  }
+
+  .account-swipe-balance strong {
+    font-size: clamp(1.72rem, 9.4vw, 2.18rem);
+  }
+
+  .account-swipe-balance .money-converted {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.78rem;
+  }
+
+  .account-swipe-card .visibility-toggle {
+    width: 34px;
+    height: 34px;
+  }
+
+  .account-swipe-name strong {
+    font-size: 0.92rem;
+  }
+
+  .account-swipe-footline {
+    gap: 8px;
+  }
+
+  .account-swipe-footline strong {
+    max-width: 44%;
+    font-size: 0.84rem;
+  }
+
+  .account-swipe-footline span {
+    font-size: 0.66rem;
+  }
+
+  .account-swipe-foot {
+    grid-template-columns: 0.76fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  .account-swipe-foot span {
+    font-size: 0.6rem;
+  }
+
+  .account-swipe-foot strong {
+    font-size: 0.7rem;
   }
 
   .overview-mini-grid {

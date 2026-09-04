@@ -4,6 +4,7 @@
   const STORAGE_KEY = "ponte-financeira-state-v4";
   const REMOTE_HOUSEHOLD_KEY = "ponte-financeira-household-id";
   const DUE_ALERT_KEY = "nekuma-finance-due-alert-key";
+  const SALARY_RECEIPT_ALERT_KEY = "nekuma-finance-salary-receipt-alert-key";
   const APP_NEWS_READ_KEY = "nekuma-finance-news-read";
   const LEGACY_STORAGE_KEYS = ["ponte-financeira-state-v1", "ponte-financeira-state-v2"];
   const PRIMARY_CURRENCY = "JPY";
@@ -219,10 +220,10 @@
   };
   const appNews = [
     {
-      id: "bank-account-dashboard-v88",
+      id: "account-calendar-polish-v92",
       date: "2026-09-04",
-      title: "Saldo principal por conta bancaria",
-      body: "O card principal agora mostra uma conta por vez, com seletor de conta, cor propria e saldo separado por pais/moeda. O saldo inicial da conta bancaria tambem ficou opcional."
+      title: "Novo card principal de contas",
+      body: "O topo do app agora separa salario previsto, saldo da conta em card colorido com arraste lateral, e mini cards independentes para contas a pagar e pago no mes."
     },
     {
       id: "bank-accounts-v87",
@@ -277,6 +278,7 @@
   let web3ListenersAttached = false;
   let remotePullTimer = null;
   let remotePullInFlight = false;
+  let dashboardCarouselTimer = null;
   let dashboardMonthAnchored = "";
   let lastLocalChangeAt = 0;
   cleanupLegacyStorage();
@@ -297,7 +299,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=88")
+      navigator.serviceWorker.register("./service-worker.js?v=92")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -399,6 +401,7 @@
     if (action === "mark-all-app-news-read") markAllAppNewsRead();
     if (action === "add-salary-progression-step") addSalaryProgressionRow();
     if (action === "remove-salary-progression-step") removeSalaryProgressionRow(button);
+    if (action === "dismiss-salary-receipt") closeModal();
     if (action === "dismiss-due-alert") closeModal();
     if (action === "copy-invite-code") copyInviteCode();
     if (action === "request-account-delete") showAccountDeleteInfo();
@@ -430,6 +433,7 @@
     if (formType === "vehicle-maintenance") saveVehicleMaintenance(form);
     if (formType === "income-source") saveIncomeSource(form);
     if (formType === "work-income") saveWorkIncome(form);
+    if (formType === "salary-receipt") saveSalaryReceipt(form);
     if (formType === "work-override") saveWorkOverride(form);
     if (formType === "auth-login") signInRemote(form);
     if (formType === "auth-signup") signUpRemote(form);
@@ -1038,6 +1042,7 @@
     return items.map((item) => ({
       ...item,
       ownerId: item.ownerId || item.createdBy || "",
+      salaryPayDay: number(item.salaryPayDay || item.payDay || item.paymentDay),
       salaryProgressions: normalizeSalaryProgressions(item.salaryProgressions)
     }));
   }
@@ -1046,7 +1051,9 @@
     if (!Array.isArray(items)) return fallback;
     return items.map((item) => ({
       ...item,
-      ownerId: item.ownerId || item.createdBy || ""
+      ownerId: item.ownerId || item.createdBy || "",
+      paid: item.paid === false ? false : Boolean(item.paid === true || !item.date || isDateReached(item.date)),
+      receivedAt: item.receivedAt || (item.paid === true ? item.updatedAt || item.createdAt || "" : "")
     }));
   }
 
@@ -1057,8 +1064,10 @@
         const country = countryMeta[item.country] && item.country !== "global" ? item.country : "japao";
         const currency = sanitizeCurrency(item.currency, countryMeta[country]?.currency || PRIMARY_CURRENCY);
         const fallbackColor = bankAccountColors[index % bankAccountColors.length];
+        const stableId = String(item.id || item.bankAccountId || `ba_legacy_${index}_${normalizeLookupText([item.country, item.bankName, item.nickname, item.accountLast4].filter(Boolean).join("_")).replace(/[^a-z0-9]+/g, "_").slice(0, 36)}`).trim();
         return {
           ...item,
+          id: stableId,
           country,
           bankName: String(item.bankName || item.provider || "").trim(),
           nickname: String(item.nickname || item.name || "").trim(),
@@ -1581,6 +1590,7 @@
     });
 
     refreshIcons();
+    setupDashboardAccountCarousel();
     requestAnimationFrame(drawVisibleCharts);
     scheduleFxRefresh(false);
     scheduleCryptoRefresh(false);
@@ -1595,6 +1605,52 @@
         }
       });
     }
+  }
+
+  function setupDashboardAccountCarousel() {
+    const carousel = document.querySelector(".account-swipe-carousel");
+    if (!carousel) return;
+    const cards = Array.from(carousel.querySelectorAll(".account-swipe-card"));
+    const selectedCard = cards.find((card) => card.dataset.id === state.ui.selectedDashboardAccountId);
+    if (selectedCard) {
+      requestAnimationFrame(() => selectedCard.scrollIntoView({ block: "nearest", inline: "start" }));
+    } else {
+      markDashboardCarouselFocus(carousel);
+    }
+    carousel.addEventListener("scroll", () => {
+      clearTimeout(dashboardCarouselTimer);
+      markDashboardCarouselFocus(carousel);
+      dashboardCarouselTimer = setTimeout(() => {
+        const nextId = nearestDashboardAccountCard(carousel)?.dataset.id || "";
+        if (!nextId || state.ui.selectedDashboardAccountId === nextId) return;
+        state.ui.selectedDashboardAccountId = nextId;
+        persistLocalState();
+        render();
+      }, 180);
+    }, { passive: true });
+  }
+
+  function nearestDashboardAccountCard(carousel) {
+    const cards = Array.from(carousel.querySelectorAll(".account-swipe-card"));
+    if (!cards.length) return null;
+    const carouselRect = carousel.getBoundingClientRect();
+    const targetX = carouselRect.left + carouselRect.width * 0.42;
+    return cards.reduce((best, card) => {
+      const rect = card.getBoundingClientRect();
+      const distance = Math.abs((rect.left + rect.width / 2) - targetX);
+      return !best || distance < best.distance ? { card, distance } : best;
+    }, null)?.card || null;
+  }
+
+  function markDashboardCarouselFocus(carousel) {
+    const nearest = nearestDashboardAccountCard(carousel);
+    carousel.querySelectorAll(".account-swipe-card").forEach((card) => {
+      card.classList.toggle("is-active", card === nearest);
+    });
+    const activeId = nearest?.dataset.id || "";
+    carousel.closest(".account-carousel-block")?.querySelectorAll(".account-carousel-dot").forEach((dot) => {
+      dot.classList.toggle("is-active", dot.dataset.id === activeId);
+    });
   }
 
   function updateAppGreeting() {
@@ -1789,7 +1845,7 @@
     const account = activeBankAccounts().find((item) => item.id === id);
     if (!account) return;
     state.ui.selectedDashboardAccountId = account.id;
-    saveState();
+    persistLocalState();
     render();
   }
 
@@ -1823,6 +1879,15 @@
   function showDueAlertIfNeeded() {
     if (modalRoot.innerHTML.trim()) return;
     if (remoteStore.enabled && remoteSession.status !== "ready") return;
+    const salaryAlert = pendingSalaryReceiptAlerts()[0];
+    if (salaryAlert) {
+      const salaryKey = `${localDateKey()}|${salaryAlert.ref}`;
+      if (localStorage.getItem(SALARY_RECEIPT_ALERT_KEY) !== salaryKey) {
+        localStorage.setItem(SALARY_RECEIPT_ALERT_KEY, salaryKey);
+        openModal("salaryReceipt", salaryAlert.ref);
+        return;
+      }
+    }
     const alerts = upcomingDueAlerts(3);
     if (!alerts.length) return;
     const key = `${localDateKey()}|${alerts.map((item) => `${item.type}:${item.id}:${item.date}`).join("|")}`;
@@ -1960,15 +2025,13 @@
     ensureDashboardCurrentMonth();
     const summary = summarizeMonth(state.ui.selectedMonth, "global");
     const showPaypal = hasPaypalDashboardBalance();
-    const dashboardAccount = selectedDashboardAccount();
-    const overviewClass = dashboardAccount ? "content-panel overview-card has-bank-account" : "content-panel overview-card";
 
     return `
       ${renderFxCards()}
 
       ${renderToolbar()}
 
-      <section class="${overviewClass}"${dashboardAccount ? bankAccountStyleAttrs(dashboardAccount) : ""}>
+      <section class="content-panel overview-card balance-section-card">
         ${renderBalanceOverview(summary)}
       </section>
 
@@ -2081,62 +2144,117 @@
   function renderBalanceOverview(summary) {
     const breakdown = dashboardBalanceBreakdown(summary);
     const hideBalance = Boolean(state.ui.hideBalance);
-    const salaryValue = hideBalance
-      ? "*****"
-      : (breakdown.salaryEstimate.configured ? formatMoneyWithPrimary(breakdown.salaryEstimate.total, breakdown.salaryEstimate.currency, state.ui.selectedMonth) : "--");
+    const salaryCards = dashboardSalaryCards(state.ui.selectedMonth);
     const mainBalance = dashboardMainBalance(summary);
     const account = mainBalance.account || null;
     const accounts = activeBankAccounts();
-    const activity = account ? bankAccountMonthlyActivity(account, state.ui.selectedMonth) : null;
-    const payableAmount = account
-      ? convert(breakdown.payables, breakdown.currency, mainBalance.currency, latestRate(state.ui.selectedMonth))
-      : breakdown.payables;
-    const mainValue = hideBalance ? maskedMoney(mainBalance.currency) : formatMoneyWithPrimary(mainBalance.amount, mainBalance.currency);
-    const receivedValue = hideBalance ? "•••••" : formatMoneyWithPrimary(activity ? activity.received : breakdown.received, mainBalance.currency);
-    const paidValue = hideBalance ? "*****" : formatMoneyWithPrimary(activity ? activity.paid : breakdown.paid, mainBalance.currency);
-    const payableValue = hideBalance ? "•••••" : (payableAmount ? formatMoneyWithPrimary(payableAmount, mainBalance.currency) : formatMoney(0, mainBalance.currency));
-    const receivedLabel = account ? "Entradas na conta" : "Recebido ate agora";
-    const paidLabel = account ? "Pagos na conta" : "Pagos no mes";
-    const payableLabel = account ? "A pagar geral" : "Contas a pagar";
+    const accountBreakdown = dashboardAccountBreakdown(account, breakdown);
+    const paidValue = hideBalance ? "*****" : formatMoneyWithPrimary(accountBreakdown.paid, accountBreakdown.currency);
+    const payableValue = hideBalance ? "•••••" : (accountBreakdown.payables ? formatMoneyWithPrimary(accountBreakdown.payables, accountBreakdown.currency) : formatMoney(0, accountBreakdown.currency));
     return `
-      <div class="balance-overview">
-        <div class="balance-privacy-action">
-          ${renderVisibilityToggle("balance", hideBalance, "saldo atual")}
-        </div>
-        <div class="balance-copy">
-          <p class="hero-title">${account ? "Saldo da conta" : "Saldo atual"}</p>
-          <p class="hero-value">${mainValue}</p>
-          ${account ? renderDashboardAccountBadge(account) : ""}
-          <div class="overview-mini-grid">
-            <div>
-              <span>${receivedLabel}</span>
-              <strong>${receivedValue}</strong>
-            </div>
-            <div>
-              <span>${paidLabel}</span>
-              <strong>${paidValue}</strong>
-            </div>
-            <div>
-              <span>${payableLabel}</span>
-              <strong>${payableValue}</strong>
+      <div class="balance-overview balance-redesign ${accounts.length ? "has-account-carousel" : ""}">
+        ${renderDashboardSalaryCards(salaryCards, hideBalance)}
+        ${accounts.length ? renderDashboardAccountCarousel(accounts, account, hideBalance) : `
+          <div class="account-carousel-block">
+            <div class="account-swipe-carousel single-card">
+              ${renderFallbackDashboardBalanceCard(mainBalance, hideBalance)}
             </div>
           </div>
-          ${renderDashboardAccountSelector(accounts, account)}
-        </div>
-        <div class="balance-pie-wrap">
-          <canvas id="balance-pie-chart" aria-label="Recebido contra contas a pagar"></canvas>
-          <div class="balance-pie-center">
-            <span>Folego</span>
-            <strong>${summary.coverage}%</strong>
+        `}
+        <div class="overview-duo-grid">
+          <div class="overview-mini-card payable">
+            <span><i data-lucide="calendar-clock" aria-hidden="true"></i>Contas a pagar</span>
+            <strong>${payableValue}</strong>
           </div>
-        </div>
-        <div class="salary-estimate-card">
-          <span>Salario estimado</span>
-          <strong>${salaryValue}</strong>
-          <small>Bruto previsto pela escala</small>
+          <div class="overview-mini-card paid">
+            <span><i data-lucide="badge-check" aria-hidden="true"></i>Pago no mes</span>
+            <strong>${paidValue}</strong>
+          </div>
         </div>
       </div>
     `;
+  }
+
+  function renderDashboardSalaryCards(cards, hideBalance) {
+    if (!cards.length) return "";
+    return `
+      <div class="salary-card-row ${cards.length === 1 ? "single-card" : ""}">
+        ${cards.map((card) => `
+          <article class="salary-estimate-card balance-salary-card ${card.paid ? "is-paid" : ""}" ${salaryCardStyleAttrs(card)}>
+            <span><i data-lucide="${card.paid ? "check-circle-2" : "wallet"}" aria-hidden="true"></i>Salario bruto previsto</span>
+            <strong>${hideBalance ? "*****" : formatMoneyWithPrimary(card.amount, card.currency, card.month)}</strong>
+            <div class="salary-card-footer">
+              <small>${escapeHtml(card.title)}</small>
+              ${card.canConfirm ? `
+                <button class="salary-confirm-button" type="button" data-action="open-modal" data-modal="salaryReceipt" data-payment-id="${escapeAttr(card.ref)}">Recebi</button>
+              ` : `<em>${escapeHtml(card.status)}</em>`}
+            </div>
+          </article>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function dashboardSalaryCards(month = state.ui.selectedMonth) {
+    const factoryCards = factorySources()
+      .map((source) => {
+        const estimate = estimateFactorySourceSalary(source, month);
+        if (!estimate.configured) return null;
+        const paid = isFactorySalaryPaid(source.id, month);
+        const date = factorySalaryDueDate(source, month);
+        return {
+          kind: "factory",
+          ref: `factory:${source.id}:${month}`,
+          id: source.id,
+          title: source.name || "Fabrica",
+          amount: estimate.total,
+          currency: estimate.currency,
+          month,
+          date,
+          color: source.color,
+          paid,
+          canConfirm: !paid && isDateReached(date),
+          status: paid ? "Pago" : `Previsto ${formatShortDate(date)}`
+        };
+      })
+      .filter(Boolean);
+
+    const plannedCards = monthPlannedWorkIncomes(month)
+      .filter((item) => normalizedSourceType(incomeSourceById(item.sourceId).type) !== "factory")
+      .map((item) => {
+        const source = incomeSourceById(item.sourceId);
+        const due = isDateReached(item.date);
+        return {
+          kind: "work",
+          ref: `work:${item.id}`,
+          id: item.id,
+          title: source.name || item.sourceName || "Renda extra",
+          amount: number(item.amount),
+          currency: item.currency || source.currency || "JPY",
+          month,
+          date: item.date,
+          color: source.color,
+          paid: false,
+          canConfirm: due,
+          status: due ? "Confirmar" : `Previsto ${formatShortDate(item.date)}`
+        };
+      });
+
+    return [...factoryCards, ...plannedCards].sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === "factory" ? -1 : 1;
+      return String(a.date || "").localeCompare(String(b.date || ""));
+    });
+  }
+
+  function salaryCardStyleAttrs(card) {
+    const color = sanitizeColor(card.color, "#567c9b");
+    return `style="--salary-color:${escapeAttr(color)};--salary-color-rgb:${escapeAttr(hexToRgbValues(color))}"`;
+  }
+
+  function pendingSalaryReceiptAlerts() {
+    return dashboardSalaryCards(currentMonth())
+      .filter((card) => card.canConfirm && !card.paid)
+      .map((card) => ({ ref: card.ref, title: card.title, date: card.date }));
   }
 
   function renderPaypalPanel() {
@@ -2246,6 +2364,27 @@
       paid: Math.max(0, summary.actualOutflow),
       salaryEstimate,
       payables: Math.max(0, payables)
+    };
+  }
+
+  function dashboardAccountBreakdown(account, fallbackBreakdown) {
+    if (!account) {
+      return {
+        currency: fallbackBreakdown.currency,
+        paid: fallbackBreakdown.paid,
+        payables: fallbackBreakdown.payables
+      };
+    }
+    const activity = bankAccountMonthlyActivity(account, state.ui.selectedMonth);
+    const currency = sanitizeCurrency(account.currency, primaryCurrency());
+    const rate = latestRate(state.ui.selectedMonth);
+    const payables = dashboardUpcomingFinancialItems(99)
+      .filter((item) => item.country === account.country)
+      .reduce((total, item) => total + convert(item.amount, item.currency, currency, rate), 0);
+    return {
+      currency,
+      paid: activity.paid,
+      payables
     };
   }
 
@@ -3998,7 +4137,7 @@
         <span><strong>${counts.night}</strong> noite</span>
         <span><strong>${counts.off}</strong> folgas</span>
         <span><strong>${counts.forcedOff}</strong> folga extra</span>
-        <span><strong>Dom</strong> 35%</span>
+        <span><strong>${counts.sundayWork}</strong> domingos</span>
       </div>
       <div class="work-calendar-weekdays" aria-hidden="true">
         ${["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"].map((day) => `<span>${day}</span>`).join("")}
@@ -4256,10 +4395,11 @@
       incomeSource: renderIncomeSourceModal,
       workOverride: renderWorkOverrideModal,
       workIncome: renderWorkIncomeModal,
+      salaryReceipt: renderSalaryReceiptModal,
       monthlyPayment: renderMonthlyPaymentModal,
       subscription: renderSubscriptionModal
     };
-    const modalData = type === "monthlyPayment" || type === "goalContribution" ? id : editableItem(type, id);
+    const modalData = type === "monthlyPayment" || type === "goalContribution" || type === "salaryReceipt" ? id : editableItem(type, id);
     const content = map[type] ? map[type](modalData) : "";
     modalRoot.innerHTML = `
       <div class="modal-backdrop">
@@ -5568,6 +5708,10 @@
             <strong>Provisao de salario</strong>
             <span>Percentuais configuraveis por empresa para estimar o bruto do mes.</span>
           </div>
+          <div class="field">
+            <label for="salaryPayDay">Dia do pagamento</label>
+            <input id="salaryPayDay" name="salaryPayDay" inputmode="numeric" placeholder="Ex: 25" value="${escapeAttr(item?.salaryPayDay || "")}" />
+          </div>
           <div class="three-cols">
             <div class="field">
               <label for="salaryHourlyRate">Valor hora</label>
@@ -5806,6 +5950,119 @@
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
           <button class="primary-button" type="submit">Salvar folga</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function salaryReceiptTargetFromRef(ref = "") {
+    const [kind, sourceId, refMonth] = String(ref || "").split(":");
+    if (kind === "factory" && sourceId) {
+      const source = incomeSourceById(sourceId);
+      if (!source.id || normalizedSourceType(source.type) !== "factory") return null;
+      const month = refMonth || state.ui.selectedMonth;
+      const estimate = estimateFactorySourceSalary(source, month);
+      if (!estimate.configured) return null;
+      const date = factorySalaryDueDate(source, month);
+      return {
+        kind,
+        id: source.id,
+        sourceId: source.id,
+        title: source.name || "Fabrica",
+        category: "Salario bruto previsto",
+        amount: round(estimate.total, estimate.currency === "JPY" ? 0 : 2),
+        currency: estimate.currency,
+        month,
+        date,
+        bankAccountId: source.bankAccountId || "",
+        paid: isFactorySalaryPaid(source.id, month)
+      };
+    }
+
+    if (kind === "work" && sourceId) {
+      const item = userWorkIncomes().find((entry) => entry.id === sourceId);
+      if (!item || item.paid !== false) return null;
+      const source = incomeSourceById(item.sourceId);
+      return {
+        kind,
+        id: item.id,
+        sourceId: item.sourceId,
+        title: source.name || item.sourceName || "Renda extra",
+        category: sourceTypeLabel(source),
+        amount: number(item.amount),
+        currency: item.currency || source.currency || "JPY",
+        month: item.date?.slice(0, 7) || state.ui.selectedMonth,
+        date: item.date,
+        bankAccountId: item.bankAccountId || "",
+        paid: false
+      };
+    }
+
+    return null;
+  }
+
+  function preferredIncomeBankAccountId() {
+    const selected = selectedDashboardAccount();
+    if (selected?.id && selected.country === "japao") return selected.id;
+    return activeBankAccounts().find((account) => account.country === "japao")?.id || activeBankAccounts()[0]?.id || "";
+  }
+
+  function renderSalaryReceiptModal(receiptRef = "") {
+    const target = salaryReceiptTargetFromRef(receiptRef);
+    if (!target) {
+      return `
+        <div class="modal-head">
+          <h2>Confirmar recebimento</h2>
+          <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+        </div>
+        <div class="form-grid">
+          <p class="empty-state">Nao foi possivel encontrar este recebimento previsto.</p>
+          <div class="form-actions">
+            <button class="secondary-button" type="button" data-action="close-modal">Fechar</button>
+          </div>
+        </div>
+      `;
+    }
+    const preferredAccountId = target.bankAccountId || preferredIncomeBankAccountId();
+    return `
+      <div class="modal-head">
+        <h2>Confirmar recebimento</h2>
+        <button class="close-button" type="button" data-action="dismiss-salary-receipt" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="salary-receipt">
+        <input type="hidden" name="receiptRef" value="${escapeAttr(receiptRef)}" />
+        <div class="payment-confirm-card salary-receipt-card">
+          <p class="mini-label">${escapeHtml(target.category)}</p>
+          <strong>${escapeHtml(target.title)}</strong>
+          <span>${formatMoneyWithPrimary(target.amount, target.currency, target.month)} - previsto ${formatShortDate(target.date)}</span>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="salaryReceiptAmount">Valor recebido</label>
+            <input id="salaryReceiptAmount" name="amount" type="number" min="0" step="0.01" required value="${escapeAttr(target.amount)}" />
+          </div>
+          <div class="field">
+            <label for="salaryReceiptCurrency">Moeda</label>
+            <select id="salaryReceiptCurrency" name="currency">
+              ${currencyOptions(target.currency)}
+            </select>
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="salaryReceiptDate">Data</label>
+            <input id="salaryReceiptDate" name="date" type="date" required value="${escapeAttr(target.date)}" />
+          </div>
+          <div class="field">
+            <label for="salaryReceiptBankAccountId">Conta de destino</label>
+            <select id="salaryReceiptBankAccountId" name="bankAccountId">
+              ${bankAccountSelectOptions("japao", preferredAccountId, "Sem conta vinculada")}
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="dismiss-salary-receipt">Depois</button>
+          <button class="primary-button" type="submit">Marcar recebido</button>
         </div>
       </form>
     `;
@@ -6396,6 +6653,7 @@
       salaryNightStart: isFactory ? String(data.salaryNightStart || "22:00") : "",
       salaryNightEnd: isFactory ? String(data.salaryNightEnd || "05:00") : "",
       salarySundayAllDay: isFactory ? data.salarySundayAllDay !== "no" : false,
+      salaryPayDay: isFactory && number(data.salaryPayDay) ? clamp(Math.round(number(data.salaryPayDay)), 1, 31) : 0,
       color: data.color || sourceColors[userIncomeSources().length % sourceColors.length],
       currency: data.currency || "JPY",
       payRule: String(data.payRule || "").trim(),
@@ -6427,6 +6685,8 @@
     const data = formData(form);
     const source = incomeSourceById(data.sourceId);
     const author = currentUserAuthor();
+    const current = findItem("workIncomes", data.id);
+    const isReceived = current ? current.paid !== false : isDateReached(data.date);
     const updated = upsertItem("workIncomes", data.id, {
       ownerId: author.id,
       sourceId: data.sourceId,
@@ -6437,6 +6697,8 @@
       date: data.date,
       bankAccountId: data.bankAccountId || "",
       receiptMethod: data.receiptMethod || "salary",
+      paid: isReceived,
+      receivedAt: isReceived ? current?.receivedAt || new Date().toISOString() : "",
       periodStart: "",
       periodEnd: "",
       workDays: 0,
@@ -6451,6 +6713,84 @@
     closeModal();
     render();
     showToast(updated ? "Recebimento atualizado." : "Recebimento salvo.");
+  }
+
+  function saveSalaryReceipt(form) {
+    const data = formData(form);
+    const target = salaryReceiptTargetFromRef(data.receiptRef);
+    if (!target) {
+      showToast("Recebimento nao encontrado.");
+      return;
+    }
+    const amount = number(data.amount);
+    if (amount <= 0) {
+      showToast("Informe o valor recebido.");
+      return;
+    }
+    const currency = sanitizeCurrency(data.currency, target.currency);
+    const date = data.date || target.date;
+    const bankAccountId = data.bankAccountId || "";
+    const author = currentUserAuthor();
+    const now = new Date().toISOString();
+
+    if (target.kind === "factory") {
+      const key = salaryPaymentKey(target.sourceId, target.month);
+      if (state.paidCommitments[key]) {
+        showToast("Este salario ja foi marcado como recebido.");
+        closeModal();
+        render();
+        return;
+      }
+      state.paidCommitments[key] = {
+        receivedAt: now,
+        bankAccountId,
+        amount,
+        currency
+      };
+      state.transactions.unshift({
+        id: uid("tx"),
+        date,
+        country: bankAccountById(bankAccountId)?.country || "japao",
+        type: "income",
+        title: `Salario ${target.title}`,
+        category: "Salario",
+        amount,
+        currency,
+        bankAccountId,
+        receiptMethod: "salary",
+        note: "Salario confirmado no app",
+        createdAt: now,
+        createdBy: author.id,
+        createdByName: author.name,
+        updatedAt: now,
+        updatedBy: author.id,
+        updatedByName: author.name
+      });
+    }
+
+    if (target.kind === "work") {
+      state.workIncomes = (state.workIncomes || []).map((item) => {
+        if (item.id !== target.id) return item;
+        return {
+          ...item,
+          amount,
+          currency,
+          date,
+          bankAccountId,
+          paid: true,
+          receivedAt: now,
+          updatedAt: now,
+          updatedBy: author.id,
+          updatedByName: author.name
+        };
+      });
+    }
+
+    state.ui.selectedMonth = date.slice(0, 7);
+    saveState();
+    closeModal();
+    render();
+    showToast("Recebimento confirmado.");
   }
 
   function saveWorkOverride(form) {
@@ -7956,8 +8296,16 @@
 
   function monthWorkIncomes(month) {
     return userWorkIncomes()
+      .filter((item) => item.paid !== false)
       .filter((item) => item.date && item.date.slice(0, 7) === month)
       .sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  function monthPlannedWorkIncomes(month) {
+    return userWorkIncomes()
+      .filter((item) => item.paid === false)
+      .filter((item) => item.date && item.date.slice(0, 7) === month)
+      .sort((a, b) => a.date.localeCompare(b.date));
   }
 
   function plannedCommitmentEntries(month, country) {
@@ -8801,6 +9149,27 @@
     return factorySources()[0] || null;
   }
 
+  function incomeSourcePayDay(source = {}) {
+    const explicit = Math.round(number(source.salaryPayDay));
+    if (explicit >= 1 && explicit <= 31) return explicit;
+    const text = String(source.payRule || "");
+    const match = text.match(/(?:dia\s*)?(\d{1,2})/i);
+    const parsed = match ? Number(match[1]) : 0;
+    return parsed >= 1 && parsed <= 31 ? parsed : 25;
+  }
+
+  function factorySalaryDueDate(source, month = state.ui.selectedMonth) {
+    return dateInMonth(month, incomeSourcePayDay(source));
+  }
+
+  function salaryPaymentKey(sourceId, month) {
+    return `${month}:salary:${sourceId}`;
+  }
+
+  function isFactorySalaryPaid(sourceId, month = state.ui.selectedMonth) {
+    return Boolean(state.paidCommitments?.[salaryPaymentKey(sourceId, month)]);
+  }
+
   function estimateFactorySalaryForMonth(month = state.ui.selectedMonth, targetCurrency = primaryCurrency()) {
     const sources = factorySources();
     const rate = latestRate(month);
@@ -9076,8 +9445,9 @@
       if (day.type === "night" || day.type === "shift3") current.night += 1;
       if (day.type === "off") current.off += 1;
       if (day.type === "forcedOff") current.forcedOff += 1;
+      if (day.isSundayWork) current.sundayWork += 1;
       return current;
-    }, { day: 0, night: 0, off: 0, forcedOff: 0 });
+    }, { day: 0, night: 0, off: 0, forcedOff: 0, sundayWork: 0 });
   }
 
   function isWorkedScheduleDay(day) {
@@ -9524,6 +9894,84 @@
     return ` style="--account-color:${escapeAttr(color)};--account-color-rgb:${escapeAttr(hexToRgbValues(color))}"`;
   }
 
+  function countryFlag(country) {
+    if (country === "brasil") return "🇧🇷";
+    if (country === "japao") return "🇯🇵";
+    return "◎";
+  }
+
+  function renderDashboardAccountCarousel(accounts, activeAccount, hideBalance) {
+    return `
+      <div class="account-carousel-block">
+        <div class="account-swipe-carousel" aria-label="Cards de contas bancarias">
+          ${accounts.map((account) => renderDashboardAccountCard(account, activeAccount, hideBalance)).join("")}
+        </div>
+        ${accounts.length > 1 ? `
+          <div class="account-carousel-dots" aria-hidden="true">
+            ${accounts.map((account) => `<button class="account-carousel-dot ${activeAccount?.id === account.id ? "is-active" : ""}" type="button" data-action="select-dashboard-account" data-id="${escapeAttr(account.id)}" title="${escapeAttr(bankAccountName(account))}"></button>`).join("")}
+          </div>
+        ` : ""}
+      </div>
+    `;
+  }
+
+  function renderDashboardAccountCard(account, activeAccount, hideBalance) {
+    const country = countryMeta[account.country] || countryMeta.japao;
+    const balance = bankAccountBalance(account, state.ui.selectedMonth);
+    const active = activeAccount?.id === account.id;
+    const last4 = account.accountLast4 ? `**** ${account.accountLast4}` : "Sem final";
+    const balanceValue = hideBalance ? maskedMoney(account.currency) : formatMoneyWithPrimary(balance, account.currency);
+    return `
+      <article
+        class="account-swipe-card ${active ? "is-active" : ""}"
+        role="button"
+        tabindex="0"
+        data-action="select-dashboard-account"
+        data-id="${escapeAttr(account.id)}"
+        ${bankAccountStyleAttrs(account)}
+      >
+        <div class="account-swipe-top">
+          <span class="account-country-pill"><span class="country-flag" aria-hidden="true">${countryFlag(account.country)}</span>${escapeHtml(country.label)}</span>
+          <strong>${escapeHtml(account.currency)}</strong>
+        </div>
+        <div class="account-swipe-balance">
+          <div>
+            <span>Saldo da conta</span>
+            <strong>${balanceValue}</strong>
+          </div>
+          ${renderVisibilityToggle("balance", hideBalance, "saldo atual")}
+        </div>
+        <div class="account-swipe-footline">
+          <strong>${escapeHtml(bankAccountName(account))}</strong>
+          <span>${escapeHtml(account.bankName || "Banco")} - ${escapeHtml(last4)}</span>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderFallbackDashboardBalanceCard(mainBalance, hideBalance) {
+    const balanceValue = hideBalance ? maskedMoney(mainBalance.currency) : formatMoneyWithPrimary(mainBalance.amount, mainBalance.currency);
+    return `
+      <article class="account-swipe-card is-active fallback-balance-card" style="--account-color:#0f6b4e;--account-color-rgb:15, 107, 78">
+        <div class="account-swipe-top">
+          <span class="account-country-pill"><span class="country-flag" aria-hidden="true">◎</span>Global</span>
+          <strong>${escapeHtml(mainBalance.currency)}</strong>
+        </div>
+        <div class="account-swipe-balance">
+          <div>
+            <span>Saldo atual</span>
+            <strong>${balanceValue}</strong>
+          </div>
+          ${renderVisibilityToggle("balance", hideBalance, "saldo atual")}
+        </div>
+        <div class="account-swipe-footline">
+          <strong>Saldo geral</strong>
+          <span>Cadastre contas bancarias para separar por pais</span>
+        </div>
+      </article>
+    `;
+  }
+
   function renderDashboardAccountBadge(account) {
     const country = countryMeta[account.country] || countryMeta.japao;
     const detail = [
@@ -9653,6 +10101,7 @@
 
     (state.workIncomes || [])
       .filter((item) => item.bankAccountId === account.id)
+      .filter((item) => item.paid !== false)
       .forEach((item) => applyMovement(item.amount, item.currency, item.date, 1));
 
     return round(balance, currency === "JPY" ? 0 : 2);
@@ -9671,6 +10120,7 @@
       .reduce((total, item) => total + convert(item.amount, item.currency, currency, rate), 0);
     const workReceived = (state.workIncomes || [])
       .filter((item) => item.bankAccountId === account.id && sameMonth(item.date))
+      .filter((item) => item.paid !== false)
       .reduce((total, item) => total + convert(item.amount, item.currency, currency, rate), 0);
     return {
       received: round(receivedFromTransactions + workReceived, currency === "JPY" ? 0 : 2),
