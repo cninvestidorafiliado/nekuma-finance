@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "salary-total-highlight-v102",
+      id: "salary-formula-responsive-v103",
       date: "2026-09-05",
-      title: "Salario bruto mais limpo",
-      body: "O mini card de salario bruto previsto agora destaca o total e mostra apenas a conversao em reais abaixo."
+      title: "Formula do salario alinhada",
+      body: "O calculo do salario bruto previsto ficou alinhado no computador e mais compacto no celular, com total em destaque."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=102")
+      navigator.serviceWorker.register("./service-worker.js?v=103")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
