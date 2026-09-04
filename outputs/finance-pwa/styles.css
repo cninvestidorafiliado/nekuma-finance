@@ -13,6 +13,8 @@
   --green: #42a67a;
   --red: #d95d4e;
   --blue: #6f75a8;
+  --account-color: #42a67a;
+  --account-color-rgb: 66, 166, 122;
   --shadow: 0 18px 50px rgba(49, 44, 81, 0.15);
   --nav-h: 68px;
   --radius: 8px;
@@ -654,6 +656,112 @@ h3 {
   overflow-wrap: anywhere;
 }
 
+.balance-account-badge {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid rgba(var(--account-color-rgb), 0.44);
+  border-radius: 999px;
+  background: rgba(var(--account-color-rgb), 0.18);
+}
+
+.balance-account-badge strong,
+.balance-account-badge small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.balance-account-badge strong {
+  color: var(--paper);
+  font-size: 0.82rem;
+  line-height: 1.1;
+}
+
+.balance-account-badge small {
+  margin-top: 2px;
+  color: rgba(255, 250, 240, 0.66);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.account-color-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--account-color);
+  box-shadow: 0 0 0 4px rgba(var(--account-color-rgb), 0.18);
+}
+
+.balance-account-selector {
+  display: flex;
+  gap: 8px;
+  max-width: 100%;
+  padding: 2px 2px 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+
+.balance-account-selector::-webkit-scrollbar {
+  display: none;
+}
+
+.balance-account-option {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 1px;
+  flex: 0 0 auto;
+  min-width: 122px;
+  max-width: 190px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 250, 240, 0.12);
+  border-radius: 999px;
+  color: rgba(255, 250, 240, 0.78);
+  background: rgba(255, 250, 240, 0.08);
+  scroll-snap-align: start;
+}
+
+.balance-account-option .account-color-dot {
+  grid-row: 1 / span 2;
+}
+
+.balance-account-option span:not(.account-color-dot),
+.balance-account-option small {
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.balance-account-option span:not(.account-color-dot) {
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.balance-account-option small {
+  color: rgba(255, 250, 240, 0.56);
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.balance-account-option.is-active {
+  border-color: rgba(var(--account-color-rgb), 0.7);
+  color: var(--paper);
+  background: rgba(var(--account-color-rgb), 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
 .balance-pie-wrap {
   position: relative;
   min-height: 230px;
@@ -1127,13 +1235,16 @@ h3 {
 }
 
 .bank-account-card {
+  --account-color: var(--green);
+  --account-color-rgb: 66, 166, 122;
   display: grid;
   gap: 12px;
   min-width: 0;
   padding: 13px;
-  border: 1px solid rgba(16, 35, 31, 0.12);
+  border: 1px solid rgba(var(--account-color-rgb), 0.26);
   border-radius: 20px;
   background:
+    radial-gradient(circle at 92% 6%, rgba(var(--account-color-rgb), 0.18), transparent 28%),
     linear-gradient(145deg, rgba(255, 253, 247, 0.95), rgba(239, 248, 241, 0.72));
   box-shadow: 0 12px 30px rgba(49, 44, 81, 0.08);
 }
@@ -1176,7 +1287,7 @@ h3 {
   place-items: center;
   border-radius: 14px;
   color: var(--paper);
-  background: linear-gradient(145deg, var(--green), #2f4157);
+  background: linear-gradient(145deg, var(--account-color), #2f4157);
   font-size: 0.72rem;
   font-weight: 950;
 }
@@ -4363,6 +4474,18 @@ h1 {
     radial-gradient(circle at 12% 84%, rgba(67, 168, 111, 0.24), transparent 26%),
     linear-gradient(145deg, #08221b 0%, #123d31 58%, #071a16 100%);
   box-shadow: 0 34px 90px rgba(7, 31, 25, 0.28);
+}
+
+.content-panel.overview-card.has-bank-account {
+  border-color: rgba(var(--account-color-rgb), 0.38);
+  background:
+    radial-gradient(circle at 80% 14%, rgba(var(--account-color-rgb), 0.38), transparent 26%),
+    radial-gradient(circle at 10% 86%, rgba(var(--account-color-rgb), 0.22), transparent 24%),
+    linear-gradient(145deg, #08221b 0%, #123d31 58%, #071a16 100%);
+}
+
+.content-panel.overview-card.has-bank-account .balance-copy .hero-value {
+  text-shadow: 0 18px 40px rgba(var(--account-color-rgb), 0.24);
 }
 
 .content-panel.overview-card::before {

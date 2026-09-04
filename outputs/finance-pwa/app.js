@@ -69,6 +69,7 @@
     vehicle: { label: "Veiculo", icon: "V", tone: "blue" }
   };
   const sourceColors = ["#42a67a", "#f5c84c", "#567c9b", "#d95d4e", "#8b6fd6", "#2db7a3", "#f08b4f"];
+  const bankAccountColors = ["#0f6b4e", "#567c9b", "#f0c38e", "#8b6fd6", "#2db7a3", "#d95d4e", "#312c51", "#4f7f42"];
   const collectionPrefixes = {
     transactions: "tx",
     transfers: "tr",
@@ -218,6 +219,12 @@
   };
   const appNews = [
     {
+      id: "bank-account-dashboard-v88",
+      date: "2026-09-04",
+      title: "Saldo principal por conta bancaria",
+      body: "O card principal agora mostra uma conta por vez, com seletor de conta, cor propria e saldo separado por pais/moeda. O saldo inicial da conta bancaria tambem ficou opcional."
+    },
+    {
       id: "bank-accounts-v87",
       date: "2026-08-30",
       title: "Contas bancarias por pais",
@@ -290,7 +297,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=87")
+      navigator.serviceWorker.register("./service-worker.js?v=88")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -345,6 +352,10 @@
 
     if (action === "card-carousel-select") {
       selectCardCarousel(Number(button.dataset.index || 0), Number(button.dataset.total || 0));
+    }
+
+    if (action === "select-dashboard-account") {
+      selectDashboardAccount(button.dataset.id);
     }
 
     if (action === "scroll-subscriptions") {
@@ -983,6 +994,7 @@
       ui: {
         ...base.ui,
         ...(raw.ui || {}),
+        selectedDashboardAccountId: String(raw.ui?.selectedDashboardAccountId || ""),
         hideBalance: Boolean(raw.ui?.hideBalance),
         hideCalendarDetails: Boolean(raw.ui?.hideCalendarDetails),
         hideCryptoDetails: Boolean(raw.ui?.hideCryptoDetails)
@@ -1012,6 +1024,9 @@
       paidCommitments: raw.paidCommitments || {}
     };
     normalized.ui.activeCountry = "global";
+    if (normalized.ui.selectedDashboardAccountId && !normalized.bankAccounts.some((account) => account.id === normalized.ui.selectedDashboardAccountId && account.active !== false)) {
+      normalized.ui.selectedDashboardAccountId = "";
+    }
     if (urlParams.get("tab") === "dashboard" || urlParams.get("home") === "1") {
       normalized.ui.activeTab = "dashboard";
     }
@@ -1038,9 +1053,10 @@
   function normalizeBankAccounts(items, fallback = []) {
     if (!Array.isArray(items)) return fallback;
     return items
-      .map((item) => {
+      .map((item, index) => {
         const country = countryMeta[item.country] && item.country !== "global" ? item.country : "japao";
         const currency = sanitizeCurrency(item.currency, countryMeta[country]?.currency || PRIMARY_CURRENCY);
+        const fallbackColor = bankAccountColors[index % bankAccountColors.length];
         return {
           ...item,
           country,
@@ -1051,6 +1067,7 @@
           initialBalance: number(item.initialBalance ?? item.balance ?? item.currentBalance),
           currency,
           balanceDate: String(item.balanceDate || item.openingBalanceDate || dateInMonth(currentMonth(), new Date().getDate())).slice(0, 10),
+          color: sanitizeColor(item.color, fallbackColor),
           active: item.active !== false
         };
       })
@@ -1409,6 +1426,7 @@
         activeTab: "dashboard",
         selectedMonth,
         activeCardIndex: 0,
+        selectedDashboardAccountId: "",
         hideBalance: false,
         hideCalendarDetails: false,
         hideCryptoDetails: false
@@ -1767,6 +1785,14 @@
     render();
   }
 
+  function selectDashboardAccount(id) {
+    const account = activeBankAccounts().find((item) => item.id === id);
+    if (!account) return;
+    state.ui.selectedDashboardAccountId = account.id;
+    saveState();
+    render();
+  }
+
   function renderVisibilityToggle(panel, hidden, label) {
     return `
       <button
@@ -1934,13 +1960,15 @@
     ensureDashboardCurrentMonth();
     const summary = summarizeMonth(state.ui.selectedMonth, "global");
     const showPaypal = hasPaypalDashboardBalance();
+    const dashboardAccount = selectedDashboardAccount();
+    const overviewClass = dashboardAccount ? "content-panel overview-card has-bank-account" : "content-panel overview-card";
 
     return `
       ${renderFxCards()}
 
       ${renderToolbar()}
 
-      <section class="content-panel overview-card">
+      <section class="${overviewClass}"${dashboardAccount ? bankAccountStyleAttrs(dashboardAccount) : ""}>
         ${renderBalanceOverview(summary)}
       </section>
 
@@ -2052,39 +2080,48 @@
 
   function renderBalanceOverview(summary) {
     const breakdown = dashboardBalanceBreakdown(summary);
-    const payableLabel = breakdown.payables ? formatMoneyWithPrimary(breakdown.payables, breakdown.currency) : formatMoney(0, breakdown.currency);
     const hideBalance = Boolean(state.ui.hideBalance);
-    const paidValue = hideBalance ? "*****" : formatMoneyWithPrimary(breakdown.paid, breakdown.currency);
     const salaryValue = hideBalance
       ? "*****"
       : (breakdown.salaryEstimate.configured ? formatMoneyWithPrimary(breakdown.salaryEstimate.total, breakdown.salaryEstimate.currency, state.ui.selectedMonth) : "--");
     const mainBalance = dashboardMainBalance(summary);
-    const mainValue = hideBalance ? "¥ •••••" : formatMoneyWithPrimary(mainBalance.amount, mainBalance.currency);
-    const receivedValue = hideBalance ? "•••••" : formatMoneyWithPrimary(breakdown.received, breakdown.currency);
-    const payableValue = hideBalance ? "•••••" : payableLabel;
+    const account = mainBalance.account || null;
+    const accounts = activeBankAccounts();
+    const activity = account ? bankAccountMonthlyActivity(account, state.ui.selectedMonth) : null;
+    const payableAmount = account
+      ? convert(breakdown.payables, breakdown.currency, mainBalance.currency, latestRate(state.ui.selectedMonth))
+      : breakdown.payables;
+    const mainValue = hideBalance ? maskedMoney(mainBalance.currency) : formatMoneyWithPrimary(mainBalance.amount, mainBalance.currency);
+    const receivedValue = hideBalance ? "•••••" : formatMoneyWithPrimary(activity ? activity.received : breakdown.received, mainBalance.currency);
+    const paidValue = hideBalance ? "*****" : formatMoneyWithPrimary(activity ? activity.paid : breakdown.paid, mainBalance.currency);
+    const payableValue = hideBalance ? "•••••" : (payableAmount ? formatMoneyWithPrimary(payableAmount, mainBalance.currency) : formatMoney(0, mainBalance.currency));
+    const receivedLabel = account ? "Entradas na conta" : "Recebido ate agora";
+    const paidLabel = account ? "Pagos na conta" : "Pagos no mes";
+    const payableLabel = account ? "A pagar geral" : "Contas a pagar";
     return `
       <div class="balance-overview">
         <div class="balance-privacy-action">
           ${renderVisibilityToggle("balance", hideBalance, "saldo atual")}
         </div>
         <div class="balance-copy">
-          <p class="hero-title">Saldo atual</p>
+          <p class="hero-title">${account ? "Saldo da conta" : "Saldo atual"}</p>
           <p class="hero-value">${mainValue}</p>
-          ${mainBalance.fromAccounts ? `<p class="row-meta balance-source-note">Soma das contas bancarias cadastradas</p>` : ""}
+          ${account ? renderDashboardAccountBadge(account) : ""}
           <div class="overview-mini-grid">
             <div>
-              <span>Recebido ate agora</span>
+              <span>${receivedLabel}</span>
               <strong>${receivedValue}</strong>
             </div>
             <div>
-              <span>Pagos no mes</span>
+              <span>${paidLabel}</span>
               <strong>${paidValue}</strong>
             </div>
             <div>
-              <span>Contas a pagar</span>
+              <span>${payableLabel}</span>
               <strong>${payableValue}</strong>
             </div>
           </div>
+          ${renderDashboardAccountSelector(accounts, account)}
         </div>
         <div class="balance-pie-wrap">
           <canvas id="balance-pie-chart" aria-label="Recebido contra contas a pagar"></canvas>
@@ -2170,7 +2207,7 @@
           const balance = bankAccountBalance(account, state.ui.selectedMonth);
           const author = authorLabel(account);
           return `
-            <article class="bank-account-card">
+            <article class="bank-account-card"${bankAccountStyleAttrs(account)}>
               <div class="bank-account-head">
                 <span class="bank-account-icon">${escapeHtml(countryMeta[account.country]?.short || "BK")}</span>
                 <div>
@@ -4899,6 +4936,7 @@
     const selectedCurrency = item?.currency || countryMeta[country].currency;
     const selectedType = item?.accountType || defaultBankAccountType(country);
     const balanceDate = item?.balanceDate || dateInMonth(state.ui.selectedMonth || currentMonth(), new Date().getDate());
+    const nextColor = sanitizeColor(item?.color, bankAccountColors[activeBankAccounts().length % bankAccountColors.length]);
     return `
       <div class="modal-head">
         <h2>${item ? "Editar conta bancaria" : "Nova conta bancaria"}</h2>
@@ -4937,7 +4975,7 @@
         <div class="three-cols">
           <div class="field">
             <label for="bankInitialBalance">Saldo nesta data</label>
-            <input id="bankInitialBalance" name="initialBalance" required type="number" step="0.01" value="${item ? number(item.initialBalance) : ""}" />
+            <input id="bankInitialBalance" name="initialBalance" type="number" step="0.01" placeholder="Opcional" value="${item ? number(item.initialBalance) : ""}" />
           </div>
           <div class="field">
             <label for="bankAccountCurrency">Moeda</label>
@@ -4950,9 +4988,15 @@
             <input id="bankBalanceDate" name="balanceDate" required type="date" value="${escapeAttr(balanceDate)}" />
           </div>
         </div>
-        <div class="field">
-          <label for="bankAccountLast4">Final da conta</label>
-          <input id="bankAccountLast4" name="accountLast4" inputmode="numeric" maxlength="4" placeholder="4 ultimos numeros" value="${escapeAttr(item?.accountLast4 || "")}" />
+        <div class="two-cols">
+          <div class="field">
+            <label for="bankAccountLast4">Final da conta</label>
+            <input id="bankAccountLast4" name="accountLast4" inputmode="numeric" maxlength="4" placeholder="4 ultimos numeros" value="${escapeAttr(item?.accountLast4 || "")}" />
+          </div>
+          <div class="field">
+            <label for="bankAccountColor">Cor do card principal</label>
+            <input id="bankAccountColor" name="color" type="color" value="${escapeAttr(nextColor)}" />
+          </div>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -6103,7 +6147,8 @@
   function saveBankAccount(form) {
     const data = formData(form);
     const country = data.country === "brasil" ? "brasil" : "japao";
-    const updated = upsertItem("bankAccounts", data.id, {
+    const accountId = data.id || uid(collectionPrefixes.bankAccounts || "ba");
+    const updated = upsertItem("bankAccounts", accountId, {
       country,
       bankName: String(data.bankName || "").trim(),
       nickname: String(data.nickname || "").trim(),
@@ -6112,8 +6157,10 @@
       initialBalance: number(data.initialBalance),
       currency: sanitizeCurrency(data.currency, countryMeta[country].currency),
       balanceDate: data.balanceDate || dateInMonth(state.ui.selectedMonth || currentMonth(), new Date().getDate()),
+      color: sanitizeColor(data.color, bankAccountColors[activeBankAccounts().length % bankAccountColors.length]),
       active: true
     });
+    state.ui.selectedDashboardAccountId = accountId;
     saveState();
     closeModal();
     render();
@@ -6722,6 +6769,10 @@
     const ok = window.confirm("Excluir este item?");
     if (!ok) return;
     state[collection] = current.filter((entry) => entry.id !== id);
+    if (collection === "bankAccounts" && state.ui.selectedDashboardAccountId === id) {
+      const fallback = activeBankAccounts()[0];
+      state.ui.selectedDashboardAccountId = fallback?.id || "";
+    }
     saveState();
     render();
     showToast(message);
@@ -9449,12 +9500,72 @@
       });
   }
 
+  function selectedDashboardAccount() {
+    const accounts = activeBankAccounts();
+    if (!accounts.length) return null;
+    const selectedId = String(state.ui.selectedDashboardAccountId || "");
+    return accounts.find((account) => account.id === selectedId) || accounts[0];
+  }
+
   function bankAccountById(id) {
     return (state.bankAccounts || []).find((account) => account.id === id) || null;
   }
 
   function bankAccountName(account) {
     return String(account?.nickname || account?.bankName || "Conta bancaria").trim();
+  }
+
+  function bankAccountColor(account) {
+    return sanitizeColor(account?.color, countryMeta[account?.country]?.color || "#42a67a");
+  }
+
+  function bankAccountStyleAttrs(account) {
+    const color = bankAccountColor(account);
+    return ` style="--account-color:${escapeAttr(color)};--account-color-rgb:${escapeAttr(hexToRgbValues(color))}"`;
+  }
+
+  function renderDashboardAccountBadge(account) {
+    const country = countryMeta[account.country] || countryMeta.japao;
+    const detail = [
+      country.label,
+      account.bankName,
+      bankAccountTypeLabel(account),
+      account.accountLast4 ? `**** ${account.accountLast4}` : ""
+    ].filter(Boolean).join(" - ");
+    return `
+      <div class="balance-account-badge"${bankAccountStyleAttrs(account)}>
+        <span class="account-color-dot" aria-hidden="true"></span>
+        <div>
+          <strong>${escapeHtml(bankAccountName(account))}</strong>
+          <small>${escapeHtml(detail)}</small>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderDashboardAccountSelector(accounts, activeAccount) {
+    if (!accounts.length) return "";
+    return `
+      <div class="balance-account-selector" aria-label="Selecionar conta principal">
+        ${accounts.map((account) => {
+          const active = activeAccount?.id === account.id;
+          const country = countryMeta[account.country] || countryMeta.japao;
+          return `
+            <button
+              class="balance-account-option ${active ? "is-active" : ""}"
+              type="button"
+              data-action="select-dashboard-account"
+              data-id="${escapeAttr(account.id)}"
+              ${bankAccountStyleAttrs(account)}
+            >
+              <span class="account-color-dot" aria-hidden="true"></span>
+              <span>${escapeHtml(bankAccountName(account))}</span>
+              <small>${escapeHtml(country.short)} · ${escapeHtml(account.currency)}</small>
+            </button>
+          `;
+        }).join("")}
+      </div>
+    `;
   }
 
   function defaultBankAccountType(country) {
@@ -9547,6 +9658,26 @@
     return round(balance, currency === "JPY" ? 0 : 2);
   }
 
+  function bankAccountMonthlyActivity(account, month = state.ui.selectedMonth) {
+    if (!account) return { received: 0, paid: 0 };
+    const currency = sanitizeCurrency(account.currency, countryMeta[account.country]?.currency || primaryCurrency());
+    const rate = latestRate(month);
+    const sameMonth = (date) => String(date || "").slice(0, 7) === month;
+    const receivedFromTransactions = (state.transactions || [])
+      .filter((item) => item.bankAccountId === account.id && item.type === "income" && sameMonth(item.date))
+      .reduce((total, item) => total + convert(item.amount, item.currency, currency, rate), 0);
+    const paidFromTransactions = (state.transactions || [])
+      .filter((item) => item.bankAccountId === account.id && allOutflowTypes.includes(item.type) && sameMonth(item.date))
+      .reduce((total, item) => total + convert(item.amount, item.currency, currency, rate), 0);
+    const workReceived = (state.workIncomes || [])
+      .filter((item) => item.bankAccountId === account.id && sameMonth(item.date))
+      .reduce((total, item) => total + convert(item.amount, item.currency, currency, rate), 0);
+    return {
+      received: round(receivedFromTransactions + workReceived, currency === "JPY" ? 0 : 2),
+      paid: round(paidFromTransactions, currency === "JPY" ? 0 : 2)
+    };
+  }
+
   function bankAccountsTotal(currency = primaryCurrency(), month = state.ui.selectedMonth) {
     const rate = latestRate(month);
     return activeBankAccounts().reduce((total, account) => {
@@ -9568,17 +9699,20 @@
   }
 
   function dashboardMainBalance(summary) {
-    if (!activeBankAccounts().length) {
+    const account = selectedDashboardAccount();
+    if (!account) {
       return {
         amount: summary.remaining,
         currency: summary.currency,
-        fromAccounts: false
+        fromAccounts: false,
+        account: null
       };
     }
     return {
-      amount: bankAccountsTotal(primaryCurrency(), state.ui.selectedMonth),
-      currency: primaryCurrency(),
-      fromAccounts: true
+      amount: bankAccountBalance(account, state.ui.selectedMonth),
+      currency: account.currency,
+      fromAccounts: true,
+      account
     };
   }
 
@@ -9773,6 +9907,19 @@
     return supportedCurrencies[currency] ? currency : fallback;
   }
 
+  function sanitizeColor(color, fallback = "#42a67a") {
+    const value = String(color || "").trim();
+    return /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+  }
+
+  function hexToRgbValues(color) {
+    const safe = sanitizeColor(color).slice(1);
+    const red = parseInt(safe.slice(0, 2), 16);
+    const green = parseInt(safe.slice(2, 4), 16);
+    const blue = parseInt(safe.slice(4, 6), 16);
+    return `${red}, ${green}, ${blue}`;
+  }
+
   function sanitizeSecondaryCurrency(currency, primary) {
     const safe = sanitizeCurrency(currency, primary === DEFAULT_SECONDARY_CURRENCY ? "USD" : DEFAULT_SECONDARY_CURRENCY);
     if (safe !== primary) return safe;
@@ -9831,6 +9978,16 @@
       maximumFractionDigits: meta.fraction,
       minimumFractionDigits: meta.fraction
     }).format(amount);
+  }
+
+  function maskedMoney(currency) {
+    const symbols = {
+      JPY: "¥",
+      BRL: "R$",
+      USD: "$",
+      EUR: "€"
+    };
+    return `${symbols[sanitizeCurrency(currency, primaryCurrency())] || "¤"} •••••`;
   }
 
   function formatSignedMoney(value, currency) {
