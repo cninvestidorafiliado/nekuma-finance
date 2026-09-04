@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "work-calendar-sunday-start-v101",
+      id: "salary-total-highlight-v102",
       date: "2026-09-05",
-      title: "Calendario de turnos ajustado",
-      body: "O calendario de turnos agora segue o padrao visual com a semana iniciando no domingo."
+      title: "Salario bruto mais limpo",
+      body: "O mini card de salario bruto previsto agora destaca o total e mostra apenas a conversao em reais abaixo."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=101")
+      navigator.serviceWorker.register("./service-worker.js?v=102")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -2420,7 +2420,7 @@
           <div><em>zangyou</em><strong>*****</strong></div>
           ${hasBonus ? `<b>+</b><div><em>bonus</em><strong>*****</strong></div>` : ""}
           <b>=</b>
-          <div><em>total</em><strong>*****</strong></div>
+          <div class="is-total"><em>total</em><strong>*****</strong></div>
         </div>
       `;
     }
@@ -2431,10 +2431,17 @@
         <div><em>zangyou</em><strong>${formatMoney(extras, card.currency)}</strong></div>
         ${hasBonus ? `<b>+</b><div><em>bonus</em><strong>${formatMoney(bonus, card.currency)}</strong></div>` : ""}
         <b>=</b>
-        <div><em>total</em><strong>${formatMoney(total, card.currency)}</strong></div>
+        <div class="is-total"><em>total</em><strong>${formatMoney(total, card.currency)}</strong></div>
       </div>
-      <div class="salary-total-converted">${formatMoneyWithPrimary(total, card.currency, card.month)}</div>
+      ${renderSalaryTotalConverted(total, card.currency, card.month)}
     `;
+  }
+
+  function renderSalaryTotalConverted(total, currency, month = state.ui.selectedMonth) {
+    const sourceCurrency = sanitizeCurrency(currency, primaryCurrency());
+    if (sourceCurrency === "BRL") return "";
+    const converted = convert(total, sourceCurrency, "BRL", latestRate(month));
+    return `<div class="salary-total-converted">(${formatMoney(converted, "BRL")})</div>`;
   }
 
   function dashboardSalaryCards(month = state.ui.selectedMonth) {

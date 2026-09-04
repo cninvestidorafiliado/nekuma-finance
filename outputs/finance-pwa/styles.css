@@ -1413,6 +1413,15 @@ h3 {
   white-space: nowrap;
 }
 
+.salary-formula .is-total em {
+  color: rgba(9, 122, 86, 0.72);
+}
+
+.salary-formula .is-total strong {
+  color: #078257;
+  font-size: clamp(0.95rem, 3.2vw, 1.22rem);
+}
+
 .salary-formula b {
   padding-bottom: 1px;
   color: rgba(18, 49, 79, 0.58);
@@ -1421,9 +1430,9 @@ h3 {
 }
 
 .salary-total-converted {
-  margin-top: 5px;
-  color: rgba(18, 49, 79, 0.66);
-  font-size: 0.7rem;
+  margin-top: 3px;
+  color: rgba(18, 49, 79, 0.72);
+  font-size: 0.78rem;
   font-weight: 850;
   line-height: 1.1;
 }
@@ -5722,6 +5731,16 @@ h1 {
 
   .salary-estimate-card {
     align-self: start;
+  }
+
+  .salary-formula .is-total {
+    flex-basis: 100%;
+    margin-top: 4px;
+    text-align: center;
+  }
+
+  .salary-total-converted {
+    text-align: center;
   }
 
   .kpi-grid {
