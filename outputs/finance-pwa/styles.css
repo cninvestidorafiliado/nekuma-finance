@@ -2214,6 +2214,15 @@ canvas {
   gap: 12px;
 }
 
+.settings-maintenance-grid {
+  grid-template-columns: 1fr;
+}
+
+.settings-maintenance-grid > .content-panel,
+.settings-maintenance-grid > .settings-refresh-button {
+  grid-column: 1 / -1;
+}
+
 .list {
   display: grid;
   gap: 8px;

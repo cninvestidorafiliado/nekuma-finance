@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "mobile-converter-zoom-fix-v109",
+      id: "settings-maintenance-width-v110",
       date: "2026-09-05",
-      title: "Conversor ajustado no celular",
-      body: "O conversor de moedas foi ajustado para nao ampliar a tela nem criar rolagem lateral ao tocar nos campos."
+      title: "Ajustes mais organizados",
+      body: "Backup e Ambiente voltaram a ocupar a largura completa, com o botao Atualizar App entre os dois."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=109")
+      navigator.serviceWorker.register("./service-worker.js?v=110")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -3076,7 +3076,7 @@
 
       ${renderProfileSupportCards()}
 
-      <section class="split-grid">
+      <section class="split-grid settings-maintenance-grid">
         <article class="content-panel">
           <div class="panel-head">
             <h2>Backup</h2>
