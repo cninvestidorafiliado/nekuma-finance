@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "desktop-ipad-inline-fixes-v107",
+      id: "mobile-header-refresh-settings-v108",
       date: "2026-09-05",
-      title: "Ajustes desktop e iPad",
-      body: "Conversor, moradia e carteira cripto receberam alinhamentos mais consistentes nas telas maiores."
+      title: "Topo mobile mais limpo",
+      body: "O topo do celular ficou com menos botoes, Wise entrou no menu adicionar e o botao Atualizar App foi para Ajustes."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=107")
+      navigator.serviceWorker.register("./service-worker.js?v=108")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -891,6 +891,7 @@
       await forcePwaUpdate();
       const url = new URL(window.location.href);
       url.searchParams.set("refresh", `manual-${Date.now()}`);
+      if (state.ui.activeTab) url.searchParams.set("tab", state.ui.activeTab);
       saveScrollPositionForRestore();
       window.location.replace(url.toString());
     } catch (error) {
@@ -3090,6 +3091,11 @@
           </div>
         </article>
 
+        <button class="settings-refresh-button" type="button" data-action="reload-app">
+          <span data-lucide="refresh-cw" aria-hidden="true"></span>
+          Atualizar App
+        </button>
+
         <article class="content-panel">
           <div class="panel-head">
             <h2>Ambiente</h2>
@@ -4786,6 +4792,7 @@
     const actions = [
       { modal: "incomeSource", icon: "E", title: "Cadastro de Empresa", meta: "Fontes como fabrica, Amazon, Uber e renda extra" },
       { modal: "workIncome", icon: "¥", title: "Cadastro de Pagamento", meta: "Recebimento ligado a uma empresa cadastrada" },
+      { modal: "transfer", icon: "W", title: "Adicionar Wise", meta: "Transferencias e conversoes entre Brasil e Japao" },
       { modal: "vehicle", icon: "V", title: "Cadastrar veiculo", meta: "Carro do Japao, Shaken, seguro e dados principais" },
       { modal: "housingCard", icon: "A", title: "Cadastrar moradia", meta: "Aluguel, luz, gas, agua e internet em um unico card" },
       { modal: "creditCard", icon: "C", title: "Cadastrar cartao", meta: "Cartao do Brasil ou Japao com bandeira e vencimento" },

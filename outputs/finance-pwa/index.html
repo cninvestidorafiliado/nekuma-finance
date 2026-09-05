@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;650;750;850&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=107" />
+    <link rel="stylesheet" href="./styles.css?v=108" />
   </head>
   <body>
     <div class="app-shell">
@@ -26,8 +26,8 @@
           </div>
         </div>
         <div class="top-actions">
-          <button class="icon-button mobile-refresh-button" type="button" data-action="reload-app" aria-label="Atualizar aplicativo" title="Atualizar app">
-            <span data-lucide="refresh-cw" aria-hidden="true"></span>
+          <button class="icon-button" type="button" data-action="open-modal" data-modal="addHub" aria-label="Adicionar no app" title="Adicionar">
+            <span data-lucide="plus" aria-hidden="true">+</span>
           </button>
           <button class="icon-button news-button" id="app-news-button" type="button" data-action="open-app-news" aria-label="Novidades do app" title="Novidades">
             <span data-lucide="circle-alert" aria-hidden="true"></span>
@@ -36,12 +36,6 @@
           <button class="icon-button logout-button" type="button" data-action="remote-signout" aria-label="Sair da conta" title="Sair">
             <span data-lucide="log-out" aria-hidden="true"></span>
             Sair
-          </button>
-          <button class="icon-button" type="button" data-action="open-modal" data-modal="addHub" aria-label="Adicionar no app" title="Adicionar">
-            <span data-lucide="plus" aria-hidden="true">+</span>
-          </button>
-          <button class="icon-button soft" type="button" data-action="open-modal" data-modal="transfer" aria-label="Adicionar Wise" title="Adicionar Wise">
-            <span data-lucide="repeat-2" aria-hidden="true">W</span>
           </button>
         </div>
       </header>
@@ -89,6 +83,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
     <script src="./supabase-config.js?v=26"></script>
-    <script src="./app.js?v=107"></script>
+    <script src="./app.js?v=108"></script>
   </body>
 </html>

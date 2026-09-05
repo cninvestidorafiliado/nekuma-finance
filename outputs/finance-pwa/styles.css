@@ -226,6 +226,27 @@ h3 {
   display: grid;
 }
 
+.settings-refresh-button {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: var(--radius);
+  color: #071f19;
+  background: linear-gradient(135deg, #d8ff72, #f0c38e);
+  box-shadow: 0 16px 36px rgba(216, 255, 114, 0.16);
+  font-weight: 950;
+}
+
+.settings-refresh-button svg {
+  width: 20px;
+  height: 20px;
+}
+
 .online-mode .logout-button {
   display: grid;
 }
@@ -6425,10 +6446,6 @@ h1 {
     flex: 0 0 auto;
     gap: 6px;
     max-width: 46%;
-  }
-
-  .mobile-refresh-button {
-    display: grid;
   }
 
   .logout-button {
