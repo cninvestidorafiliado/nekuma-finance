@@ -678,6 +678,50 @@ h3 {
   display: none;
 }
 
+.fx-converter-card {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+}
+
+.fx-converter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fx-converter-head strong {
+  color: #08764f;
+  text-align: right;
+}
+
+.fx-converter-controls {
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) minmax(62px, 0.64fr) auto minmax(62px, 0.64fr);
+  gap: 6px;
+  align-items: center;
+}
+
+.fx-converter-controls input,
+.fx-converter-controls select {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid rgba(49, 44, 81, 0.12);
+  border-radius: 12px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.fx-converter-controls span {
+  color: var(--muted);
+  font-weight: 950;
+}
+
 .hero-panel {
   display: flex;
   flex-direction: column;
@@ -5704,6 +5748,29 @@ h1 {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
+  .fx-converter-card {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.3fr);
+    align-items: center;
+    min-height: 72px;
+  }
+
+  .fx-converter-head {
+    display: grid;
+    align-content: center;
+    justify-content: start;
+  }
+
+  .fx-converter-head strong {
+    font-size: clamp(1.24rem, 2.2vw, 1.75rem);
+    text-align: left;
+  }
+
+  .fx-converter-controls {
+    grid-template-columns: minmax(120px, 1fr) minmax(92px, 0.42fr) auto minmax(92px, 0.42fr);
+    align-self: center;
+  }
+
   .fx-status-card {
     grid-column: auto;
   }
@@ -5759,14 +5826,82 @@ h1 {
     grid-template-columns: 1.2fr 0.8fr;
   }
 
-  .crypto-panel.is-compact .crypto-layout {
-    grid-template-columns: minmax(250px, 0.8fr) minmax(280px, 1fr);
-    align-items: center;
+  .crypto-wallet {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: stretch;
   }
 
-  .crypto-panel.is-compact .crypto-value-card,
-  .crypto-panel.is-compact .crypto-status {
-    grid-column: 2;
+  .crypto-wallet-hero,
+  .crypto-allocation {
+    min-height: 150px;
+  }
+
+  .crypto-status {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .calendar-item {
+    min-height: 66px;
+    padding: 8px 10px;
+  }
+
+  .calendar-date {
+    min-height: 46px;
+  }
+
+  .calendar-amount {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .calendar-amount .chip {
+    flex: 0 0 auto;
+  }
+
+  .calendar-pay-button {
+    flex: 0 0 auto;
+    min-height: 30px;
+  }
+
+  .housing-item {
+    grid-template-columns: auto minmax(0, 1fr) minmax(120px, auto) auto;
+    align-items: center;
+    min-height: 58px;
+    padding: 8px 10px;
+    gap: 8px 10px;
+  }
+
+  .housing-item .row-amount {
+    display: block;
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .housing-item .row-amount .money-converted {
+    display: block;
+  }
+
+  .housing-item .row-actions {
+    grid-column: 4;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .crypto-token-list {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .crypto-token-card {
+    min-width: 0;
   }
 
   .modal-backdrop {

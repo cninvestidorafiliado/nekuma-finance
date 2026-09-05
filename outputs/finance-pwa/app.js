@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "salary-payment-account-v104",
+      id: "desktop-ipad-inline-fixes-v107",
       date: "2026-09-05",
-      title: "Salario ligado a conta",
-      body: "O salario previsto agora considera pagamento no mes seguinte ao trabalhado e pode ser vinculado a uma conta bancaria de destino."
+      title: "Ajustes desktop e iPad",
+      body: "Conversor, moradia e carteira cripto receberam alinhamentos mais consistentes nas telas maiores."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=104")
+      navigator.serviceWorker.register("./service-worker.js?v=107")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -456,6 +456,7 @@
 
   document.addEventListener("input", (event) => {
     if (event.target.closest("[data-form='transfer']")) updateTransferPreview();
+    if (event.target.closest(".fx-converter-card")) updateFxConverterPreview();
   });
 
   document.addEventListener("change", (event) => {
@@ -475,6 +476,7 @@
     if (event.target.id === "goalCountry") updateGoalCurrencyField();
     if (event.target.id === "goalContributionGoalId") updateGoalContributionCurrencyField();
     if (event.target.id === "vehicleInsurancePaymentType") updateVehicleInsuranceCardField();
+    if (event.target.closest(".fx-converter-card")) updateFxConverterPreview();
   });
 
   document.addEventListener("keydown", (event) => {
@@ -2011,8 +2013,47 @@
           </div>
           <button class="small-action ghost" type="button" data-action="refresh-fx">Atualizar</button>
         </article>
+        ${renderFxConverterCard()}
       </section>
     `;
+  }
+
+  function renderFxConverterCard() {
+    return `
+      <article class="fx-card fx-converter-card" aria-label="Conversor de moedas">
+        <div class="fx-converter-head">
+          <p class="mini-label">Conversor</p>
+          <strong data-fx-converter-result>${formatMoney(convert(250, "USD", "BRL", latestRate()), "BRL")}</strong>
+        </div>
+        <div class="fx-converter-controls">
+          <input class="fx-converter-amount" type="number" min="0" step="0.01" value="250" aria-label="Valor para converter" />
+          <select class="fx-converter-from" aria-label="Moeda de origem">
+            ${fxConverterCurrencyOptions("USD")}
+          </select>
+          <span aria-hidden="true">&rarr;</span>
+          <select class="fx-converter-to" aria-label="Moeda de destino">
+            ${fxConverterCurrencyOptions("BRL")}
+          </select>
+        </div>
+      </article>
+    `;
+  }
+
+  function fxConverterCurrencyOptions(selected = primaryCurrency()) {
+    return ["USD", "BRL", "JPY", "EUR"]
+      .map((currency) => `<option value="${currency}" ${selectedAttr(currency, selected)}>${currency}</option>`)
+      .join("");
+  }
+
+  function updateFxConverterPreview() {
+    const card = document.querySelector(".fx-converter-card");
+    if (!card) return;
+    const amount = number(card.querySelector(".fx-converter-amount")?.value);
+    const from = sanitizeCurrency(card.querySelector(".fx-converter-from")?.value || "USD", "USD");
+    const to = sanitizeCurrency(card.querySelector(".fx-converter-to")?.value || "BRL", "BRL");
+    const result = convert(amount, from, to, latestRate());
+    const output = card.querySelector("[data-fx-converter-result]");
+    if (output) output.textContent = formatMoney(result, to);
   }
 
   function renderCurrentTab() {
