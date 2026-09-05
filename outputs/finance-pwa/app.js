@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "mobile-header-refresh-settings-v108",
+      id: "mobile-converter-zoom-fix-v109",
       date: "2026-09-05",
-      title: "Topo mobile mais limpo",
-      body: "O topo do celular ficou com menos botoes, Wise entrou no menu adicionar e o botao Atualizar App foi para Ajustes."
+      title: "Conversor ajustado no celular",
+      body: "O conversor de moedas foi ajustado para nao ampliar a tela nem criar rolagem lateral ao tocar nos campos."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=108")
+      navigator.serviceWorker.register("./service-worker.js?v=109")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });

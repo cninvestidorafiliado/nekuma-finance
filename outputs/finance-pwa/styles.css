@@ -736,6 +736,7 @@ h3 {
   background: rgba(255, 255, 255, 0.72);
   font-size: 0.82rem;
   font-weight: 900;
+  touch-action: manipulation;
 }
 
 .fx-converter-controls span {
@@ -6509,6 +6510,21 @@ h1 {
     min-height: 78px;
     padding: 9px;
     overflow: hidden;
+  }
+
+  .fx-converter-card {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .fx-converter-controls {
+    grid-template-columns: minmax(0, 1fr) minmax(70px, 0.72fr) auto minmax(70px, 0.72fr);
+  }
+
+  .fx-converter-controls input,
+  .fx-converter-controls select {
+    font-size: 16px;
+    line-height: 1.15;
   }
 
   .content-panel {
