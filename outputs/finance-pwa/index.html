@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;650;750;850&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=117" />
+    <link rel="stylesheet" href="./styles.css?v=118" />
   </head>
   <body>
     <div class="app-shell">
@@ -48,20 +48,12 @@
           <span data-lucide="wallet" aria-hidden="true">C</span>
           Contas
         </button>
+        <button class="nav-item nav-add-button" type="button" data-action="open-modal" data-modal="addHub" aria-label="Adicionar no app" title="Adicionar">
+          <span data-lucide="plus" aria-hidden="true">+</span>
+        </button>
         <button class="nav-item" type="button" data-action="set-tab" data-tab="crypto">
           <span data-lucide="bitcoin" aria-hidden="true">B</span>
           Cripto
-        </button>
-        <button class="nav-item nav-add-button" type="button" data-action="open-modal" data-modal="addHub" aria-label="Adicionar no app" title="Adicionar">
-          <span data-lucide="layout-grid" aria-hidden="true">+</span>
-        </button>
-        <button class="nav-item" type="button" data-action="set-tab" data-tab="wise">
-          <span data-lucide="repeat-2" aria-hidden="true">W</span>
-          Wise
-        </button>
-        <button class="nav-item" type="button" data-action="set-tab" data-tab="reports">
-          <span data-lucide="bar-chart-3" aria-hidden="true">R</span>
-          Relatorios
         </button>
         <button class="nav-item" type="button" data-action="set-tab" data-tab="settings">
           <span data-lucide="settings" aria-hidden="true">S</span>
@@ -83,6 +75,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
     <script src="./supabase-config.js?v=26"></script>
-    <script src="./app.js?v=117"></script>
+    <script src="./app.js?v=118"></script>
   </body>
 </html>

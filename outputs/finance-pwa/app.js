@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "center-add-fab-v117",
+      id: "simplified-nav-add-fab-v118",
       date: "2026-09-08",
-      title: "Adicionar em estilo botao central",
-      body: "O menu inferior ganhou um botao central destacado para abrir todos os cadastros do app."
+      title: "Menu inferior simplificado",
+      body: "Wise saiu da barra, Relatorios entrou em Ajustes e o botao central de adicionar ganhou um + grande em destaque."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=117")
+      navigator.serviceWorker.register("./service-worker.js?v=118")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -2983,6 +2983,12 @@
         <div class="panel-head">
           <h2>Ajustes</h2>
           <span class="chip ${state.settings.dataMode === "local" ? "gold" : "green"}">${state.settings.dataMode}</span>
+        </div>
+        <div class="settings-shortcuts">
+          <button class="settings-shortcut-button" type="button" data-action="set-tab" data-tab="reports">
+            <span data-lucide="bar-chart-3" aria-hidden="true"></span>
+            <span>Relatorios</span>
+          </button>
         </div>
         <form class="form-grid" data-form="settings">
           <div class="two-cols">
