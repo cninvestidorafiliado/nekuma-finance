@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "center-add-nav-polish-v116",
+      id: "center-add-fab-v117",
       date: "2026-09-08",
-      title: "Adicionar central corrigido",
-      body: "O botao central de adicionar agora fica dentro da barra inferior com destaque visual."
+      title: "Adicionar em estilo botao central",
+      body: "O menu inferior ganhou um botao central destacado para abrir todos os cadastros do app."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=116")
+      navigator.serviceWorker.register("./service-worker.js?v=117")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
