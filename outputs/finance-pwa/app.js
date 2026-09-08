@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "crypto-kpi-responsive-v114",
+      id: "center-add-nav-v115",
       date: "2026-09-08",
-      title: "Cripto mais legivel",
-      body: "Os mini cards de investido, valor atual e resultado agora usam melhor o espaco dentro de cada cripto."
+      title: "Adicionar em destaque",
+      body: "O botao de adicionar saiu do topo e foi para o centro do menu inferior, deixando o topo mais limpo."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=114")
+      navigator.serviceWorker.register("./service-worker.js?v=115")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
