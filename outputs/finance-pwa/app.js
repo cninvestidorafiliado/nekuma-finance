@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "settings-maintenance-width-v110",
-      date: "2026-09-05",
-      title: "Ajustes mais organizados",
-      body: "Backup e Ambiente voltaram a ocupar a largura completa, com o botao Atualizar App entre os dois."
+      id: "crypto-kpi-responsive-v114",
+      date: "2026-09-08",
+      title: "Cripto mais legivel",
+      body: "Os mini cards de investido, valor atual e resultado agora usam melhor o espaco dentro de cada cripto."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=110")
+      navigator.serviceWorker.register("./service-worker.js?v=114")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -2278,109 +2278,121 @@
     const showPaypal = hasPaypalDashboardBalance();
 
     return `
-      ${renderFxCards()}
-
-      ${renderToolbar()}
-
-      <section class="content-panel overview-card balance-section-card">
-        ${renderBalanceOverview(summary)}
-      </section>
-
-      ${showPaypal ? `<section class="content-panel paypal-panel">
-        ${renderPaypalPanel()}
-      </section>` : ""}
-
-      <section class="content-panel subscriptions-panel">
-        <div class="panel-head">
-          <div class="panel-title-block">
-            <h2>Subscricoes atuais</h2>
-            <p class="panel-total">Total a pagar ${subscriptionMonthTotalLabel(state.ui.selectedMonth)}</p>
-          </div>
-          <button class="small-action icon-action" type="button" data-action="open-modal" data-modal="subscription" aria-label="Nova subscricao">+</button>
+      <div class="desktop-dashboard-shell">
+        <div class="desktop-dashboard-top">
+          ${renderFxCards()}
         </div>
-        ${renderSubscriptionsHomePanel()}
-      </section>
 
-      <section class="content-panel">
-        <div class="panel-head">
-          <h2>Calendario financeiro</h2>
-          <div class="chips">
-            ${renderVisibilityToggle("calendar", state.ui.hideCalendarDetails, "eventos do calendario")}
-            <span class="chip gold">${formatMonthLabel(state.ui.selectedMonth)}</span>
-          </div>
+        <div class="desktop-dashboard-month-row">
+          ${renderToolbar()}
         </div>
-        ${state.ui.hideCalendarDetails ? renderHiddenDetails("Eventos ocultos", "Clique no olho para mostrar o calendario financeiro.") : renderFinancialCalendar(8, "upcoming")}
-      </section>
 
-      <section class="content-panel work-calendar-panel">
-        ${renderWorkCalendarPanel()}
-      </section>
+        <aside class="desktop-dashboard-column desktop-dashboard-left">
+          <section class="content-panel overview-card balance-section-card">
+            ${renderBalanceOverview(summary)}
+          </section>
 
-      <section class="content-panel housing-panel">
-        <div class="panel-head">
-          <h2>Moradia</h2>
-          <button class="small-action" type="button" data-action="open-modal" data-modal="housingCard">Nova moradia</button>
-        </div>
-        ${renderHousingPanel(2)}
-      </section>
+          ${showPaypal ? `<section class="content-panel paypal-panel">
+            ${renderPaypalPanel()}
+          </section>` : ""}
 
-      <section class="content-panel crypto-panel is-compact">
-        <div class="panel-head">
-          <h2>Carteira cripto</h2>
-          <div class="chips">
-            ${renderVisibilityToggle("crypto", state.ui.hideCryptoDetails, "criptos compradas")}
-            <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
-            <button class="small-action" type="button" data-action="open-modal" data-modal="crypto">Nova cripto</button>
-          </div>
-        </div>
-        ${renderCryptoPanel(true)}
-      </section>
+          <section class="dashboard-card-vehicle-grid">
+            <article class="content-panel dashboard-cards-panel">
+              <div class="panel-head">
+                <h2>Meus Cartoes</h2>
+                <button class="small-action" type="button" data-action="open-modal" data-modal="creditCard">Novo</button>
+              </div>
+              ${renderCreditCardHomePanel()}
+            </article>
 
-      <section class="dashboard-card-vehicle-grid">
-        <article class="content-panel dashboard-cards-panel">
-          <div class="panel-head">
-            <h2>Meus Cartoes</h2>
-            <button class="small-action" type="button" data-action="open-modal" data-modal="creditCard">Novo</button>
-          </div>
-          ${renderCreditCardHomePanel()}
-        </article>
+            <article class="content-panel vehicle-panel">
+              <div class="panel-head">
+                <h2>Veiculo Japao</h2>
+                <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicle">Editar</button>
+              </div>
+              ${renderVehiclePanel(3)}
+            </article>
+          </section>
 
-        <article class="content-panel vehicle-panel">
-          <div class="panel-head">
-            <h2>Veiculo Japao</h2>
-            <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicle">Editar</button>
-          </div>
-          ${renderVehiclePanel(3)}
-        </article>
-      </section>
+          <section class="content-panel housing-panel">
+            <div class="panel-head">
+              <h2>Moradia</h2>
+              <button class="small-action" type="button" data-action="open-modal" data-modal="housingCard">Nova moradia</button>
+            </div>
+            ${renderHousingPanel(2)}
+          </section>
+        </aside>
 
-      <section class="content-panel">
-        <div class="panel-head">
-          <h2>Comparativo do mes</h2>
-          <span class="chip blue">6 meses</span>
-        </div>
-        <div class="chart-wrap"><canvas id="trend-chart" aria-label="Grafico mensal"></canvas></div>
-      </section>
+        <section class="desktop-dashboard-column desktop-dashboard-main">
+          <article class="content-panel dashboard-trend-panel">
+            <div class="panel-head">
+              <h2>Comparativo do mes</h2>
+              <span class="chip blue">6 meses</span>
+            </div>
+            <div class="chart-wrap"><canvas id="trend-chart" aria-label="Grafico mensal"></canvas></div>
+          </article>
 
-      <section class="content-panel goals-panel">
-        ${renderFinancialGoalsPanel()}
-      </section>
+          <article class="content-panel">
+            <div class="panel-head">
+              <h2>Calendario financeiro</h2>
+              <div class="chips">
+                ${renderVisibilityToggle("calendar", state.ui.hideCalendarDetails, "eventos do calendario")}
+                <span class="chip gold">${formatMonthLabel(state.ui.selectedMonth)}</span>
+              </div>
+            </div>
+            ${state.ui.hideCalendarDetails ? renderHiddenDetails("Eventos ocultos", "Clique no olho para mostrar o calendario financeiro.") : renderFinancialCalendar(8, "upcoming")}
+          </article>
 
-      <section class="content-panel debt-home-panel">
-        <div class="panel-head">
-          <h2>Financiamentos</h2>
-          <button class="small-action" type="button" data-action="open-modal" data-modal="debt">Novo contrato</button>
-        </div>
-        ${renderDebtList()}
-      </section>
+          <article class="content-panel">
+            <div class="panel-head">
+              <h2>Ultimos lancamentos</h2>
+              <button class="small-action ghost" type="button" data-action="set-tab" data-tab="accounts">Ver contas</button>
+            </div>
+              ${renderTransactionList(monthLedgerEntries(state.ui.selectedMonth, "global").slice(0, 7))}
+          </article>
 
-      <section class="content-panel">
-        <div class="panel-head">
-          <h2>Ultimos lancamentos</h2>
-          <button class="small-action ghost" type="button" data-action="set-tab" data-tab="accounts">Ver contas</button>
-        </div>
-          ${renderTransactionList(monthLedgerEntries(state.ui.selectedMonth, "global").slice(0, 7))}
-      </section>
+          <article class="content-panel work-calendar-panel">
+            ${renderWorkCalendarPanel()}
+          </article>
+        </section>
+
+        <aside class="desktop-dashboard-column desktop-dashboard-right">
+          <section class="content-panel subscriptions-panel">
+            <div class="panel-head">
+              <div class="panel-title-block">
+                <h2>Subscricoes atuais</h2>
+                <p class="panel-total">Total a pagar ${subscriptionMonthTotalLabel(state.ui.selectedMonth)}</p>
+              </div>
+              <button class="small-action icon-action" type="button" data-action="open-modal" data-modal="subscription" aria-label="Nova subscricao">+</button>
+            </div>
+            ${renderSubscriptionsHomePanel()}
+          </section>
+
+          <section class="content-panel crypto-panel is-compact">
+            <div class="panel-head">
+              <h2>Carteira cripto</h2>
+              <div class="chips">
+                ${renderVisibilityToggle("crypto", state.ui.hideCryptoDetails, "criptos compradas")}
+                <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
+                <button class="small-action" type="button" data-action="open-modal" data-modal="crypto">Nova cripto</button>
+              </div>
+            </div>
+            ${renderCryptoPanel(true)}
+          </section>
+
+          <section class="content-panel goals-panel">
+            ${renderFinancialGoalsPanel()}
+          </section>
+
+          <section class="content-panel debt-home-panel">
+            <div class="panel-head">
+              <h2>Financiamentos</h2>
+              <button class="small-action" type="button" data-action="open-modal" data-modal="debt">Novo contrato</button>
+            </div>
+            ${renderDebtList()}
+          </section>
+        </aside>
+      </div>
     `;
   }
 

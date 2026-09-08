@@ -258,6 +258,13 @@ h3 {
   max-width: 100%;
 }
 
+.desktop-dashboard-shell,
+.desktop-dashboard-top,
+.desktop-dashboard-month-row,
+.desktop-dashboard-column {
+  display: contents;
+}
+
 .refresh-splash {
   position: fixed;
   inset: 0;
@@ -4686,6 +4693,7 @@ canvas {
 
 .crypto-token-main {
   display: grid;
+  width: 100%;
   min-width: 0;
   gap: 9px;
 }
@@ -4703,12 +4711,16 @@ canvas {
 
 .crypto-token-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 118px), 1fr));
   gap: 8px;
 }
 
 .crypto-token-grid div {
+  display: grid;
+  align-content: center;
   min-width: 0;
+  min-height: 68px;
   padding: 8px;
   border-radius: var(--radius);
   background: rgba(49, 44, 81, 0.045);
@@ -5806,6 +5818,82 @@ h1 {
     grid-column: auto;
   }
 
+  .desktop-dashboard-shell {
+    display: grid;
+    grid-template-columns: minmax(250px, 0.88fr) minmax(340px, 1.12fr);
+    gap: 14px;
+    align-items: start;
+  }
+
+  .desktop-dashboard-top {
+    display: grid;
+    grid-column: 1 / -1;
+  }
+
+  .desktop-dashboard-month-row {
+    display: grid;
+    grid-column: 1 / -1;
+  }
+
+  .desktop-dashboard-month-row .toolbar {
+    margin: 0;
+  }
+
+  .desktop-dashboard-month-row .month-switcher {
+    width: 100%;
+    max-width: none;
+    grid-template-columns: 52px minmax(0, 1fr) 52px;
+  }
+
+  .desktop-dashboard-month-row .month-current {
+    justify-content: center;
+    font-size: 1rem;
+  }
+
+  .desktop-dashboard-column {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+    align-content: start;
+  }
+
+  .desktop-dashboard-left,
+  .desktop-dashboard-main,
+  .desktop-dashboard-right {
+    min-width: 0;
+  }
+
+  .desktop-dashboard-right {
+    grid-column: 1 / -1;
+  }
+
+  .desktop-dashboard-left .dashboard-card-vehicle-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .desktop-dashboard-left .dashboard-card-vehicle-grid > .content-panel {
+    min-height: 0;
+  }
+
+  .desktop-dashboard-left .balance-overview {
+    grid-template-columns: 1fr;
+    min-height: 244px;
+    padding: 18px;
+  }
+
+  .desktop-dashboard-left .balance-copy {
+    grid-row: auto;
+  }
+
+  .desktop-dashboard-left .balance-pie-wrap,
+  .desktop-dashboard-left .salary-estimate-card {
+    grid-column: auto;
+  }
+
+  .desktop-dashboard-main .dashboard-trend-panel .chart-wrap {
+    min-height: 220px;
+  }
+
   .dashboard-grid {
     grid-template-columns: 1fr;
     align-items: stretch;
@@ -5935,6 +6023,15 @@ h1 {
     min-width: 0;
   }
 
+  .crypto-token-grid {
+    grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  }
+
+  .crypto-token-grid div {
+    min-height: 72px;
+    padding: 10px;
+  }
+
   .modal-backdrop {
     place-items: center;
   }
@@ -5951,7 +6048,7 @@ h1 {
 
   .bottom-nav {
     top: 96px;
-    right: calc((100vw - min(100%, 1220px)) / 2 + 20px);
+    right: 20px;
     bottom: auto;
     left: auto;
     width: 92px;
@@ -5963,12 +6060,27 @@ h1 {
   }
 
   .app-shell {
+    width: 100%;
+    max-width: none;
+    margin: 0;
     padding-right: 126px;
+    padding-left: 24px;
     padding-bottom: 36px;
   }
 
   .toast {
     bottom: 18px;
+  }
+}
+
+@media (min-width: 1220px) {
+  .desktop-dashboard-shell {
+    grid-template-columns: minmax(320px, 0.82fr) minmax(480px, 1.28fr) minmax(360px, 0.9fr);
+    gap: 16px;
+  }
+
+  .desktop-dashboard-right {
+    grid-column: auto;
   }
 }
 
