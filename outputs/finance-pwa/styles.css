@@ -5569,6 +5569,31 @@ h1 {
   box-shadow: 0 8px 18px rgba(216, 255, 114, 0.24);
 }
 
+.bottom-nav .nav-add-button {
+  align-self: center;
+  margin-top: 0;
+  color: #d8ff72;
+  background: rgba(216, 255, 114, 0.08);
+}
+
+.bottom-nav .nav-add-button span {
+  width: 58px;
+  height: 58px;
+  border: 5px solid rgba(239, 255, 244, 0.18);
+  border-radius: 999px;
+  color: #071f19;
+  background: linear-gradient(135deg, #d8ff72 0%, #f0c38e 100%);
+  box-shadow:
+    0 18px 34px rgba(7, 31, 25, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  font-size: 1.35rem;
+}
+
+.bottom-nav .nav-add-button small {
+  color: #d8ff72;
+  font-size: 0.64rem;
+}
+
 .calendar-item,
 .list-row,
 .subscription-home-card,
@@ -6102,13 +6127,13 @@ h1 {
     margin-top: 0;
   }
 
-  .nav-add-button span {
+  .bottom-nav .nav-add-button span {
     width: 42px;
     height: 42px;
     border-width: 0;
   }
 
-  .nav-add-button small {
+  .bottom-nav .nav-add-button small {
     color: rgba(239, 255, 244, 0.72);
   }
 
@@ -6603,7 +6628,7 @@ h1 {
   .app-shell {
     width: 100%;
     max-width: 100%;
-    padding: 12px 10px calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px);
+    padding: 12px 10px calc(104px + env(safe-area-inset-bottom));
     overflow-x: hidden;
   }
 
@@ -6625,7 +6650,10 @@ h1 {
 
   .bottom-nav {
     gap: 2px;
+    min-height: calc(92px + env(safe-area-inset-bottom));
     padding-inline: 8px;
+    padding-top: 10px;
+    align-items: center;
   }
 
   .nav-item {
@@ -6638,8 +6666,8 @@ h1 {
   }
 
   .nav-add-button span {
-    width: 54px;
-    height: 54px;
+    width: 58px;
+    height: 58px;
   }
 
   .logout-button {

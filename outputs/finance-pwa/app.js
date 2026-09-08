@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "center-add-nav-v115",
+      id: "center-add-nav-polish-v116",
       date: "2026-09-08",
-      title: "Adicionar em destaque",
-      body: "O botao de adicionar saiu do topo e foi para o centro do menu inferior, deixando o topo mais limpo."
+      title: "Adicionar central corrigido",
+      body: "O botao central de adicionar agora fica dentro da barra inferior com destaque visual."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=115")
+      navigator.serviceWorker.register("./service-worker.js?v=116")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
