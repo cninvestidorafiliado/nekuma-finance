@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "simplified-nav-add-fab-v118",
+      id: "stylish-add-plus-v119",
       date: "2026-09-08",
-      title: "Menu inferior simplificado",
-      body: "Wise saiu da barra, Relatorios entrou em Ajustes e o botao central de adicionar ganhou um + grande em destaque."
+      title: "Botao adicionar mais forte",
+      body: "O botao central recebeu um + maior e desenhado para ocupar melhor o circulo de destaque."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=118")
+      navigator.serviceWorker.register("./service-worker.js?v=119")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });

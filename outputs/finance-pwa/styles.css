@@ -5177,6 +5177,7 @@ canvas {
 }
 
 .nav-add-button span {
+  position: relative;
   width: 64px;
   height: 64px;
   border: 6px solid rgba(255, 250, 244, 0.92);
@@ -5187,6 +5188,30 @@ canvas {
     linear-gradient(135deg, #6b3cff 0%, #9d55ff 100%);
   box-shadow: 0 16px 28px rgba(62, 32, 145, 0.36);
   font-size: 1.8rem;
+}
+
+.nav-add-button span svg {
+  display: none;
+}
+
+.nav-add-button span::before,
+.nav-add-button span::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ffffff, #e9dcff);
+  box-shadow:
+    0 0 14px rgba(255, 255, 255, 0.42),
+    0 5px 12px rgba(42, 16, 112, 0.2);
+  transform: translate(-50%, -50%);
+}
+
+.nav-add-button span::after {
+  transform: translate(-50%, -50%) rotate(90deg);
 }
 
 .modal-backdrop {
@@ -5620,6 +5645,12 @@ h1 {
     0 18px 34px rgba(62, 32, 145, 0.36),
     inset 0 1px 0 rgba(255, 255, 255, 0.42);
   font-size: 1.8rem;
+}
+
+.bottom-nav .nav-add-button span::before,
+.bottom-nav .nav-add-button span::after {
+  width: 36px;
+  height: 7px;
 }
 
 .calendar-item,
@@ -6708,6 +6739,12 @@ h1 {
   .bottom-nav .nav-add-button span {
     width: 64px;
     height: 64px;
+  }
+
+  .bottom-nav .nav-add-button span::before,
+  .bottom-nav .nav-add-button span::after {
+    width: 38px;
+    height: 8px;
   }
 
   .logout-button {
