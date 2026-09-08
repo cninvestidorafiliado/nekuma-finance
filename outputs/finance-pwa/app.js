@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "stylish-add-plus-v119",
+      id: "custom-add-plus-v120",
       date: "2026-09-08",
-      title: "Botao adicionar mais forte",
-      body: "O botao central recebeu um + maior e desenhado para ocupar melhor o circulo de destaque."
+      title: "Botao adicionar redesenhado",
+      body: "O + central agora usa desenho proprio, sem depender do icone padrao, para aparecer maior e mais estiloso."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=119")
+      navigator.serviceWorker.register("./service-worker.js?v=120")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
