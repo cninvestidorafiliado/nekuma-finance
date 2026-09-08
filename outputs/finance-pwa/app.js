@@ -229,10 +229,10 @@
   };
   const appNews = [
     {
-      id: "custom-add-plus-v120",
+      id: "nekuma-add-button-style-v121",
       date: "2026-09-08",
-      title: "Botao adicionar redesenhado",
-      body: "O + central agora usa desenho proprio, sem depender do icone padrao, para aparecer maior e mais estiloso."
+      title: "Adicionar no estilo Nekuma",
+      body: "O botao central manteve o + grande, mas agora usa verde escuro, lima e dourado para combinar com o app."
     },
     {
       id: "bank-accounts-v87",
@@ -309,7 +309,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=120")
+      navigator.serviceWorker.register("./service-worker.js?v=121")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
