@@ -7588,13 +7588,15 @@ h1 {
   }
 
   .auth-panel-login,
-  .auth-panel-signup {
+  .auth-panel-signup,
+  .auth-panel-reset {
     grid-template-columns: 0.86fr 0.74fr;
     justify-content: center;
   }
 
   .auth-panel-login .auth-card,
-  .auth-panel-signup .auth-card {
+  .auth-panel-signup .auth-card,
+  .auth-panel-reset .auth-card {
     align-self: center;
   }
 

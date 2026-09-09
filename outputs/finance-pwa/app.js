@@ -321,8 +321,10 @@
   let dashboardCarouselTimer = null;
   let dashboardMonthAnchored = "";
   let lastLocalChangeAt = 0;
-  let authView = ["login", "signup"].includes(urlParams.get("auth")) ? urlParams.get("auth") : "welcome";
-  const hasExplicitAuthView = authView === "login" || authView === "signup";
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const isPasswordRecoveryLink = urlParams.get("type") === "recovery" || hashParams.get("type") === "recovery";
+  let authView = isPasswordRecoveryLink ? "reset" : (["login", "signup", "reset"].includes(urlParams.get("auth")) ? urlParams.get("auth") : "welcome");
+  const hasExplicitAuthView = authView === "login" || authView === "signup" || authView === "reset";
   cleanupLegacyStorage();
   let state = loadState();
   const remoteStore = createRemoteStore();
@@ -341,7 +343,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=137")
+      navigator.serviceWorker.register("./service-worker.js?v=139")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -505,6 +507,7 @@
     if (formType === "work-override") saveWorkOverride(form);
     if (formType === "auth-login") signInRemote(form);
     if (formType === "auth-signup") signUpRemote(form);
+    if (formType === "auth-reset") updatePasswordFromRecovery(form);
     if (formType === "join-family") joinFamilyFromForm(form);
     if (formType === "settings") saveSettings(form);
   });
@@ -569,11 +572,23 @@
     render();
     restoreSavedScrollPosition();
     try {
+      const authCode = urlParams.get("code");
+      if (authView === "reset" && authCode && remoteStore.client.auth.exchangeCodeForSession) {
+        const { error } = await remoteStore.client.auth.exchangeCodeForSession(authCode);
+        if (error) throw error;
+      }
       const { data, error } = await remoteStore.client.auth.getSession();
       if (error) throw error;
       const session = data?.session;
       if (!session?.user) {
         remoteSession.status = "signedOut";
+        render();
+        return;
+      }
+
+      if (authView === "reset") {
+        remoteSession.user = session.user;
+        remoteSession.status = "passwordReset";
         render();
         return;
       }
@@ -682,12 +697,47 @@
       return;
     }
     try {
-      const redirectTo = `${window.location.origin}${window.location.pathname}?auth=login`;
+      const redirectTo = `${window.location.origin}${window.location.pathname}?auth=reset`;
       const { error } = await remoteStore.client.auth.resetPasswordForEmail(email, { redirectTo });
       if (error) throw error;
       window.alert("Enviamos as instruções de recuperação para seu email.");
     } catch (error) {
       window.alert(error.message || "Não foi possível enviar a recuperação de senha.");
+    }
+  }
+
+  async function updatePasswordFromRecovery(form) {
+    if (!remoteStore.enabled) {
+      window.alert("Recuperação de senha disponível apenas no modo online.");
+      return;
+    }
+    const data = formData(form);
+    const password = String(data.password || "");
+    const confirmPassword = String(data.confirmPassword || "");
+    if (password.length < 6) {
+      window.alert("A senha precisa ter pelo menos 6 caracteres.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      window.alert("As senhas não conferem.");
+      return;
+    }
+
+    remoteSession.status = "loading";
+    remoteSession.error = "";
+    render();
+    try {
+      const { error } = await remoteStore.client.auth.updateUser({ password });
+      if (error) throw error;
+      await remoteStore.client.auth.signOut().catch(() => {});
+      remoteSession.status = "signedOut";
+      remoteSession.user = null;
+      window.alert("Senha atualizada com sucesso. Faça login novamente.");
+      window.location.href = "./index.html";
+    } catch (error) {
+      remoteSession.status = "passwordReset";
+      remoteSession.error = error.message || "Não foi possível atualizar a senha.";
+      render();
     }
   }
 
@@ -1999,20 +2049,21 @@
   function renderAuthGate() {
     const isLoading = remoteSession.status === "loading";
     const canSignup = remoteStore.config.enableSignup !== false;
-    const view = authView === "login" || authView === "signup" ? authView : "welcome";
+    const view = authView === "login" || authView === "signup" || authView === "reset" ? authView : "welcome";
     const isSignup = view === "signup";
+    const isReset = view === "reset";
     return `
       <section class="auth-panel auth-panel-${view}">
         <article class="auth-visual">
           <img class="auth-brand-mark" src="./assets/nekuma-logo-192.png" alt="" />
           <div>
             <p class="auth-kicker">Nekuma Finance</p>
-            <h2>${isSignup ? "Crie sua conta Nekuma." : "Bem-vindo ao Nekuma."}</h2>
+            <h2>${isReset ? "Recupere sua senha." : isSignup ? "Crie sua conta Nekuma." : "Bem-vindo ao Nekuma."}</h2>
           </div>
           <div class="auth-preview-card">
-            <span>${isSignup ? "7 dias grátis" : "Acesso seguro"}</span>
+            <span>${isReset ? "Nova senha" : isSignup ? "7 dias grátis" : "Acesso seguro"}</span>
             <strong>¥ 248,500</strong>
-            <small>${isSignup ? "Cadastro simples para começar a organizar o mês" : "Entre para acessar sua vida financeira"}</small>
+            <small>${isReset ? "Atualize o acesso e volte para o Nekuma" : isSignup ? "Cadastro simples para começar a organizar o mês" : "Entre para acessar sua vida financeira"}</small>
           </div>
           <div class="auth-swatches">
             <span style="background:#312C51"></span>
@@ -2024,7 +2075,7 @@
 
         <article class="auth-card">
           ${remoteSession.error ? `<p class="auth-error">${escapeHtml(remoteSession.error)}</p>` : ""}
-          ${isLoading ? `<p class="empty-state">Conectando...</p>` : view === "login" ? renderAuthLoginForm() : view === "signup" ? renderAuthSignupForm(canSignup) : renderAuthWelcome(canSignup)}
+          ${isLoading ? `<p class="empty-state">Conectando...</p>` : view === "login" ? renderAuthLoginForm() : view === "signup" ? renderAuthSignupForm(canSignup) : view === "reset" ? renderAuthResetForm() : renderAuthWelcome(canSignup)}
         </article>
       </section>
     `;
@@ -2116,6 +2167,30 @@
         <button class="primary-button" type="submit">Criar login</button>
       </form>
       <p class="auth-footer-link">Já tem cadastro? <a href="./app.html?auth=login">Entrar</a></p>
+    `;
+  }
+
+  function renderAuthResetForm() {
+    return `
+      <div class="auth-card-head">
+        <div>
+          <p class="auth-kicker">Recuperar senha</p>
+          <h2>Crie uma nova senha</h2>
+        </div>
+      </div>
+      <p class="auth-lead">Digite uma nova senha para sua conta. Depois da confirmação, você volta para a landing e entra pelo login novamente.</p>
+      <form class="form-grid" data-form="auth-reset">
+        <div class="field">
+          <label for="resetPassword">Nova senha</label>
+          <input id="resetPassword" name="password" type="password" autocomplete="new-password" minlength="6" required />
+        </div>
+        <div class="field">
+          <label for="resetConfirmPassword">Confirmar nova senha</label>
+          <input id="resetConfirmPassword" name="confirmPassword" type="password" autocomplete="new-password" minlength="6" required />
+        </div>
+        <button class="primary-button" type="submit">Atualizar senha</button>
+      </form>
+      <p class="auth-footer-link"><a href="./app.html?auth=login">Voltar para login</a></p>
     `;
   }
 
