@@ -89,8 +89,30 @@
     vehicleMaintenance: "vm",
     incomeSources: "is",
     workIncomes: "wi",
+    familyMembers: "fm",
+    familyBusinesses: "fb",
+    shoppingLists: "sl",
+    receipts: "rc",
     workScheduleOverrides: "wo"
   };
+  const familyRoleMeta = {
+    father: "Pai",
+    mother: "Mae",
+    child: "Filho",
+    other: "Outros"
+  };
+  const quickExpenseCategories = [
+    "Supermercado",
+    "Kombini",
+    "Farmacia",
+    "Roupas",
+    "Starbucks",
+    "Restaurante",
+    "Transporte",
+    "Casa",
+    "Filhos",
+    "Outros"
+  ];
   const housingItemTemplates = [
     { key: "rent", label: "Aluguel", icon: "A" },
     { key: "electricity", label: "Luz", icon: "L" },
@@ -127,6 +149,7 @@
     estudos: "Estudos",
     diversao: "Diversao",
     investimento: "Investimento",
+    patrimonio: "Patrimonio",
     other: "Outros"
   };
   const debtProviderOptions = ["Caixa", "Santander", "Bradesco", "Itau", "Banco do Brasil", "Outros"];
@@ -396,6 +419,10 @@
     if (action === "delete-vehicle-maintenance") deleteItem("vehicleMaintenance", button.dataset.id, "Manutencao removida.");
     if (action === "delete-income-source") deleteItem("incomeSources", button.dataset.id, "Empresa removida.");
     if (action === "delete-work-income") deleteItem("workIncomes", button.dataset.id, "Recebimento removido.");
+    if (action === "delete-family-member") deleteItem("familyMembers", button.dataset.id, "Pessoa removida.");
+    if (action === "delete-family-business") deleteItem("familyBusinesses", button.dataset.id, "Negocio removido.");
+    if (action === "delete-shopping-list") deleteItem("shoppingLists", button.dataset.id, "Lista removida.");
+    if (action === "delete-receipt") deleteItem("receipts", button.dataset.id, "Recibo removido.");
     if (action === "delete-work-override") deleteItem("workScheduleOverrides", button.dataset.id, "Folga extra removida.");
     if (action === "refresh-crypto") refreshCryptoQuotes(true);
     if (action === "refresh-fx") refreshFxQuotes(true);
@@ -438,6 +465,7 @@
     if (formType === "bank-account") saveBankAccount(form);
     if (formType === "subscription") saveSubscription(form);
     if (formType === "goal") saveFinancialGoal(form);
+    if (formType === "emergency-reserve") saveEmergencyReserve(form);
     if (formType === "goal-contribution") saveGoalContribution(form);
     if (formType === "monthly-payment") saveMonthlyPayment(form);
     if (formType === "crypto") saveCryptoAsset(form);
@@ -446,6 +474,11 @@
     if (formType === "vehicle-maintenance") saveVehicleMaintenance(form);
     if (formType === "income-source") saveIncomeSource(form);
     if (formType === "work-income") saveWorkIncome(form);
+    if (formType === "quick-expense") saveQuickExpense(form);
+    if (formType === "family-member") saveFamilyMember(form);
+    if (formType === "family-business") saveFamilyBusiness(form);
+    if (formType === "shopping-list") saveShoppingList(form);
+    if (formType === "receipt") saveReceipt(form);
     if (formType === "salary-receipt") saveSalaryReceipt(form);
     if (formType === "work-override") saveWorkOverride(form);
     if (formType === "auth-login") signInRemote(form);
@@ -703,7 +736,7 @@
     if (data?.state && Object.keys(data.state).length) {
       const remoteState = normalizeState(data.state);
       const mergedCrypto = mergeCryptoAssetsWithLocal(remoteState.cryptoAssets, state.cryptoAssets);
-      const mergedLocalData = mergeLocalCollections(remoteState, state, ["incomeSources", "workIncomes", "workScheduleOverrides"]);
+      const mergedLocalData = mergeLocalCollections(remoteState, state, ["incomeSources", "workIncomes", "workScheduleOverrides", "familyMembers", "familyBusinesses", "shoppingLists", "receipts"]);
       shouldRewriteRemoteState = cryptoAssetsWereNormalized(data.state.cryptoAssets, remoteState.cryptoAssets) || mergedCrypto.changed || mergedLocalData.changed;
       state = { ...remoteState, ...mergedLocalData.collections, cryptoAssets: mergedCrypto.items, deletedItems: mergeDeletedItems(remoteState.deletedItems, state.deletedItems) };
     } else if (!createIfEmpty) {
@@ -965,7 +998,7 @@
 
       const remoteState = normalizeState(data.state);
       const mergedCrypto = mergeCryptoAssetsWithLocal(remoteState.cryptoAssets, state.cryptoAssets);
-      const mergedLocalData = mergeLocalCollections(remoteState, state, ["incomeSources", "workIncomes", "workScheduleOverrides"]);
+      const mergedLocalData = mergeLocalCollections(remoteState, state, ["incomeSources", "workIncomes", "workScheduleOverrides", "familyMembers", "familyBusinesses", "shoppingLists", "receipts"]);
       state = { ...remoteState, ...mergedLocalData.collections, cryptoAssets: mergedCrypto.items, deletedItems: mergeDeletedItems(remoteState.deletedItems, state.deletedItems) };
       state.settings.dataMode = "online";
       if (remoteSession.household?.name) state.settings.familyName = remoteSession.household.name;
@@ -1051,6 +1084,10 @@
       vehicleMaintenance: Array.isArray(raw.vehicleMaintenance) ? raw.vehicleMaintenance : base.vehicleMaintenance,
       incomeSources: normalizeIncomeSources(raw.incomeSources, base.incomeSources),
       workIncomes: normalizeWorkItems(raw.workIncomes, base.workIncomes),
+      familyMembers: normalizeFamilyMembers(raw.familyMembers, base.familyMembers),
+      familyBusinesses: normalizeFamilyBusinesses(raw.familyBusinesses, base.familyBusinesses),
+      shoppingLists: normalizeShoppingLists(raw.shoppingLists, base.shoppingLists),
+      receipts: normalizeReceipts(raw.receipts, base.receipts),
       workScheduleOverrides: normalizeWorkItems(raw.workScheduleOverrides, base.workScheduleOverrides),
       paidCommitments: raw.paidCommitments || {},
       deletedItems: normalizeDeletedItems(raw.deletedItems || base.deletedItems)
@@ -1076,6 +1113,67 @@
       salaryProgressions: normalizeSalaryProgressions(item.salaryProgressions),
       salaryBonuses: normalizeSalaryBonuses(item.salaryBonuses)
     }));
+  }
+
+  function normalizeFamilyMembers(items, fallback = []) {
+    if (!Array.isArray(items)) return fallback;
+    return items
+      .map((item) => ({
+        ...item,
+        id: item.id || uid("fm"),
+        name: String(item.name || "").trim(),
+        role: familyRoleMeta[item.role] ? item.role : "other",
+        active: item.active !== false
+      }))
+      .filter((item) => item.name);
+  }
+
+  function normalizeFamilyBusinesses(items, fallback = []) {
+    if (!Array.isArray(items)) return fallback;
+    return items
+      .map((item) => ({
+        ...item,
+        id: item.id || uid("fb"),
+        name: String(item.name || "").trim(),
+        businessType: String(item.businessType || "").trim(),
+        currency: sanitizeCurrency(item.currency, primaryCurrency()),
+        active: item.active !== false
+      }))
+      .filter((item) => item.name);
+  }
+
+  function normalizeShoppingLists(items, fallback = []) {
+    if (!Array.isArray(items)) return fallback;
+    return items
+      .map((item) => ({
+        ...item,
+        id: item.id || uid("sl"),
+        title: String(item.title || "Lista de compras").trim(),
+        marketName: String(item.marketName || "").trim(),
+        amount: number(item.amount),
+        currency: sanitizeCurrency(item.currency, primaryCurrency()),
+        date: String(item.date || dateInMonth(currentMonth(), new Date().getDate())).slice(0, 10),
+        items: String(item.items || "").trim()
+      }))
+      .filter((item) => item.title);
+  }
+
+  function normalizeReceipts(items, fallback = []) {
+    if (!Array.isArray(items)) return fallback;
+    return items
+      .map((item) => ({
+        ...item,
+        id: item.id || uid("rc"),
+        merchant: String(item.merchant || "").trim(),
+        category: String(item.category || "").trim() || "Recibo",
+        amount: number(item.amount),
+        currency: sanitizeCurrency(item.currency, primaryCurrency()),
+        date: String(item.date || dateInMonth(currentMonth(), new Date().getDate())).slice(0, 10),
+        familyMemberId: String(item.familyMemberId || "").trim(),
+        note: String(item.note || "").trim(),
+        status: item.status || "manual"
+      }))
+      .filter((item) => item.merchant || item.amount > 0);
   }
 
   function normalizeWorkItems(items, fallback = []) {
@@ -1590,6 +1688,10 @@
       vehicleMaintenance: [],
       incomeSources: [],
       workIncomes: [],
+      familyMembers: [],
+      familyBusinesses: [],
+      shoppingLists: [],
+      receipts: [],
       workScheduleOverrides: [],
       paidCommitments: {},
       deletedItems: {}
@@ -2321,6 +2423,10 @@
             </div>
             ${renderHousingPanel(2)}
           </section>
+
+          <section class="content-panel family-panel">
+            ${renderFamilyPanel()}
+          </section>
         </aside>
 
         <section class="desktop-dashboard-column desktop-dashboard-main">
@@ -2341,6 +2447,10 @@
               </div>
             </div>
             ${state.ui.hideCalendarDetails ? renderHiddenDetails("Eventos ocultos", "Clique no olho para mostrar o calendario financeiro.") : renderFinancialCalendar(8, "upcoming")}
+          </article>
+
+          <article class="content-panel family-pie-panel">
+            ${renderFamilyFinancePiePanel(summary)}
           </article>
 
           <article class="content-panel">
@@ -2380,8 +2490,16 @@
             ${renderCryptoPanel(true)}
           </section>
 
+          <section class="content-panel emergency-reserve-panel">
+            ${renderEmergencyReservePanel(summary)}
+          </section>
+
           <section class="content-panel goals-panel">
             ${renderFinancialGoalsPanel()}
+          </section>
+
+          <section class="content-panel family-tools-panel">
+            ${renderBusinessShoppingPanel()}
           </section>
 
           <section class="content-panel debt-home-panel">
@@ -2442,7 +2560,7 @@
     return `
       <div class="salary-card-row ${cards.length === 1 ? "single-card" : ""}">
         ${cards.map((card) => `
-          <article class="salary-estimate-card balance-salary-card ${card.paid ? "is-paid" : ""}" ${salaryCardStyleAttrs(card)}>
+          <article class="salary-estimate-card balance-salary-card ${card.paid ? "is-paid" : ""} ${number(card.bonus) > 0 ? "has-bonus" : ""}" ${salaryCardStyleAttrs(card)}>
             <span><i data-lucide="${card.paid ? "check-circle-2" : "wallet"}" aria-hidden="true"></i>Salario bruto previsto</span>
             ${renderSalaryFormula(card, hideBalance)}
             <div class="salary-card-footer">
@@ -3875,7 +3993,7 @@
   }
 
   function renderFinancialGoalsPanel() {
-    const goals = activeFinancialGoals();
+    const goals = activeFinancialGoals().filter((goal) => goal.templateKey !== "emergency");
     const totalSaved = goals.reduce((total, goal) => total + goalProgress(goal).savedPrimary, 0);
     return `
       <div class="panel-head">
@@ -3900,6 +4018,235 @@
         </div>
       `}
     `;
+  }
+
+  function renderFamilyPanel() {
+    const members = activeFamilyMembers();
+    const spending = familyMemberSpending().slice(0, 4);
+    const housingOpen = (state.housingCards || [])
+      .filter((item) => item.active !== false)
+      .flatMap((card) => housingCardMonthRows(card, state.ui.selectedMonth))
+      .filter((item) => !item.paid)
+      .reduce((total, item) => total + convert(item.amount, item.currency, primaryCurrency(), latestRate(state.ui.selectedMonth)), 0);
+    return `
+      <div class="panel-head">
+        <div>
+          <h2>Familia</h2>
+          <p class="row-meta">Moradia, pessoas e gastos por membro.</p>
+        </div>
+        <button class="small-action" type="button" data-action="open-modal" data-modal="familyMember">Pessoa</button>
+      </div>
+      <div class="pro-summary-grid">
+        <div>
+          <span>Membros</span>
+          <strong>${members.length || 0}</strong>
+        </div>
+        <div>
+          <span>Moradia aberta</span>
+          <strong>${formatMoneyWithPrimary(housingOpen, primaryCurrency())}</strong>
+        </div>
+      </div>
+      ${members.length ? `
+        <div class="compact-chip-list">
+          ${members.map((member) => `
+            <button class="family-chip" type="button" data-action="open-modal" data-modal="familyMember" data-id="${member.id}">
+              <span>${escapeHtml(member.name.slice(0, 1).toUpperCase())}</span>
+              <strong>${escapeHtml(member.name)}</strong>
+              <small>${escapeHtml(familyRoleMeta[member.role] || "Outros")}</small>
+            </button>
+          `).join("")}
+        </div>
+      ` : `<p class="empty-state">Cadastre as pessoas da familia para vincular gastos.</p>`}
+      ${spending.length ? `
+        <div class="mini-ledger">
+          ${spending.map((item) => `
+            <div>
+              <span>${escapeHtml(item.name)}</span>
+              <strong>${formatMoneyWithPrimary(item.amount, item.currency)}</strong>
+            </div>
+          `).join("")}
+        </div>
+      ` : ""}
+      <div class="row-actions">
+        <button class="small-action ghost" type="button" data-action="open-modal" data-modal="housingCard">Moradia</button>
+        <button class="small-action" type="button" data-action="open-modal" data-modal="quickExpense">Gasto rapido</button>
+      </div>
+    `;
+  }
+
+  function renderEmergencyReservePanel(summary = summarizeMonth(state.ui.selectedMonth, "global")) {
+    const goal = emergencyGoal();
+    const currency = primaryCurrency();
+    const reserve = emergencyReserveStats(goal, summary);
+    const target = reserve.target;
+    const monthlyBase = reserve.monthlyBase;
+    const saved = reserve.saved;
+    const missing = Math.max(0, target - saved);
+    const percent = target ? clamp(Math.round((saved / target) * 100), 0, 100) : 0;
+    return `
+      <div class="panel-head">
+        <div>
+          <h2>Reserva de emergencia</h2>
+          <p class="row-meta">Alta prioridade - ${reserve.months} meses de seguranca.</p>
+        </div>
+        <div class="chips">
+          ${goal ? `<button class="small-action ghost" type="button" data-action="open-modal" data-modal="emergencyReserve" data-id="${goal.id}">Editar</button><button class="small-action" type="button" data-action="open-modal" data-modal="goalContribution" data-id="${goal.id}">Aporte</button>` : `<button class="small-action" type="button" data-action="open-modal" data-modal="emergencyReserve">Criar</button>`}
+        </div>
+      </div>
+      <div class="emergency-card">
+        <span>${reserve.mode === "manual" ? "Meta estipulada" : `Necessario para ${reserve.months} meses`}</span>
+        <strong>${formatMoneyWithPrimary(target, currency)}</strong>
+        <small>Base mensal ${formatMoneyWithPrimary(monthlyBase, currency)}</small>
+        <div class="emergency-progress" aria-label="Progresso da reserva">
+          <span style="width:${percent > 0 ? Math.max(3, percent) : 0}%"></span>
+        </div>
+      </div>
+      <div class="pro-summary-grid">
+        <div>
+          <span>Guardado</span>
+          <strong>${formatMoneyWithPrimary(saved, currency)}</strong>
+        </div>
+        <div>
+          <span>Falta</span>
+          <strong>${formatMoneyWithPrimary(missing, currency)}</strong>
+        </div>
+        <div>
+          <span>Guardar por mes</span>
+          <strong>${formatMoneyWithPrimary(reserve.monthlyNeed, currency)}</strong>
+        </div>
+      </div>
+    `;
+  }
+
+  function emergencyReserveStats(goal = emergencyGoal(), summary = summarizeMonth(state.ui.selectedMonth, "global")) {
+    const currency = primaryCurrency();
+    const rate = latestRate(state.ui.selectedMonth);
+    const mode = goal?.reserveMode || (goal?.targetAmount ? "manual" : "auto");
+    const months = clamp(Math.round(number(goal?.reserveMonths) || 6), 1, 60);
+    const monthlyBase = Math.max(summary.actualOutflow || 0, summary.projectedOutflow || 0);
+    const saved = goal ? convert(goalProgress(goal).saved, goal.currency, currency, rate) : 0;
+    const manualTarget = goal ? convert(number(goal.targetAmount), goal.currency, currency, rate) : 0;
+    const target = mode === "manual" && manualTarget > 0 ? manualTarget : monthlyBase * months;
+    return {
+      mode,
+      months,
+      monthlyBase,
+      saved,
+      target,
+      monthlyNeed: months ? Math.max(0, target - saved) / months : 0
+    };
+  }
+
+  function renderBusinessShoppingPanel() {
+    const businesses = (state.familyBusinesses || []).filter((item) => item.active !== false);
+    const lists = (state.shoppingLists || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 3);
+    const receipts = (state.receipts || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 3);
+    return `
+      <div class="panel-head">
+        <div>
+          <h2>Compras e negocios</h2>
+          <p class="row-meta">Listas, recibos e pequenos negocios familiares.</p>
+        </div>
+        <button class="small-action" type="button" data-action="open-modal" data-modal="shoppingList">Lista</button>
+      </div>
+      <div class="pro-action-row">
+        <button class="small-action" type="button" data-action="open-modal" data-modal="receipt">Recibo</button>
+        <button class="small-action ghost" type="button" data-action="open-modal" data-modal="familyBusiness">Negocio</button>
+      </div>
+      <div class="mini-ledger">
+        ${businesses.slice(0, 2).map((item) => `<div><span>${escapeHtml(item.name)}</span><strong>${escapeHtml(item.businessType || "Negocio")}</strong></div>`).join("")}
+        ${lists.map((item) => `<div><span>${escapeHtml(item.marketName || item.title)}</span><strong>${formatMoneyWithPrimary(item.amount, item.currency)}</strong></div>`).join("")}
+        ${receipts.map((item) => `<div><span>${escapeHtml(item.merchant)}</span><strong>${formatMoneyWithPrimary(item.amount, item.currency)}</strong></div>`).join("")}
+        ${!businesses.length && !lists.length && !receipts.length ? `<p class="empty-state">Adicione listas, recibos ou um pequeno negocio da familia.</p>` : ""}
+      </div>
+    `;
+  }
+
+  function renderFamilyFinancePiePanel(summary) {
+    const currency = primaryCurrency();
+    const rate = latestRate(state.ui.selectedMonth);
+    const emergency = emergencyGoal();
+    const emergencySaved = emergency ? convert(goalProgress(emergency).saved, emergency.currency, currency, rate) : 0;
+    const expenseItems = familyExpenseBreakdown(state.ui.selectedMonth, currency);
+    const inflow = summary.actualInflow;
+    const outflow = expenseItems.reduce((total, item) => total + item.amount, 0);
+    const breath = inflow - outflow;
+    const breathTotal = Math.max(inflow, outflow, 1);
+    const breathInPct = clamp(Math.round((inflow / breathTotal) * 100), 0, 100);
+    const breathOutPct = clamp(Math.round((outflow / breathTotal) * 100), 0, 100);
+    const pieStyle = familyPieGradient(expenseItems);
+    return `
+      <div class="panel-head">
+        <div>
+          <h2>Raio-x familiar</h2>
+          <p class="row-meta">Gastos do mes e folego financeiro.</p>
+        </div>
+        <span class="chip blue">${formatMonthLabel(state.ui.selectedMonth)}</span>
+      </div>
+      <div class="ray-x-grid">
+        <div class="ray-chart-card">
+          <div class="ray-chart-head">
+            <strong>Gastos totais</strong>
+            <span>${formatMoneyWithPrimary(outflow, currency)}</span>
+          </div>
+          <div class="family-pie-layout">
+            ${expenseItems.length ? `<div class="family-pie-donut" style="${escapeAttr(pieStyle)}"><span>${expenseItems.length}</span></div>` : ""}
+            <div class="family-pie-list">
+              ${expenseItems.length ? expenseItems.map((item) => `
+                <div class="family-pie-row ${escapeAttr(item.tone)}">
+                  <span>${escapeHtml(item.label)}</span>
+                  <strong>${formatMoneyWithPrimary(item.amount, currency)}</strong>
+                </div>
+              `).join("") : `<p class="empty-state">Nenhum gasto lancado neste mes.</p>`}
+            </div>
+          </div>
+        </div>
+        <div class="ray-chart-card breath-card ${breath >= 0 ? "is-positive" : "is-negative"}">
+          <div class="ray-chart-head">
+            <strong>Folego</strong>
+            <span>${formatMoneyWithPrimary(breath, currency)}</span>
+          </div>
+          <div class="breath-bars">
+            <div><span>Entrou</span><strong>${formatMoneyWithPrimary(inflow, currency)}</strong><em style="width:${breathInPct}%"></em></div>
+            <div><span>Saiu</span><strong>${formatMoneyWithPrimary(outflow, currency)}</strong><em style="width:${breathOutPct}%"></em></div>
+          </div>
+          <p class="row-meta">Reserva guardada: ${formatMoneyWithPrimary(emergencySaved, currency)}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  function familyExpenseBreakdown(month = state.ui.selectedMonth, currency = primaryCurrency()) {
+    const rate = latestRate(month);
+    const colors = ["#d95d4e", "#f0c38e", "#567c9b", "#42a67a", "#8b6fd6", "#2db7a3", "#aa3d31"];
+    const add = (map, label, amount, sourceCurrency, tone = "expense") => {
+      const key = String(label || "Outros").trim() || "Outros";
+      const current = map.get(key) || { label: key, amount: 0, tone, color: colors[map.size % colors.length] };
+      current.amount += convert(number(amount), sourceCurrency, currency, rate);
+      map.set(key, current);
+    };
+    const map = new Map();
+    monthTransactions(month, "global")
+      .filter((item) => allOutflowTypes.includes(item.type))
+      .forEach((item) => add(map, item.category || typeMeta[item.type]?.label || "Outros", item.amount, item.currency, item.type === "investment" ? "asset" : "expense"));
+    cardPurchaseRows(month, "global")
+      .forEach((item) => add(map, item.category || "Cartao de credito", item.amount, item.currency, "card"));
+    return Array.from(map.values())
+      .filter((item) => item.amount > 0)
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 8);
+  }
+
+  function familyPieGradient(items) {
+    const total = items.reduce((sumValue, item) => sumValue + Math.max(0, number(item.amount)), 0);
+    if (!total) return "background:#eef4ea";
+    let cursor = 0;
+    const stops = items.map((item) => {
+      const start = cursor;
+      cursor += (Math.max(0, number(item.amount)) / total) * 100;
+      return `${item.color} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
+    });
+    return `background:conic-gradient(${stops.join(",")})`;
   }
 
   function renderFinancialGoalCard(goal) {
@@ -4766,6 +5113,7 @@
       cardPurchase: renderCardPurchaseModal,
       bankAccount: renderBankAccountModal,
       goal: renderFinancialGoalModal,
+      emergencyReserve: renderEmergencyReserveModal,
       goalContribution: renderGoalContributionModal,
       crypto: renderCryptoModal,
       web3Wallet: renderWeb3WalletModal,
@@ -4773,6 +5121,11 @@
       vehicle: renderVehicleModal,
       vehicleMaintenance: renderVehicleMaintenanceModal,
       incomeSource: renderIncomeSourceModal,
+      quickExpense: renderQuickExpenseModal,
+      familyMember: renderFamilyMemberModal,
+      familyBusiness: renderFamilyBusinessModal,
+      shoppingList: renderShoppingListModal,
+      receipt: renderReceiptModal,
       workOverride: renderWorkOverrideModal,
       workIncome: renderWorkIncomeModal,
       salaryReceipt: renderSalaryReceiptModal,
@@ -4807,36 +5160,68 @@
   }
 
   function renderAddHubModal() {
-    const actions = [
-      { modal: "incomeSource", icon: "E", title: "Cadastro de Empresa", meta: "Fontes como fabrica, Amazon, Uber e renda extra" },
-      { modal: "workIncome", icon: "¥", title: "Cadastro de Pagamento", meta: "Recebimento ligado a uma empresa cadastrada" },
-      { modal: "transfer", icon: "W", title: "Adicionar Wise", meta: "Transferencias e conversoes entre Brasil e Japao" },
-      { modal: "vehicle", icon: "V", title: "Cadastrar veiculo", meta: "Carro do Japao, Shaken, seguro e dados principais" },
-      { modal: "housingCard", icon: "A", title: "Cadastrar moradia", meta: "Aluguel, luz, gas, agua e internet em um unico card" },
-      { modal: "creditCard", icon: "C", title: "Cadastrar cartao", meta: "Cartao do Brasil ou Japao com bandeira e vencimento" },
-      { modal: "bankAccount", icon: "B", title: "Cadastrar conta bancaria", meta: "Banco, pais, tipo de conta e saldo atual" },
-      { modal: "subscription", icon: "S", title: "Cadastrar subscricao", meta: "Streaming, apps e servicos recorrentes no Pix ou cartao" },
-      { modal: "goal", icon: "M", title: "Cadastrar meta", meta: "Reserva, viagem, imovel, carro ou objetivo particular" },
-      { modal: "crypto", icon: "B", title: "Cadastrar cripto", meta: "Quantidade comprada, custo e acompanhamento de cotacao" },
-      { modal: "web3Wallet", icon: "W", title: "Conectar carteira web3", meta: "MetaMask e carteiras EVM para ver endereco, rede e saldo" },
-      { modal: "commitment", icon: "F", title: "Cadastrar contas", meta: "Despesas fixas, financiamentos, consorcios e recorrencias" },
-      { modal: "investment", icon: "I", title: "Cadastrar investimentos", meta: "Instituicao, saldo atual e aporte mensal" },
-      { modal: "transaction", icon: "+", title: "Lancamento avulso", meta: "Entrada ou despesa unica fora dos cadastros acima" }
+    const groups = [
+      {
+        title: "Gastos",
+        actions: [
+          { modal: "quickExpense", icon: "R", title: "Gasto rapido", meta: "Mercado, kombini, farmacia, roupa ou qualquer compra do dia" },
+          { modal: "creditCard", icon: "C", title: "Adicionar cartao", meta: "Cartao do Brasil ou Japao com bandeira e vencimento" },
+          { modal: "subscription", icon: "S", title: "Adicionar subscricao", meta: "Streaming, apps e servicos recorrentes no Pix ou cartao" },
+          { modal: "receipt", icon: "N", title: "Recibo", meta: "Salvar recibo manual agora; leitura por IA fica preparada para API segura" },
+          { modal: "shoppingList", icon: "L", title: "Lista de compras", meta: "Compare valores por mercado e acompanhe compras recorrentes" },
+          { modal: "transaction", icon: "+", title: "Lancamento avulso", meta: "Entrada ou despesa unica fora dos cadastros acima" }
+        ]
+      },
+      {
+        title: "Familia",
+        actions: [
+          { modal: "familyMember", icon: "P", title: "Pessoa da familia", meta: "Pai, mae, filho ou outros para vincular gastos" },
+          { modal: "housingCard", icon: "A", title: "Moradia", meta: "Aluguel, luz, gas, agua e internet em um unico card" }
+        ]
+      },
+      {
+        title: "Patrimonio",
+        actions: [
+          { modal: "goal", icon: "R", title: "Reserva ou meta", meta: "Reserva de emergencia, viagem, imovel, carro ou objetivo" },
+          { modal: "investment", icon: "I", title: "Investimento", meta: "Instituicao, saldo atual e aporte mensal" },
+          { modal: "crypto", icon: "B", title: "Cripto", meta: "Quantidade comprada, custo e acompanhamento de cotacao" },
+          { modal: "web3Wallet", icon: "W", title: "Carteira web3", meta: "MetaMask e carteiras EVM para ver endereco, rede e saldo" }
+        ]
+      },
+      {
+        title: "Renda e contas",
+        actions: [
+          { modal: "incomeSource", icon: "E", title: "Empresa", meta: "Fontes como fabrica, Amazon, Uber e renda extra" },
+          { modal: "workIncome", icon: "¥", title: "Pagamento", meta: "Recebimento ligado a uma empresa cadastrada" },
+          { modal: "familyBusiness", icon: "N", title: "Negocio familiar", meta: "Entradas e saidas de pequenos negocios da familia" },
+          { modal: "transfer", icon: "W", title: "Wise", meta: "Transferencias e conversoes entre Brasil e Japao" },
+          { modal: "vehicle", icon: "V", title: "Veiculo", meta: "Carro do Japao, Shaken, seguro e dados principais" },
+          { modal: "bankAccount", icon: "B", title: "Conta bancaria", meta: "Banco, pais, tipo de conta e saldo atual" },
+          { modal: "commitment", icon: "F", title: "Conta fixa", meta: "Despesas fixas, financiamentos, consorcios e recorrencias" }
+        ]
+      }
     ];
     return `
       <div class="modal-head">
         <h2>Adicionar</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
-      <div class="add-hub-grid">
-        ${actions.map((item) => `
-          <button class="add-hub-option" type="button" data-action="open-modal" data-modal="${item.modal}">
-            <span class="row-icon">${item.icon}</span>
-            <span>
-              <strong>${escapeHtml(item.title)}</strong>
-              <small>${escapeHtml(item.meta)}</small>
-            </span>
-          </button>
+      <div class="add-hub-sections">
+        ${groups.map((group) => `
+          <section class="add-hub-section">
+            <h3>${escapeHtml(group.title)}</h3>
+            <div class="add-hub-grid">
+              ${group.actions.map((item) => `
+                <button class="add-hub-option" type="button" data-action="open-modal" data-modal="${item.modal}">
+                  <span class="row-icon">${item.icon}</span>
+                  <span>
+                    <strong>${escapeHtml(item.title)}</strong>
+                    <small>${escapeHtml(item.meta)}</small>
+                  </span>
+                </button>
+              `).join("")}
+            </div>
+          </section>
         `).join("")}
       </div>
     `;
@@ -4905,6 +5290,12 @@
               ${receiptMethodOptions(activeCountry, item?.receiptMethod || item?.paymentMethod || (transactionType === "income" ? "salary" : "bank"), transactionType)}
             </select>
           </div>
+        </div>
+        <div class="field">
+          <label for="transactionFamilyMemberId">Quem movimentou</label>
+          <select id="transactionFamilyMemberId" name="familyMemberId">
+            ${familyMemberOptions(item?.familyMemberId)}
+          </select>
         </div>
         <div class="field">
           <label for="note">Observacao</label>
@@ -5234,6 +5625,233 @@
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
           <button class="primary-button" type="submit">Salvar contrato</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderQuickExpenseModal() {
+    const activeCountry = state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry;
+    const currency = countryMeta[activeCountry].currency;
+    return `
+      <div class="modal-head">
+        <h2>Gasto rapido</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="quick-expense">
+        <div class="two-cols">
+          ${countrySelect(activeCountry)}
+          <div class="field">
+            <label for="quickExpenseCategory">Categoria</label>
+            <input id="quickExpenseCategory" name="category" list="quickExpenseCategories" required placeholder="Ex: Supermercado" />
+            <datalist id="quickExpenseCategories">
+              ${quickExpenseCategories.map((item) => `<option value="${escapeAttr(item)}"></option>`).join("")}
+            </datalist>
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="quickExpenseTitle">Local/descricao</label>
+            <input id="quickExpenseTitle" name="title" required placeholder="Ex: Gyomu, Seven, Sugi" />
+          </div>
+          <div class="field">
+            <label for="quickExpenseMember">Quem gastou</label>
+            <select id="quickExpenseMember" name="familyMemberId">
+              ${familyMemberOptions()}
+            </select>
+          </div>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="quickExpenseAmount">Valor</label>
+            <input id="quickExpenseAmount" name="amount" required type="number" min="0" step="0.01" />
+          </div>
+          <div class="field">
+            <label for="quickExpenseCurrency">Moeda</label>
+            <select id="quickExpenseCurrency" name="currency">${currencyOptions(currency)}</select>
+          </div>
+          <div class="field">
+            <label for="quickExpenseDate">Data</label>
+            <input id="quickExpenseDate" name="date" type="date" required value="${escapeAttr(dateInMonth(state.ui.selectedMonth, new Date().getDate()))}" />
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="quickExpenseBankAccountId">Conta bancaria</label>
+            <select id="quickExpenseBankAccountId" name="bankAccountId">
+              ${bankAccountSelectOptions(activeCountry, "", "Sem conta vinculada")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="quickExpensePaymentMethod">Forma de pagamento</label>
+            <select id="quickExpensePaymentMethod" name="paymentMethod">
+              ${receiptMethodOptions(activeCountry, "bank", "expense")}
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar gasto</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderFamilyMemberModal(item = null) {
+    return `
+      <div class="modal-head">
+        <h2>${item ? "Editar pessoa" : "Pessoa da familia"}</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="family-member">
+        ${editHidden(item)}
+        <div class="two-cols">
+          <div class="field">
+            <label for="familyMemberName">Nome</label>
+            <input id="familyMemberName" name="name" required placeholder="Ex: Carlos" value="${escapeAttr(item?.name || "")}" />
+          </div>
+          <div class="field">
+            <label for="familyMemberRole">Papel na familia</label>
+            <select id="familyMemberRole" name="role">
+              ${Object.entries(familyRoleMeta).map(([value, label]) => `<option value="${value}" ${selectedAttr(value, item?.role || "other")}>${escapeHtml(label)}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar pessoa</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderFamilyBusinessModal(item = null) {
+    const currency = item?.currency || primaryCurrency();
+    return `
+      <div class="modal-head">
+        <h2>${item ? "Editar negocio" : "Negocio familiar"}</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="family-business">
+        ${editHidden(item)}
+        <div class="two-cols">
+          <div class="field">
+            <label for="businessName">Nome</label>
+            <input id="businessName" name="name" required placeholder="Ex: Marmitas, vendas, servicos" value="${escapeAttr(item?.name || "")}" />
+          </div>
+          <div class="field">
+            <label for="businessType">Tipo</label>
+            <input id="businessType" name="businessType" placeholder="Ex: Comida, revenda, servico" value="${escapeAttr(item?.businessType || "")}" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="businessCurrency">Moeda principal</label>
+          <select id="businessCurrency" name="currency">${currencyOptions(currency)}</select>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar negocio</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderShoppingListModal(item = null) {
+    const currency = item?.currency || primaryCurrency();
+    return `
+      <div class="modal-head">
+        <h2>${item ? "Editar lista" : "Lista de compras"}</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="shopping-list">
+        ${editHidden(item)}
+        <div class="two-cols">
+          <div class="field">
+            <label for="shoppingTitle">Nome da lista</label>
+            <input id="shoppingTitle" name="title" required placeholder="Ex: Compra da semana" value="${escapeAttr(item?.title || "")}" />
+          </div>
+          <div class="field">
+            <label for="shoppingMarket">Mercado</label>
+            <input id="shoppingMarket" name="marketName" placeholder="Ex: Gyomu, Trial, Valor" value="${escapeAttr(item?.marketName || "")}" />
+          </div>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="shoppingAmount">Valor total</label>
+            <input id="shoppingAmount" name="amount" type="number" min="0" step="0.01" value="${item ? number(item.amount) : ""}" />
+          </div>
+          <div class="field">
+            <label for="shoppingCurrency">Moeda</label>
+            <select id="shoppingCurrency" name="currency">${currencyOptions(currency)}</select>
+          </div>
+          <div class="field">
+            <label for="shoppingDate">Data</label>
+            <input id="shoppingDate" name="date" type="date" required value="${escapeAttr(item?.date || dateInMonth(state.ui.selectedMonth, new Date().getDate()))}" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="shoppingItems">Itens</label>
+          <textarea id="shoppingItems" name="items" placeholder="Arroz, leite, carne...">${escapeHtml(item?.items || "")}</textarea>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar lista</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderReceiptModal(item = null) {
+    const currency = item?.currency || primaryCurrency();
+    return `
+      <div class="modal-head">
+        <h2>${item ? "Editar recibo" : "Recibo"}</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="receipt">
+        ${editHidden(item)}
+        <div class="notice-card">
+          <strong>IA em preparo</strong>
+          <span>Agora salvamos o recibo manualmente. A leitura por foto precisa de uma Function segura no Cloudflare para chamar a LLM sem expor chave.</span>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="receiptMerchant">Loja</label>
+            <input id="receiptMerchant" name="merchant" required placeholder="Ex: Trial, Sugi, Seven" value="${escapeAttr(item?.merchant || "")}" />
+          </div>
+          <div class="field">
+            <label for="receiptCategory">Categoria</label>
+            <input id="receiptCategory" name="category" list="quickExpenseCategoriesReceipt" required placeholder="Ex: Supermercado" value="${escapeAttr(item?.category || "")}" />
+            <datalist id="quickExpenseCategoriesReceipt">
+              ${quickExpenseCategories.map((entry) => `<option value="${escapeAttr(entry)}"></option>`).join("")}
+            </datalist>
+          </div>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="receiptAmount">Valor</label>
+            <input id="receiptAmount" name="amount" required type="number" min="0" step="0.01" value="${item ? number(item.amount) : ""}" />
+          </div>
+          <div class="field">
+            <label for="receiptCurrency">Moeda</label>
+            <select id="receiptCurrency" name="currency">${currencyOptions(currency)}</select>
+          </div>
+          <div class="field">
+            <label for="receiptDate">Data</label>
+            <input id="receiptDate" name="date" type="date" required value="${escapeAttr(item?.date || dateInMonth(state.ui.selectedMonth, new Date().getDate()))}" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="receiptFamilyMemberId">Quem gastou</label>
+          <select id="receiptFamilyMemberId" name="familyMemberId">${familyMemberOptions(item?.familyMemberId)}</select>
+        </div>
+        <div class="field">
+          <label for="receiptNote">Itens/observacao</label>
+          <textarea id="receiptNote" name="note">${escapeHtml(item?.note || "")}</textarea>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar recibo</button>
         </div>
       </form>
     `;
@@ -5682,6 +6300,84 @@
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
           <button class="primary-button" type="submit">Salvar meta</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderEmergencyReserveModal(item = null) {
+    const goal = item || emergencyGoal();
+    const selectedCountry = goalCountryMeta(goal?.country) ? goal.country : "global";
+    const selectedCurrency = goal?.currency || goalDefaultCurrency(selectedCountry);
+    const summary = summarizeMonth(state.ui.selectedMonth, "global");
+    const stats = emergencyReserveStats(goal, summary);
+    const mode = goal?.reserveMode || "auto";
+    const months = clamp(Math.round(number(goal?.reserveMonths) || 6), 1, 60);
+    const targetDate = goal?.targetDate || dateInMonth(addMonths(state.ui.selectedMonth || currentMonth(), months), 1);
+    const saved = goal ? goalProgress(goal).saved : 0;
+    return `
+      <div class="modal-head">
+        <h2>Reserva de emergencia</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="emergency-reserve">
+        ${editHidden(goal)}
+        <div class="notice-card">
+          <strong>Alta prioridade</strong>
+          <span>Defina uma meta manual ou deixe o app calcular a reserva ideal pelos gastos da familia.</span>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="reserveMode">Tipo de calculo</label>
+            <select id="reserveMode" name="reserveMode">
+              <option value="auto" ${selectedAttr("auto", mode)}>Automatico pelos gastos</option>
+              <option value="manual" ${selectedAttr("manual", mode)}>Meta estipulada</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="reserveMonths">Tempo de seguranca</label>
+            <select id="reserveMonths" name="reserveMonths">
+              <option value="3" ${selectedAttr("3", months)}>3 meses</option>
+              <option value="6" ${selectedAttr("6", months)}>6 meses</option>
+              <option value="12" ${selectedAttr("12", months)}>12 meses</option>
+            </select>
+          </div>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="reserveTargetAmount">Meta manual</label>
+            <input id="reserveTargetAmount" name="targetAmount" type="number" min="0" step="0.01" value="${goal ? number(goal.targetAmount) : ""}" placeholder="${Math.round(stats.target)}" />
+          </div>
+          <div class="field">
+            <label for="reserveCurrency">Moeda</label>
+            <select id="reserveCurrency" name="currency">
+              ${currencyOptions(selectedCurrency)}
+            </select>
+          </div>
+          <div class="field">
+            <label for="reserveTargetDate">Data alvo</label>
+            <input id="reserveTargetDate" name="targetDate" type="date" required value="${escapeAttr(targetDate)}" />
+          </div>
+        </div>
+        ${goal ? `
+          <div class="readonly-field">
+            <span>Guardado atualmente</span>
+            <strong>${formatMoneyWithPrimary(saved, selectedCurrency)}</strong>
+          </div>
+        ` : `
+          <div class="field">
+            <label for="reserveInitialAmount">Valor ja guardado</label>
+            <input id="reserveInitialAmount" name="initialAmount" type="number" min="0" step="0.01" value="" />
+          </div>
+        `}
+        <div class="reserve-preview-box">
+          <div><span>Gasto mensal base</span><strong>${formatMoneyWithPrimary(stats.monthlyBase, primaryCurrency())}</strong></div>
+          <div><span>Projecao automatica</span><strong>${formatMoneyWithPrimary(stats.monthlyBase * months, primaryCurrency())}</strong></div>
+          <div><span>Guardar por mes</span><strong>${formatMoneyWithPrimary(stats.monthlyNeed, primaryCurrency())}</strong></div>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar reserva</button>
         </div>
       </form>
     `;
@@ -6684,6 +7380,7 @@
       currency: data.currency,
       bankAccountId: data.bankAccountId || "",
       receiptMethod: data.receiptMethod || "",
+      familyMemberId: data.familyMemberId || "",
       note: data.note.trim()
     }, true);
     state.ui.selectedMonth = data.date.slice(0, 7);
@@ -6691,6 +7388,118 @@
     closeModal();
     render();
     showToast(updated ? "Lancamento atualizado." : "Lancamento salvo.");
+  }
+
+  function saveQuickExpense(form) {
+    const data = formData(form);
+    const author = currentUserAuthor();
+    state.transactions.unshift({
+      id: uid("tx"),
+      date: data.date,
+      country: data.country,
+      type: "expense",
+      title: String(data.title || data.category || "Gasto rapido").trim(),
+      category: String(data.category || "Gasto rapido").trim(),
+      amount: number(data.amount),
+      currency: data.currency,
+      bankAccountId: data.bankAccountId || "",
+      paymentMethod: data.paymentMethod || "",
+      receiptMethod: data.paymentMethod || "",
+      familyMemberId: data.familyMemberId || "",
+      note: "Criado pelo gasto rapido",
+      createdAt: new Date().toISOString(),
+      createdBy: author.id,
+      createdByName: author.name
+    });
+    state.ui.selectedMonth = data.date.slice(0, 7);
+    saveState();
+    closeModal();
+    render();
+    showToast("Gasto rapido salvo.");
+  }
+
+  function saveFamilyMember(form) {
+    const data = formData(form);
+    const updated = upsertItem("familyMembers", data.id, {
+      name: String(data.name || "").trim(),
+      role: familyRoleMeta[data.role] ? data.role : "other",
+      active: true
+    }, true);
+    saveState();
+    closeModal();
+    render();
+    showToast(updated ? "Pessoa atualizada." : "Pessoa salva.");
+  }
+
+  function saveFamilyBusiness(form) {
+    const data = formData(form);
+    const updated = upsertItem("familyBusinesses", data.id, {
+      name: String(data.name || "").trim(),
+      businessType: String(data.businessType || "").trim(),
+      currency: sanitizeCurrency(data.currency, primaryCurrency()),
+      active: true
+    }, true);
+    saveState();
+    closeModal();
+    render();
+    showToast(updated ? "Negocio atualizado." : "Negocio salvo.");
+  }
+
+  function saveShoppingList(form) {
+    const data = formData(form);
+    const updated = upsertItem("shoppingLists", data.id, {
+      title: String(data.title || "Lista de compras").trim(),
+      marketName: String(data.marketName || "").trim(),
+      amount: number(data.amount),
+      currency: sanitizeCurrency(data.currency, primaryCurrency()),
+      date: data.date,
+      items: String(data.items || "").trim()
+    }, true);
+    state.ui.selectedMonth = data.date.slice(0, 7);
+    saveState();
+    closeModal();
+    render();
+    showToast(updated ? "Lista atualizada." : "Lista salva.");
+  }
+
+  function saveReceipt(form) {
+    const data = formData(form);
+    const receiptId = data.id || uid("rc");
+    const author = currentUserAuthor();
+    const receipt = {
+      merchant: String(data.merchant || "").trim(),
+      category: String(data.category || "Recibo").trim(),
+      amount: number(data.amount),
+      currency: sanitizeCurrency(data.currency, primaryCurrency()),
+      date: data.date,
+      familyMemberId: data.familyMemberId || "",
+      note: String(data.note || "").trim(),
+      status: "manual"
+    };
+    const updated = upsertItem("receipts", receiptId, receipt, true);
+    if (!updated) {
+      state.transactions.unshift({
+        id: uid("tx"),
+        date: receipt.date,
+        country: receipt.currency === "BRL" ? "brasil" : "japao",
+        type: "expense",
+        title: receipt.merchant || "Recibo",
+        category: receipt.category,
+        amount: receipt.amount,
+        currency: receipt.currency,
+        familyMemberId: receipt.familyMemberId,
+        note: receipt.note ? `Recibo: ${receipt.note}` : "Criado a partir de recibo",
+        receiptId,
+        createdAt: new Date().toISOString(),
+        createdBy: author.id,
+        createdByName: author.name
+      });
+    }
+    state.ui.selectedMonth = receipt.date.slice(0, 7);
+    saveState();
+    closeModal();
+    render();
+    showToast(updated ? "Recibo atualizado." : "Recibo salvo e lancado.");
   }
 
   function saveTransfer(form) {
@@ -6939,6 +7748,52 @@
     closeModal();
     render();
     showToast(updated ? "Meta atualizada." : "Meta criada.");
+  }
+
+  function saveEmergencyReserve(form) {
+    const data = formData(form);
+    const current = findItem("financialGoals", data.id) || emergencyGoal();
+    const currency = sanitizeCurrency(data.currency, primaryCurrency());
+    const months = clamp(Math.round(number(data.reserveMonths) || 6), 1, 60);
+    const mode = data.reserveMode === "manual" ? "manual" : "auto";
+    const summary = summarizeMonth(state.ui.selectedMonth, "global");
+    const automaticTarget = Math.max(summary.actualOutflow || 0, summary.projectedOutflow || 0) * months;
+    const targetAmount = mode === "manual" && number(data.targetAmount) > 0
+      ? number(data.targetAmount)
+      : convert(automaticTarget, primaryCurrency(), currency, latestRate(state.ui.selectedMonth));
+    const goalId = current?.id || uid(collectionPrefixes.financialGoals);
+    const updated = upsertItem("financialGoals", goalId, {
+      ...(current || {}),
+      templateKey: "emergency",
+      country: "global",
+      title: "Reserva de emergencia",
+      customName: "",
+      targetAmount,
+      currency,
+      targetDate: data.targetDate || dateInMonth(addMonths(state.ui.selectedMonth || currentMonth(), months), 1),
+      priority: "high",
+      reserveMode: mode,
+      reserveMonths: months,
+      reserveMonthlyBase: automaticTarget,
+      note: mode === "manual" ? "Meta estipulada pela familia" : "Calculada pelos gastos mensais da familia",
+      active: true
+    }, true);
+
+    const initialAmount = number(data.initialAmount);
+    if (!updated && initialAmount > 0) {
+      upsertItem("goalContributions", "", {
+        goalId,
+        amount: initialAmount,
+        currency,
+        date: dateInMonth(state.ui.selectedMonth || currentMonth(), new Date().getDate()),
+        note: "Saldo inicial da reserva"
+      }, true);
+    }
+
+    saveState();
+    closeModal();
+    render();
+    showToast(updated ? "Reserva atualizada." : "Reserva criada.");
   }
 
   function saveGoalContribution(form) {
@@ -10522,6 +11377,47 @@
     `;
   }
 
+  function activeFamilyMembers() {
+    return (state.familyMembers || []).filter((item) => item.active !== false);
+  }
+
+  function familyMemberById(id) {
+    return activeFamilyMembers().find((item) => item.id === id) || null;
+  }
+
+  function familyMemberName(id) {
+    const member = familyMemberById(id);
+    return member ? member.name : "";
+  }
+
+  function familyMemberOptions(selected = "") {
+    const members = activeFamilyMembers();
+    return `
+      <option value="" ${selectedAttr("", selected)}>Familia</option>
+      ${members.map((member) => `<option value="${member.id}" ${selectedAttr(member.id, selected)}>${escapeHtml(member.name)} - ${escapeHtml(familyRoleMeta[member.role] || "Outros")}</option>`).join("")}
+    `;
+  }
+
+  function emergencyGoal() {
+    return activeFinancialGoals().find((goal) => goal.templateKey === "emergency") || null;
+  }
+
+  function familyMemberSpending(month = state.ui.selectedMonth) {
+    const currency = primaryCurrency();
+    const rate = latestRate(month);
+    return monthTransactions(month, "global")
+      .filter((item) => item.type === "expense")
+      .reduce((items, item) => {
+        const id = item.familyMemberId || "family";
+        const existing = items.find((entry) => entry.id === id);
+        const amount = convert(number(item.amount), item.currency, currency, rate);
+        if (existing) existing.amount += amount;
+        else items.push({ id, name: familyMemberName(id) || "Familia", amount, currency });
+        return items;
+      }, [])
+      .sort((a, b) => b.amount - a.amount);
+  }
+
   function renderDashboardAccountCard(account, activeAccount, hideBalance) {
     const country = countryMeta[account.country] || countryMeta.japao;
     const balance = bankAccountBalance(account, state.ui.selectedMonth);
@@ -11293,6 +12189,10 @@
       housingCard: "housingCards",
       vehicleMaintenance: "vehicleMaintenance",
       incomeSource: "incomeSources",
+      familyMember: "familyMembers",
+      familyBusiness: "familyBusinesses",
+      shoppingList: "shoppingLists",
+      receipt: "receipts",
       workOverride: "workScheduleOverrides",
       workIncome: "workIncomes"
     };
