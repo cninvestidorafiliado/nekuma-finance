@@ -15,9 +15,7 @@ const publicFiles = [
   "manifest.webmanifest",
   "supabase-config.js",
   "_headers",
-  "_redirects",
-  "netlify.toml",
-  "vercel.json"
+  "_redirects"
 ];
 
 const publicDirs = ["assets"];

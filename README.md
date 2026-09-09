@@ -36,7 +36,7 @@ outputs/finance-pwa-online
 
 ## Deploy
 
-O fluxo recomendado e GitHub + Netlify:
+O fluxo recomendado e GitHub + Cloudflare Pages:
 
 ```text
 Build command: node scripts/build-deploy.cjs

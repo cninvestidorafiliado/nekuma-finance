@@ -9,8 +9,8 @@ https://nekuma-finance.pages.dev/
 ## Fluxo recomendado
 
 1. Suba este projeto para um repositorio no GitHub.
-2. No Netlify, crie um site conectado a esse repositorio.
-3. Use as configuracoes abaixo, ou deixe o Netlify ler o `netlify.toml` da raiz.
+2. No Cloudflare Pages, crie um projeto conectado a esse repositorio.
+3. Use as configuracoes abaixo no build do Cloudflare Pages.
 
 ```text
 Build command: node scripts/build-deploy.cjs
@@ -27,7 +27,7 @@ Quando quiser publicar manualmente:
 npm run build
 ```
 
-Depois envie a pasta abaixo para o Netlify Drop:
+Depois publique a pasta abaixo no Cloudflare Pages:
 
 ```text
 outputs/finance-pwa-online

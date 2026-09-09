@@ -14,7 +14,7 @@ Depois abra:
 http://127.0.0.1:4173
 ```
 
-Esse servidor local e a senha basica sao apenas para teste no computador. Para ficar 24h online, publique os arquivos estaticos em Vercel, Netlify ou Cloudflare Pages.
+Esse servidor local e a senha basica sao apenas para teste no computador. Para ficar 24h online, publique os arquivos estaticos em Cloudflare Pages.
 
 ## O que ja existe
 
@@ -61,17 +61,17 @@ outputs/finance-pwa-online
 
 Publique somente essa pasta. Nao publique `outputs/finance-pwa`, porque ela contem `server.cjs`, logs e arquivos `.sql`.
 
-### Opcao manual: Netlify Drop
+### Opcao manual: Cloudflare Pages
 
-1. Entre em `https://app.netlify.com/drop`.
-2. Arraste a pasta `outputs/finance-pwa-online`.
+1. Entre no painel do Cloudflare Pages.
+2. Publique a pasta `outputs/finance-pwa-online` ou use Wrangler a partir da raiz.
 3. Abra o link HTTPS gerado.
 4. No celular, abra o link e instale o PWA pela opcao do navegador.
 
-### Opcao recomendada: GitHub + Netlify
+### Opcao recomendada: GitHub + Cloudflare Pages
 
 1. Suba o projeto para um repositorio no GitHub.
-2. Conecte esse repositorio no Netlify.
+2. Conecte esse repositorio no Cloudflare Pages.
 3. Build command: `node scripts/build-deploy.cjs`.
 4. Publish directory: `outputs/finance-pwa-online`.
 5. Depois disso, cada update no GitHub gera deploy automatico.
