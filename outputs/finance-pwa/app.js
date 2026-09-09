@@ -343,7 +343,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=139")
+      navigator.serviceWorker.register("./service-worker.js?v=140")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });

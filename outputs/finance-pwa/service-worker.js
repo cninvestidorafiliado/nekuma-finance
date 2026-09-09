@@ -1,11 +1,11 @@
-const CACHE_NAME = "nekuma-finance-v139";
+const CACHE_NAME = "nekuma-finance-v140";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./app.html",
   "./clean.html",
-  "./styles.css?v=139",
-  "./app.js?v=139",
+  "./styles.css?v=140",
+  "./app.js?v=140",
   "./supabase-config.js?v=26",
   "./manifest.webmanifest",
   "./assets/nekuma-logo-192.png",

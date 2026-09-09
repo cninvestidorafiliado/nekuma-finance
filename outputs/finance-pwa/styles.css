@@ -8330,16 +8330,21 @@ h1 {
     box-shadow: none;
   }
 
+  .landing-nav nav a:not(.landing-login):not(.landing-signup) {
+    display: none;
+  }
+
   .landing-nav nav a {
     min-height: 34px;
-    padding: 0 9px;
-    font-size: 0.72rem;
+    padding: 0 12px;
+    font-size: 0.76rem;
     white-space: nowrap;
   }
 
   .landing-hero {
-    min-height: 720px;
-    padding: 46px 16px 36px;
+    align-items: start;
+    min-height: auto;
+    padding: 58px 18px 34px;
   }
 
   .landing-hero-bg::before {
@@ -8356,8 +8361,7 @@ h1 {
   }
 
   .landing-screen-main {
-    right: 18px;
-    bottom: 54px;
+    display: none;
   }
 
   .landing-screen-side {
@@ -8367,12 +8371,18 @@ h1 {
   }
 
   .landing-hero h1 {
-    font-size: clamp(2.2rem, 11vw, 3.75rem);
-    line-height: 0.98;
+    font-size: clamp(2.05rem, 10vw, 3rem);
+    line-height: 1.04;
   }
 
   .landing-hero-copy > p:not(.landing-kicker) {
-    font-size: 1rem;
+    font-size: 0.98rem;
+    line-height: 1.55;
+  }
+
+  .landing-hero .landing-actions {
+    max-width: none;
+    margin-top: 4px;
   }
 
   .landing-primary,
