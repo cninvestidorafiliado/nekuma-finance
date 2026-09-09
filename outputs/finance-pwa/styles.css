@@ -1516,6 +1516,13 @@ h3 {
   color: rgba(255, 250, 244, 0.72);
 }
 
+.auth-card .field label small {
+  color: rgba(255, 250, 244, 0.46);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: none;
+}
+
 .auth-card .field input {
   border-color: rgba(255, 250, 244, 0.2);
   color: #fffaf4;
@@ -1825,6 +1832,28 @@ h3 {
 .auth-back-link {
   margin-top: 12px;
   color: rgba(255, 250, 244, 0.8);
+}
+
+.auth-forgot-link {
+  justify-self: start;
+  min-height: 0;
+  padding: 0;
+  color: rgba(255, 250, 244, 0.72);
+  font-size: 0.86rem;
+}
+
+.auth-footer-link {
+  margin: 14px 0 0;
+  color: rgba(255, 250, 244, 0.7);
+  font-size: 0.92rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.auth-footer-link a {
+  color: #cfff45;
+  font-weight: 950;
+  text-decoration: none;
 }
 
 .fx-change-pill {
@@ -2369,6 +2398,70 @@ h3 {
   filter: saturate(1.08);
   box-shadow: 0 24px 64px rgba(var(--account-color-rgb), 0.28), 0 18px 44px rgba(7, 31, 25, 0.2);
   transform: scale(1) translateY(0) rotateY(0);
+}
+
+.account-swipe-card.has-bank-art {
+  place-items: stretch;
+  background: rgba(7, 31, 25, 0.08);
+}
+
+.account-swipe-card.has-bank-art::before {
+  display: block;
+  inset: 0;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: inherit;
+  background-image: var(--bank-card-bg);
+  background-position: center;
+  background-size: cover;
+  opacity: 0.76;
+}
+
+.account-swipe-card.has-bank-art::after {
+  display: none;
+}
+
+.account-swipe-card.has-bank-art .account-country-pill,
+.account-swipe-card.has-bank-art .visibility-toggle {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.account-swipe-card.has-bank-art .account-swipe-balance strong,
+.account-swipe-card.has-bank-art .account-swipe-footline strong,
+.account-swipe-card.has-bank-art .account-swipe-footline span,
+.account-swipe-card.has-bank-art .account-swipe-top > strong {
+  text-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+.account-swipe-card.has-bank-art .account-swipe-balance {
+  justify-content: center;
+  text-align: center;
+}
+
+.account-swipe-card.has-bank-art .account-swipe-balance > div {
+  display: grid;
+  justify-items: center;
+}
+
+.account-swipe-card.has-bank-art .visibility-toggle {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.account-swipe-card.has-bank-art .account-swipe-footline {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.account-swipe-card.has-bank-art .account-swipe-footline strong,
+.account-swipe-card.has-bank-art .account-swipe-footline span {
+  max-width: min(100%, 340px);
+  text-align: center;
 }
 
 .account-swipe-top,

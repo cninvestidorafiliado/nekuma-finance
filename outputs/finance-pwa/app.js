@@ -25,9 +25,17 @@
     global: { label: "Global", short: "GL", currency: "JPY", color: "#11110f" }
   };
   const bankSuggestions = {
-    japao: ["Yuucho", "Rakuten Bank", "SBI Sumishin", "PayPay Bank", "MUFG", "SMBC", "Mizuho", "Seven Bank"],
-    brasil: ["Nubank", "Caixa", "Santander", "Itau", "Banco do Brasil", "Bradesco", "Inter", "C6 Bank"]
+    japao: ["Yucho"],
+    brasil: ["Nubank", "Caixa", "Santander", "Banco do Brasil", "Inter"]
   };
+  const bankCardAssets = [
+    { key: "nubank", country: "brasil", file: "nubank-card.png", aliases: ["nubank", "nu bank", "nu pagamento"] },
+    { key: "caixa", country: "brasil", file: "caixa-card.png", aliases: ["caixa", "caixa economica", "caixa economica federal", "cef"] },
+    { key: "santander", country: "brasil", file: "santander-card.png", aliases: ["santander"] },
+    { key: "bancodobrasil", country: "brasil", file: "bancodobrasil-card.png", aliases: ["banco do brasil", "bb", "brasil"] },
+    { key: "inter", country: "brasil", file: "inter-card.png", aliases: ["inter", "banco inter"] },
+    { key: "yucho", country: "japao", file: "yucho-card.png", aliases: ["yucho", "yuucho", "ゆうちょ", "japan post bank"] }
+  ];
   const bankAccountTypes = {
     japao: {
       futsu: "Futsu - conta normal",
@@ -314,11 +322,12 @@
   let dashboardMonthAnchored = "";
   let lastLocalChangeAt = 0;
   let authView = ["login", "signup"].includes(urlParams.get("auth")) ? urlParams.get("auth") : "welcome";
+  const hasExplicitAuthView = authView === "login" || authView === "signup";
   cleanupLegacyStorage();
   let state = loadState();
   const remoteStore = createRemoteStore();
   const remoteSession = {
-    status: remoteStore.enabled ? "loading" : "local",
+    status: remoteStore.enabled ? (hasExplicitAuthView ? "signedOut" : "loading") : "local",
     user: null,
     householdId: "",
     household: null,
@@ -332,7 +341,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=121")
+      navigator.serviceWorker.register("./service-worker.js?v=137")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -367,6 +376,15 @@
       authView = button.dataset.view || "welcome";
       remoteSession.error = "";
       render();
+      return;
+    }
+    if (action === "go-landing") {
+      window.location.href = "./index.html";
+      return;
+    }
+    if (action === "request-password-reset") {
+      requestPasswordReset();
+      return;
     }
 
     if (action === "set-tab") {
@@ -601,6 +619,7 @@
 
   async function signUpRemote(form) {
     const data = formData(form);
+    const familyName = String(data.familyName || "").trim();
     remoteSession.status = "loading";
     remoteSession.error = "";
     render();
@@ -609,26 +628,25 @@
         email: data.email.trim(),
         password: data.password,
         options: {
-          data: { family_name: data.familyName.trim() || state.settings.familyName }
+          data: familyName ? { family_name: familyName } : {}
         }
       });
       if (error) throw error;
       if (!authData.session?.user) {
         remoteSession.status = "signedOut";
         render();
-        showToast("Conta criada. Confirme o email e depois entre com o codigo da familia.");
+        window.alert("Cadastro efetuado com sucesso. Confirme seu email e depois faça login.");
+        window.location.href = "./index.html";
         return;
       }
 
-      remoteSession.user = authData.user;
-      state.settings.familyName = data.familyName.trim() || state.settings.familyName;
-      const inviteCode = normalizeInviteCode(data.inviteCode);
-      if (inviteCode) await joinRemoteHouseholdByCode(inviteCode);
-      else await loadRemoteState(state.settings.familyName);
-      remoteSession.status = "ready";
-      startRemoteAutoSync();
+      if (familyName) state.settings.familyName = familyName;
+      await remoteStore.client.auth.signOut().catch(() => {});
+      remoteSession.status = "signedOut";
+      remoteSession.user = null;
       render();
-      showToast(inviteCode ? "Conta criada e familia conectada." : "Conta criada.");
+      window.alert("Cadastro efetuado com sucesso.");
+      window.location.href = "./index.html";
     } catch (error) {
       remoteSession.status = "signedOut";
       remoteSession.error = error.message || "Nao foi possivel criar a conta.";
@@ -647,9 +665,30 @@
     remoteSession.householdMembers = [];
     remoteSession.membersError = "";
     remoteSession.error = "";
+    authView = "login";
     stopRemoteAutoSync();
     render();
     showToast("Voce saiu da conta.");
+  }
+
+  async function requestPasswordReset() {
+    if (!remoteStore.enabled) {
+      window.alert("Recuperação de senha disponível apenas no modo online.");
+      return;
+    }
+    const email = String(document.querySelector("#loginEmail")?.value || "").trim();
+    if (!email) {
+      window.alert("Digite seu email no campo de login para recuperar a senha.");
+      return;
+    }
+    try {
+      const redirectTo = `${window.location.origin}${window.location.pathname}?auth=login`;
+      const { error } = await remoteStore.client.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) throw error;
+      window.alert("Enviamos as instruções de recuperação para seu email.");
+    } catch (error) {
+      window.alert(error.message || "Não foi possível enviar a recuperação de senha.");
+    }
   }
 
   async function joinFamilyFromForm(form) {
@@ -1961,18 +2000,19 @@
     const isLoading = remoteSession.status === "loading";
     const canSignup = remoteStore.config.enableSignup !== false;
     const view = authView === "login" || authView === "signup" ? authView : "welcome";
+    const isSignup = view === "signup";
     return `
       <section class="auth-panel auth-panel-${view}">
         <article class="auth-visual">
           <img class="auth-brand-mark" src="./assets/nekuma-logo-192.png" alt="" />
           <div>
             <p class="auth-kicker">Nekuma Finance</p>
-            <h2>Seu dinheiro no Japao e no Brasil, em uma tela mais clara.</h2>
+            <h2>${isSignup ? "Crie sua conta Nekuma." : "Bem-vindo ao Nekuma."}</h2>
           </div>
           <div class="auth-preview-card">
-            <span>Carteira do mes</span>
+            <span>${isSignup ? "7 dias grátis" : "Acesso seguro"}</span>
             <strong>¥ 248,500</strong>
-            <small>Contas, salario, cripto e familia sincronizados</small>
+            <small>${isSignup ? "Cadastro simples para começar a organizar o mês" : "Entre para acessar sua vida financeira"}</small>
           </div>
           <div class="auth-swatches">
             <span style="background:#312C51"></span>
@@ -2027,9 +2067,8 @@
       <div class="auth-card-head">
         <div>
           <p class="auth-kicker">Login</p>
-          <h2>Entrar na conta</h2>
+          <h2>Bem-vindo ao Nekuma</h2>
         </div>
-        <button class="small-action ghost" type="button" data-action="set-auth-view" data-view="welcome">Voltar</button>
       </div>
       <form class="form-grid" data-form="auth-login">
         <div class="field">
@@ -2040,13 +2079,10 @@
           <label for="loginPassword">Senha</label>
           <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
         </div>
-        <div class="field">
-          <label for="loginInviteCode">Codigo da familia</label>
-          <input id="loginInviteCode" name="inviteCode" inputmode="text" autocomplete="off" placeholder="Opcional para entrar na familia existente" />
-        </div>
+        <button class="link-action auth-forgot-link" type="button" data-action="request-password-reset">Esqueceu a senha?</button>
         <button class="primary-button" type="submit">Entrar</button>
       </form>
-      <button class="link-action auth-back-link" type="button" data-action="set-auth-view" data-view="signup">Criar uma conta</button>
+      <p class="auth-footer-link">Ainda não tem conta? <a href="./app.html?auth=signup">Cadastre-se</a></p>
     `;
   }
 
@@ -2056,14 +2092,14 @@
       <div class="auth-card-head">
         <div>
           <p class="auth-kicker">Cadastro</p>
-          <h2>Primeiro acesso</h2>
+          <h2>Criar sua conta</h2>
         </div>
-        <button class="small-action ghost" type="button" data-action="set-auth-view" data-view="welcome">Voltar</button>
+        <button class="small-action ghost" type="button" data-action="go-landing">Voltar</button>
       </div>
       <form class="form-grid" data-form="auth-signup">
         <div class="field">
-          <label for="signupFamily">Nome da familia</label>
-          <input id="signupFamily" name="familyName" value="${escapeAttr(state.settings.familyName)}" placeholder="Use se estiver criando uma nova familia" />
+          <label for="signupFamily">Nome da família <small>opcional</small></label>
+          <input id="signupFamily" name="familyName" placeholder="Use se estiver criando uma nova família" />
         </div>
         <div class="field">
           <label for="signupEmail">Email</label>
@@ -2074,12 +2110,12 @@
           <input id="signupPassword" name="password" type="password" autocomplete="new-password" minlength="6" required />
         </div>
         <div class="field">
-          <label for="signupInviteCode">Codigo da familia</label>
-          <input id="signupInviteCode" name="inviteCode" inputmode="text" autocomplete="off" placeholder="Opcional para entrar na familia existente" />
+          <label for="signupInviteCode">Código da família <small>opcional</small></label>
+          <input id="signupInviteCode" name="inviteCode" inputmode="text" autocomplete="off" placeholder="Use se recebeu um convite" />
         </div>
         <button class="primary-button" type="submit">Criar login</button>
       </form>
-      <button class="link-action auth-back-link" type="button" data-action="set-auth-view" data-view="login">Ja tenho cadastro</button>
+      <p class="auth-footer-link">Já tem cadastro? <a href="./app.html?auth=login">Entrar</a></p>
     `;
   }
 
@@ -11408,9 +11444,25 @@
     return sanitizeColor(account?.color, countryMeta[account?.country]?.color || "#42a67a");
   }
 
+  function bankCardAsset(account) {
+    const country = account?.country === "brasil" ? "brasil" : "japao";
+    const lookup = normalizeLookupText(`${account?.bankName || ""} ${account?.nickname || ""}`);
+    const exact = bankCardAssets.find((asset) => {
+      return asset.country === country && asset.aliases.some((alias) => lookup.includes(normalizeLookupText(alias)));
+    });
+    if (exact) return exact;
+    return {
+      key: `outros-${country}`,
+      country,
+      file: country === "brasil" ? "outros-brasil-card.png" : "outros-japao-card.png",
+      aliases: []
+    };
+  }
+
   function bankAccountStyleAttrs(account) {
     const color = bankAccountColor(account);
-    return ` style="--account-color:${escapeAttr(color)};--account-color-rgb:${escapeAttr(hexToRgbValues(color))}"`;
+    const asset = bankCardAsset(account);
+    return ` style="--account-color:${escapeAttr(color)};--account-color-rgb:${escapeAttr(hexToRgbValues(color))};--bank-card-bg:url('./assets/banks/${escapeAttr(asset.file)}')"`;
   }
 
   function countryFlag(country) {
@@ -11481,9 +11533,10 @@
     const active = activeAccount?.id === account.id;
     const last4 = account.accountLast4 ? `**** ${account.accountLast4}` : "Sem final";
     const balanceValue = hideBalance ? maskedMoney(account.currency) : formatMoneyWithPrimary(balance, account.currency);
+    const cardAsset = bankCardAsset(account);
     return `
       <article
-        class="account-swipe-card ${active ? "is-active" : ""}"
+        class="account-swipe-card has-bank-art bank-art-${escapeAttr(cardAsset.key)} ${active ? "is-active" : ""}"
         role="button"
         tabindex="0"
         data-action="select-dashboard-account"
