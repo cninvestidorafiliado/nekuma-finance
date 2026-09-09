@@ -2,6 +2,7 @@ const CACHE_NAME = "nekuma-finance-v121";
 const APP_SHELL = [
   "./",
   "./index.html",
+  "./app.html",
   "./clean.html",
   "./styles.css?v=121",
   "./app.js?v=121",
@@ -55,7 +56,7 @@ self.addEventListener("fetch", (event) => {
     }).catch(() =>
       caches.match(event.request).then((cached) => {
         if (cached) return cached;
-        return caches.match("./index.html").then((fallback) => fallback || Response.error());
+        return caches.match("./app.html").then((fallback) => fallback || caches.match("./index.html").then((home) => home || Response.error()));
       })
     )
   );

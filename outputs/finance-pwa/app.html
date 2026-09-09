@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#312C51" />
+    <meta name="description" content="PWA para controle financeiro Brasil e Japao." />
+    <title>Nekuma Finance</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./assets/nekuma-logo-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="./assets/nekuma-logo-512.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;650;750;850&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css?v=121" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar" aria-label="Topo do app">
+        <div class="identity">
+          <img class="avatar" src="./assets/nekuma-logo-192.png" alt="" aria-hidden="true" />
+          <div>
+            <p class="eyebrow" id="app-greeting">Hey, familia</p>
+            <h1>Nekuma Finance</h1>
+            <p class="context-label" id="country-context">Global em ienes</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="icon-button news-button" id="app-news-button" type="button" data-action="open-app-news" aria-label="Novidades do app" title="Novidades">
+            <span data-lucide="circle-alert" aria-hidden="true"></span>
+            <span class="news-badge" id="app-news-badge" aria-hidden="true"></span>
+          </button>
+          <button class="icon-button logout-button" type="button" data-action="remote-signout" aria-label="Sair da conta" title="Sair">
+            <span data-lucide="log-out" aria-hidden="true"></span>
+            Sair
+          </button>
+        </div>
+      </header>
+
+      <main id="app" class="main-view" aria-live="polite"></main>
+
+      <nav class="bottom-nav" aria-label="Navegacao principal">
+        <button class="nav-item is-active" type="button" data-action="set-tab" data-tab="dashboard">
+          <span data-lucide="home" aria-hidden="true">H</span>
+          Inicio
+        </button>
+        <button class="nav-item" type="button" data-action="set-tab" data-tab="accounts">
+          <span data-lucide="wallet" aria-hidden="true">C</span>
+          Contas
+        </button>
+        <button class="nav-item nav-add-button" type="button" data-action="open-modal" data-modal="addHub" aria-label="Adicionar no app" title="Adicionar">
+          <span class="nav-add-fab" aria-hidden="true"></span>
+        </button>
+        <button class="nav-item" type="button" data-action="set-tab" data-tab="crypto">
+          <span data-lucide="bitcoin" aria-hidden="true">B</span>
+          Cripto
+        </button>
+        <button class="nav-item" type="button" data-action="set-tab" data-tab="settings">
+          <span data-lucide="settings" aria-hidden="true">S</span>
+          Ajustes
+        </button>
+      </nav>
+    </div>
+
+    <div id="refresh-splash" class="refresh-splash" aria-hidden="true">
+      <div class="refresh-splash-card">
+        <img src="./assets/nekuma-logo-192.png" alt="" aria-hidden="true" />
+        <span>Atualizando</span>
+      </div>
+    </div>
+
+    <div id="modal-root"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script src="./supabase-config.js?v=26"></script>
+    <script src="./app.js?v=121"></script>
+  </body>
+</html>

@@ -313,7 +313,7 @@
   let dashboardCarouselTimer = null;
   let dashboardMonthAnchored = "";
   let lastLocalChangeAt = 0;
-  let authView = "welcome";
+  let authView = ["login", "signup"].includes(urlParams.get("auth")) ? urlParams.get("auth") : "welcome";
   cleanupLegacyStorage();
   let state = loadState();
   const remoteStore = createRemoteStore();

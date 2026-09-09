@@ -2,7 +2,7 @@
   "name": "Nekuma Finance",
   "short_name": "Nekuma",
   "description": "Controle financeiro familiar para Brasil, Japao e transferencias Wise.",
-  "start_url": "./index.html",
+  "start_url": "./app.html?auth=login",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f6efe7",

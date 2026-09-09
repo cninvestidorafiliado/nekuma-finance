@@ -8,6 +8,7 @@ const version = process.env.DEPLOY_VERSION || buildVersion();
 
 const publicFiles = [
   "index.html",
+  "app.html",
   "clean.html",
   "app.js",
   "styles.css",
@@ -54,7 +55,7 @@ function copyPublicDir(dirName) {
 }
 
 function withVersion(fileName, content) {
-  if (fileName === "index.html") {
+  if (fileName === "index.html" || fileName === "app.html") {
     return content
       .replace(/styles\.css\?v=\d+/g, `styles.css?v=${version}`)
       .replace(/supabase-config\.js\?v=\d+/g, `supabase-config.js?v=${version}`)

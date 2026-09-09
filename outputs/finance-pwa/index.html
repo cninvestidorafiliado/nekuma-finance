@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#312C51" />
-    <meta name="description" content="PWA para controle financeiro Brasil e Japao." />
-    <title>Nekuma Finance</title>
+    <meta name="theme-color" content="#12382e" />
+    <meta name="description" content="Nekuma Finance: controle financeiro familiar para brasileiros no Japão." />
+    <title>Nekuma Finance | Organize Brasil e Japão</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./assets/nekuma-logo-192.png" type="image/png" />
     <link rel="apple-touch-icon" href="./assets/nekuma-logo-512.png" />
@@ -14,67 +14,233 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;650;750;850&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css?v=121" />
   </head>
-  <body>
-    <div class="app-shell">
-      <header class="topbar" aria-label="Topo do app">
-        <div class="identity">
-          <img class="avatar" src="./assets/nekuma-logo-192.png" alt="" aria-hidden="true" />
-          <div>
-            <p class="eyebrow" id="app-greeting">Hey, familia</p>
-            <h1>Nekuma Finance</h1>
-            <p class="context-label" id="country-context">Global em ienes</p>
+  <body class="landing-page">
+    <header class="landing-nav">
+      <a class="landing-brand" href="./index.html" aria-label="Nekuma Finance">
+        <img src="./assets/nekuma-logo-192.png" alt="" />
+        <span>Nekuma Finance</span>
+      </a>
+      <nav aria-label="Navegação da landing">
+        <a href="#raiox">Raio-X</a>
+        <a href="#recursos">Recursos</a>
+        <a href="#precos">Preços</a>
+        <a href="#updates">Updates</a>
+        <a class="landing-login" href="./app.html?auth=login">Login</a>
+        <a class="landing-signup" href="./app.html?auth=signup">Comece já</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="landing-hero">
+        <div class="landing-hero-bg" aria-hidden="true">
+          <div class="landing-reserve-float">
+            <span>Reserva de emergência</span>
+            <strong>6 meses</strong>
+            <small>31 meses até completar</small>
+          </div>
+          <div class="landing-screen landing-screen-main">
+            <span>Salário previsto</span>
+            <strong>¥ 367,505</strong>
+            <small>teiji + zangyou + bonus</small>
           </div>
         </div>
-        <div class="top-actions">
-          <button class="icon-button news-button" id="app-news-button" type="button" data-action="open-app-news" aria-label="Novidades do app" title="Novidades">
-            <span data-lucide="circle-alert" aria-hidden="true"></span>
-            <span class="news-badge" id="app-news-badge" aria-hidden="true"></span>
-          </button>
-          <button class="icon-button logout-button" type="button" data-action="remote-signout" aria-label="Sair da conta" title="Sair">
-            <span data-lucide="log-out" aria-hidden="true"></span>
-            Sair
-          </button>
+        <div class="landing-hero-copy">
+          <p class="landing-kicker">Organização financeira para brasileiros no Japão</p>
+          <h1>Organize sua vida financeira entre Brasil e Japão. Chegue no fim do mês sabendo o que aconteceu.</h1>
+          <p>Você trabalha duro no Japão. O Nekuma ajuda a descobrir para onde seu dinheiro está indo, quanto realmente sobra do salário e quanto pode guardar com segurança.</p>
+          <div class="landing-actions">
+            <a class="landing-primary" href="./app.html?auth=signup">Começar agora</a>
+          </div>
         </div>
-      </header>
+      </section>
 
-      <main id="app" class="main-view" aria-live="polite"></main>
+      <section class="landing-trust" aria-label="Destaques do Nekuma">
+        <div><span data-lucide="banknote"></span><strong>Salário japonês</strong><small>previsão sem conta na mão</small></div>
+        <div><span data-lucide="circle-help"></span><strong>Quanto sobra</strong><small>entradas menos gastos reais</small></div>
+        <div><span data-lucide="repeat-2"></span><strong>Iene + real</strong><small>duas moedas no mesmo painel</small></div>
+        <div><span data-lucide="users"></span><strong>Família</strong><small>casa inteira no mesmo orçamento</small></div>
+      </section>
 
-      <nav class="bottom-nav" aria-label="Navegacao principal">
-        <button class="nav-item is-active" type="button" data-action="set-tab" data-tab="dashboard">
-          <span data-lucide="home" aria-hidden="true">H</span>
-          Inicio
-        </button>
-        <button class="nav-item" type="button" data-action="set-tab" data-tab="accounts">
-          <span data-lucide="wallet" aria-hidden="true">C</span>
-          Contas
-        </button>
-        <button class="nav-item nav-add-button" type="button" data-action="open-modal" data-modal="addHub" aria-label="Adicionar no app" title="Adicionar">
-          <span class="nav-add-fab" aria-hidden="true"></span>
-        </button>
-        <button class="nav-item" type="button" data-action="set-tab" data-tab="crypto">
-          <span data-lucide="bitcoin" aria-hidden="true">B</span>
-          Cripto
-        </button>
-        <button class="nav-item" type="button" data-action="set-tab" data-tab="settings">
-          <span data-lucide="settings" aria-hidden="true">S</span>
-          Ajustes
-        </button>
-      </nav>
-    </div>
+      <section id="raiox" class="landing-rayx">
+        <div class="landing-rayx-copy">
+          <p class="landing-kicker">A pergunta que muda o mês</p>
+          <h2>Você sabe quanto realmente sobra do seu salário?</h2>
+          <p>Os ¥500 aqui, ¥1.000 ali, assinaturas esquecidas, contas do Brasil e gastos da família somam mais do que parecem.</p>
+          <p><strong>O Nekuma faz esse raio-X para você.</strong> Organização financeira descomplicada para entender o mês de verdade.</p>
+        </div>
+        <div class="landing-salary-breakdown" aria-label="Exemplo de raio-x financeiro">
+          <div class="salary-line is-income"><span>Salário</span><strong>¥367,505</strong></div>
+          <div class="salary-line"><span>Moradia</span><strong>- ¥91,300</strong></div>
+          <div class="salary-line"><span>Cartões</span><strong>- ¥12,567</strong></div>
+          <div class="salary-line"><span>Assinaturas</span><strong>- ¥3,571</strong></div>
+          <div class="salary-line"><span>Combini e gastos rápidos</span><strong>- ¥18,000</strong></div>
+          <div class="salary-line"><span>Contas no Brasil</span><strong>- ¥35,000</strong></div>
+          <div class="salary-line is-total"><span>O Nekuma mostra</span><strong>quanto sobra</strong></div>
+        </div>
+      </section>
 
-    <div id="refresh-splash" class="refresh-splash" aria-hidden="true">
-      <div class="refresh-splash-card">
-        <img src="./assets/nekuma-logo-192.png" alt="" aria-hidden="true" />
-        <span>Atualizando</span>
-      </div>
-    </div>
+      <section class="landing-app-views" aria-label="Imagens do app Nekuma">
+        <div class="landing-section-head">
+          <p class="landing-kicker">Veja o Nekuma em ação</p>
+          <h2>Um painel para entender o mês sem abrir banco, calculadora e planilha.</h2>
+        </div>
+        <div class="landing-shot-grid">
+          <article class="landing-shot is-dashboard">
+            <div class="shot-bar"><span></span><span></span><span></span></div>
+            <div class="shot-grid-top">
+              <div><small>Salário bruto previsto</small><strong>¥367,505</strong></div>
+              <div><small>Contas a pagar</small><strong>¥94,910</strong></div>
+              <div><small>Pago no mês</small><strong>¥0</strong></div>
+            </div>
+            <div class="landing-sheet-preview" aria-label="Planilha de entradas e saidas">
+              <div><span>Item</span><span>Tipo</span><strong>Valor</strong></div>
+              <div><span>Salário Fábrica</span><span>Entrada</span><strong class="positive">+ ¥367,505</strong></div>
+              <div><span>Moradia</span><span>Saída</span><strong>- ¥91,300</strong></div>
+              <div><span>Cartões</span><span>Saída</span><strong>- ¥12,567</strong></div>
+              <div><span>Fôlego</span><span>Total</span><strong class="positive">¥263,638</strong></div>
+            </div>
+            <p>Dashboard PRO para PC e iPad</p>
+          </article>
+          <article class="landing-shot is-mobile">
+            <div class="phone-shell">
+              <div class="phone-notch"></div>
+              <div class="phone-card"><small>Salário previsto</small><strong>¥367,505</strong></div>
+              <div class="phone-row"><span>Dólar / Iene</span><strong>¥153.18</strong></div>
+              <div class="phone-row"><span>Reserva</span><strong>31 meses</strong></div>
+              <div class="phone-nav"><span></span><span></span><b></b><span></span><span></span></div>
+            </div>
+            <p>Resumo rápido no celular</p>
+          </article>
+          <article class="landing-shot is-family">
+            <div class="family-ring"><strong>Raio-X</strong><span>Família</span></div>
+            <div class="family-list">
+              <span>Moradia <b>42%</b></span>
+              <span>Cartões <b>28%</b></span>
+              <span>Mercado <b>18%</b></span>
+              <span>Assinaturas <b>12%</b></span>
+            </div>
+            <p>Gastos por categoria e fôlego do mês</p>
+          </article>
+        </div>
+      </section>
 
-    <div id="modal-root"></div>
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <section class="landing-detectores">
+        <div class="landing-section-head align-center">
+          <p class="landing-kicker">O que torna o Nekuma diferente</p>
+          <h2>Alertas que mostram o que merece sua atenção antes de virar susto.</h2>
+        </div>
+        <div class="landing-detector-grid">
+          <article>
+            <span class="detector-tag cyan">Salário</span>
+            <h3>"Seu zangyou mudou o resultado do mês"</h3>
+            <p>Compara o previsto com a rotina de turno, bônus e horas extras para você entender quanto deve receber.</p>
+            <div class="detector-terminal"><small>PREVISTO</small><strong>Teiji ¥251,100 + Zangyou ¥116,405</strong><b>= ¥367,505</b></div>
+          </article>
+          <article>
+            <span class="detector-tag gold">Recorrências</span>
+            <h3>"Essas assinaturas estão pesando mais do que parece"</h3>
+            <p>Mostra Netflix, YouTube, Disney+, Spotify e outros gastos pequenos que se repetem todo mês.</p>
+            <div class="detector-terminal"><small>ASSINATURAS</small><strong>4 ativas no mês</strong><b>¥3,571 / mês</b></div>
+          </article>
+          <article>
+            <span class="detector-tag red">Variações</span>
+            <h3>"A conta da casa veio diferente do normal"</h3>
+            <p>Ajuda a enxergar quando água, luz, gás, aluguel ou cartão saem do padrão da família.</p>
+            <div class="detector-terminal"><small>VARIAÇÃO</small><strong>Luz acima da média</strong><b>verificar antes do vencimento</b></div>
+          </article>
+        </div>
+      </section>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+      <section class="landing-country-block">
+        <div>
+          <p class="landing-kicker">Feito para quem vive entre dois países</p>
+          <h2>Mora no Japão, mas ainda tem vida financeira no Brasil?</h2>
+          <p>Chega de banco japonês + banco brasileiro + calculadora + bloco de notas + planilha. Sucesso financeiro começa quando tudo fica claro no mesmo lugar.</p>
+        </div>
+        <div class="landing-country-list">
+          <span>Salário e contas no Japão</span>
+          <span>Cartões, metas e compromissos no Brasil</span>
+          <span>Iene e real no mesmo painel</span>
+          <span>Gastos da família em um só lugar</span>
+        </div>
+        <a class="landing-primary" href="./app.html?auth=signup">Centralizar tudo no Nekuma</a>
+      </section>
+
+      <section id="recursos" class="landing-section align-right">
+        <div class="landing-section-head align-right">
+          <p class="landing-kicker">O que o Nekuma resolve</p>
+          <h2>Organização financeira descomplicada para o mês real.</h2>
+        </div>
+        <div class="landing-feature-grid">
+          <article><span data-lucide="factory"></span><h3>Salário japonês sem fazer conta na mão</h3><p>Veja uma previsão considerando teiji, zangyou, turno diurno, noturno, sábado, domingo e adicionais.</p></article>
+          <article><span data-lucide="refresh-cw"></span><h3>Iene e real lado a lado</h3><p>Saiba quanto tem, quanto deve e quanto está gastando sem ficar convertendo tudo no Google.</p></article>
+          <article><span data-lucide="map"></span><h3>Brasil e Japão na mesma vida financeira</h3><p>Acompanhe contas, cartões, metas, bancos e compromissos dos dois países.</p></article>
+          <article><span data-lucide="users"></span><h3>Família no mesmo orçamento</h3><p>Veja quanto a casa gasta e onde cada parte do dinheiro está indo.</p></article>
+          <article><span data-lucide="home"></span><h3>Moradia organizada</h3><p>Tenha controle sobre aluguel, luz, gás, água, internet e outros gastos relacionados.</p></article>
+          <article><span data-lucide="credit-card"></span><h3>Cartões sem surpresa</h3><p>Saiba o valor da próxima fatura antes de ela virar problema no dia do vencimento.</p></article>
+          <article><span data-lucide="calendar-check"></span><h3>Assinaturas esquecidas sob controle</h3><p>Veja quanto Netflix, YouTube, Disney+ e outras assinaturas realmente custam por mês.</p></article>
+          <article><span data-lucide="shield-alert"></span><h3>Reserva de emergência</h3><p>Estipule uma meta e prazo, ou deixe o app calcular quanto guardar baseado nos gastos do mês.</p></article>
+          <article><span data-lucide="line-chart"></span><h3>Cripto e investimentos</h3><p>Tenha controle das suas criptos, investimentos, metas e patrimônio em um só lugar.</p></article>
+        </div>
+      </section>
+
+      <section class="landing-objections">
+        <div class="landing-section-head align-center">
+          <p class="landing-kicker">Por que não é só mais um app financeiro</p>
+          <h2>O Nekuma foi pensado para a sua realidade.</h2>
+        </div>
+        <div class="landing-qa-grid">
+          <article><div class="qa-user">"Já controlo pelo banco."</div><div class="qa-app">O banco mostra movimentações. O Nekuma mostra sua vida financeira: Brasil, Japão, família, salário previsto, vencimentos e reserva.</div></article>
+          <article><div class="qa-user">"Uso uma planilha."</div><div class="qa-app">A planilha calcula. Você ainda precisa alimentar, organizar e interpretar tudo. O Nekuma centraliza o mês e apresenta o que importa.</div></article>
+          <article><div class="qa-user">"Uso outro aplicativo financeiro."</div><div class="qa-app">A maioria foi criada para quem vive em um único país. O Nekuma foi feito para quem recebe em ienes e pensa parte da vida em reais.</div></article>
+        </div>
+      </section>
+
+      <section id="updates" class="landing-section landing-roadmap">
+        <div class="landing-section-head">
+          <p class="landing-kicker">Experiência PRO do Nekuma</p>
+          <h2>Em breve, ainda mais automação para sua família.</h2>
+        </div>
+        <div class="landing-roadmap-grid">
+          <article><strong>Scanner de recibos com IA</strong><span>Tire foto do recibo e deixe a IA sugerir mercado, valor, data e categoria.</span></article>
+          <article><strong>Tecnologia Open Finance</strong><span>Uma base preparada para conectar contas, cartões e movimentações com mais automação.</span></article>
+          <article><strong>Integração Web3</strong><span>Carteiras, criptos e patrimônio digital conectados ao planejamento financeiro da família.</span></article>
+          <article><strong>Muito mais</strong><span>Relatórios, cards organizados, negócios familiares e novas formas de enxergar seu dinheiro.</span></article>
+        </div>
+      </section>
+
+      <section id="precos" class="landing-section">
+        <div class="landing-section-head">
+          <p class="landing-kicker">Planos</p>
+        </div>
+        <div class="landing-price-grid two-plans">
+          <article>
+            <span>7 dias grátis</span>
+            <strong>Comece sem compromisso</strong>
+            <p>Teste o aplicativo sem anúncios. Teste suas funcionalidades, se o app se encaixa perfeitamente às suas necessidades e atende às suas expectativas. Quase todas as funcionalidades liberadas.</p>
+          </article>
+          <article class="is-featured">
+            <span>Nekuma Finance PRO</span>
+            <strong>¥480/mês</strong>
+            <p>Todas as funcionalidades liberadas. Aplicativo sempre atualizado com novas atualizações. Contas familiares sincronizadas, relatórios completos e muito mais.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="landing-final">
+        <p class="landing-kicker">Seu dinheiro mais claro</p>
+        <h2>Comece hoje a organizar seu mês com mais clareza.</h2>
+        <a class="landing-primary" href="./app.html?auth=signup">Começar agora</a>
+      </section>
+    </main>
+
+    <footer class="landing-footer">
+      <span>©2026 Nekuma Finance</span>
+    </footer>
+
     <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script src="./supabase-config.js?v=26"></script>
-    <script src="./app.js?v=121"></script>
+    <script>
+      if (window.lucide) window.lucide.createIcons({ attrs: { "stroke-width": 2.25 } });
+    </script>
   </body>
 </html>
