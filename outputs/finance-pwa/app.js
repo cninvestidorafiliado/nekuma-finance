@@ -394,6 +394,10 @@
       selectDashboardAccount(button.dataset.id);
     }
 
+    if (action === "set-primary-bank-account") {
+      setPrimaryBankAccount(button.dataset.id);
+    }
+
     if (action === "scroll-subscriptions") {
       scrollSubscriptionCarousel(Number(button.dataset.direction || 1));
     }
@@ -1299,6 +1303,11 @@
           currency,
           targetDate: String(item.targetDate || item.deadline || "").slice(0, 10),
           priority: goalPriorities[item.priority] ? item.priority : "medium",
+          reserveMode: item.reserveMode === "manual" ? "manual" : "auto",
+          reserveMonths: clamp(Math.round(number(item.reserveMonths) || 6), 1, 60),
+          reserveContributionPercent: clamp(number(item.reserveContributionPercent) || 5, 1, 100),
+          reserveMonthlyBase: number(item.reserveMonthlyBase),
+          reserveIncomeBase: number(item.reserveIncomeBase),
           note: String(item.note || "").trim(),
           active: item.active !== false
         };
@@ -1810,7 +1819,13 @@
       sessionStorage.removeItem(RESTORE_SCROLL_KEY);
       const scroll = JSON.parse(raw);
       if (!scroll || Date.now() - Number(scroll.at || 0) > 30000) return;
-      requestAnimationFrame(() => window.scrollTo(Number(scroll.x) || 0, Number(scroll.y) || 0));
+      const x = Number(scroll.x) || 0;
+      const y = Number(scroll.y) || 0;
+      requestAnimationFrame(() => {
+        window.scrollTo(x, y);
+        setTimeout(() => window.scrollTo(x, y), 80);
+        setTimeout(() => window.scrollTo(x, y), 260);
+      });
     } catch (error) {
       sessionStorage.removeItem(RESTORE_SCROLL_KEY);
     }
@@ -2194,6 +2209,15 @@
     renderKeepingScroll();
   }
 
+  function setPrimaryBankAccount(id) {
+    const account = activeBankAccounts().find((item) => item.id === id);
+    if (!account) return;
+    state.ui.selectedDashboardAccountId = account.id;
+    saveState();
+    renderKeepingScroll();
+    showToast(`${bankAccountName(account)} agora e a conta principal.`);
+  }
+
   function renderVisibilityToggle(panel, hidden, label) {
     return `
       <button
@@ -2438,7 +2462,7 @@
             <div class="chart-wrap"><canvas id="trend-chart" aria-label="Grafico mensal"></canvas></div>
           </article>
 
-          <article class="content-panel">
+          <article class="content-panel financial-calendar-panel">
             <div class="panel-head">
               <h2>Calendario financeiro</h2>
               <div class="chips">
@@ -2453,7 +2477,7 @@
             ${renderFamilyFinancePiePanel(summary)}
           </article>
 
-          <article class="content-panel">
+          <article class="content-panel recent-transactions-panel">
             <div class="panel-head">
               <h2>Ultimos lancamentos</h2>
               <button class="small-action ghost" type="button" data-action="set-tab" data-tab="accounts">Ver contas</button>
@@ -2752,6 +2776,7 @@
         ${displayAccounts.map((account) => {
           const balance = bankAccountBalance(account, state.ui.selectedMonth);
           const author = authorLabel(account);
+          const isPrimary = state.ui.selectedDashboardAccountId === account.id;
           return `
             <article class="bank-account-card"${bankAccountStyleAttrs(account)}>
               <div class="bank-account-head">
@@ -2769,6 +2794,7 @@
               </div>
               ${author ? `<p class="row-meta">Adicionada por ${escapeHtml(author)}</p>` : ""}
               <div class="row-actions">
+                ${isPrimary ? `<span class="chip green">Principal</span>` : `<button class="small-action" type="button" data-action="set-primary-bank-account" data-id="${account.id}">Usar na Home</button>`}
                 <button class="small-action ghost" type="button" data-action="open-modal" data-modal="bankAccount" data-id="${account.id}">Editar</button>
                 <button class="small-action ghost" type="button" data-action="delete-bank-account" data-id="${account.id}">Excluir</button>
               </div>
@@ -4087,7 +4113,7 @@
       <div class="panel-head">
         <div>
           <h2>Reserva de emergencia</h2>
-          <p class="row-meta">Alta prioridade - ${reserve.months} meses de seguranca.</p>
+          <p class="row-meta">Alta prioridade - ${reserve.months} meses de seguranca - ${formatPercent(reserve.contributionPercent)} da renda.</p>
         </div>
         <div class="chips">
           ${goal ? `<button class="small-action ghost" type="button" data-action="open-modal" data-modal="emergencyReserve" data-id="${goal.id}">Editar</button><button class="small-action" type="button" data-action="open-modal" data-modal="goalContribution" data-id="${goal.id}">Aporte</button>` : `<button class="small-action" type="button" data-action="open-modal" data-modal="emergencyReserve">Criar</button>`}
@@ -4096,7 +4122,7 @@
       <div class="emergency-card">
         <span>${reserve.mode === "manual" ? "Meta estipulada" : `Necessario para ${reserve.months} meses`}</span>
         <strong>${formatMoneyWithPrimary(target, currency)}</strong>
-        <small>Base mensal ${formatMoneyWithPrimary(monthlyBase, currency)}</small>
+        <small>Gastos ${formatMoneyWithPrimary(monthlyBase, currency)} - Renda ${formatMoneyWithPrimary(reserve.incomeBase, currency)}</small>
         <div class="emergency-progress" aria-label="Progresso da reserva">
           <span style="width:${percent > 0 ? Math.max(3, percent) : 0}%"></span>
         </div>
@@ -4111,8 +4137,9 @@
           <strong>${formatMoneyWithPrimary(missing, currency)}</strong>
         </div>
         <div>
-          <span>Guardar por mes</span>
-          <strong>${formatMoneyWithPrimary(reserve.monthlyNeed, currency)}</strong>
+          <span>${formatPercent(reserve.contributionPercent)} da renda</span>
+          <strong>${formatMoneyWithPrimary(reserve.monthlyContribution, currency)}</strong>
+          <small>${reserve.monthsToGoal ? `${reserve.monthsToGoal} meses ate completar` : "Sem renda calculada"}</small>
         </div>
       </div>
     `;
@@ -4123,17 +4150,28 @@
     const rate = latestRate(state.ui.selectedMonth);
     const mode = goal?.reserveMode || (goal?.targetAmount ? "manual" : "auto");
     const months = clamp(Math.round(number(goal?.reserveMonths) || 6), 1, 60);
+    const contributionPercent = clamp(number(goal?.reserveContributionPercent) || 5, 1, 100);
     const monthlyBase = Math.max(summary.actualOutflow || 0, summary.projectedOutflow || 0);
+    const salaryEstimate = estimateFactorySalaryForMonth(state.ui.selectedMonth, currency);
+    const predictedSalary = salaryEstimate.configured ? salaryEstimate.total : 0;
+    const incomeBase = Math.max(summary.actualInflow || 0, summary.projectedInflow || 0, predictedSalary);
     const saved = goal ? convert(goalProgress(goal).saved, goal.currency, currency, rate) : 0;
     const manualTarget = goal ? convert(number(goal.targetAmount), goal.currency, currency, rate) : 0;
     const target = mode === "manual" && manualTarget > 0 ? manualTarget : monthlyBase * months;
+    const monthlyContribution = incomeBase * (contributionPercent / 100);
+    const missing = Math.max(0, target - saved);
+    const monthsToGoal = monthlyContribution > 0 && missing > 0 ? Math.ceil(missing / monthlyContribution) : 0;
     return {
       mode,
       months,
+      contributionPercent,
       monthlyBase,
+      incomeBase,
       saved,
       target,
-      monthlyNeed: months ? Math.max(0, target - saved) / months : 0
+      monthlyContribution,
+      monthlyNeed: monthlyContribution,
+      monthsToGoal
     };
   }
 
@@ -6313,6 +6351,7 @@
     const stats = emergencyReserveStats(goal, summary);
     const mode = goal?.reserveMode || "auto";
     const months = clamp(Math.round(number(goal?.reserveMonths) || 6), 1, 60);
+    const contributionPercent = clamp(number(goal?.reserveContributionPercent) || 5, 1, 100);
     const targetDate = goal?.targetDate || dateInMonth(addMonths(state.ui.selectedMonth || currentMonth(), months), 1);
     const saved = goal ? goalProgress(goal).saved : 0;
     return `
@@ -6345,6 +6384,10 @@
         </div>
         <div class="three-cols">
           <div class="field">
+            <label for="reserveContributionPercent">% da renda para guardar</label>
+            <input id="reserveContributionPercent" name="reserveContributionPercent" type="number" min="1" max="100" step="0.1" required value="${contributionPercent}" />
+          </div>
+          <div class="field">
             <label for="reserveTargetAmount">Meta manual</label>
             <input id="reserveTargetAmount" name="targetAmount" type="number" min="0" step="0.01" value="${goal ? number(goal.targetAmount) : ""}" placeholder="${Math.round(stats.target)}" />
           </div>
@@ -6372,8 +6415,9 @@
         `}
         <div class="reserve-preview-box">
           <div><span>Gasto mensal base</span><strong>${formatMoneyWithPrimary(stats.monthlyBase, primaryCurrency())}</strong></div>
-          <div><span>Projecao automatica</span><strong>${formatMoneyWithPrimary(stats.monthlyBase * months, primaryCurrency())}</strong></div>
-          <div><span>Guardar por mes</span><strong>${formatMoneyWithPrimary(stats.monthlyNeed, primaryCurrency())}</strong></div>
+          <div><span>Renda base</span><strong>${formatMoneyWithPrimary(stats.incomeBase, primaryCurrency())}</strong></div>
+          <div><span>${formatPercent(stats.contributionPercent)} por mes</span><strong>${formatMoneyWithPrimary(stats.monthlyContribution, primaryCurrency())}</strong></div>
+          <div><span>Tempo estimado</span><strong>${stats.monthsToGoal ? `${stats.monthsToGoal} meses` : "Sem renda"}</strong></div>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -7674,7 +7718,9 @@
       color: sanitizeColor(data.color, bankAccountColors[activeBankAccounts().length % bankAccountColors.length]),
       active: true
     });
-    state.ui.selectedDashboardAccountId = accountId;
+    if (!state.ui.selectedDashboardAccountId || !activeBankAccounts().some((account) => account.id === state.ui.selectedDashboardAccountId)) {
+      state.ui.selectedDashboardAccountId = accountId;
+    }
     saveState();
     closeModal();
     render();
@@ -7755,9 +7801,18 @@
     const current = findItem("financialGoals", data.id) || emergencyGoal();
     const currency = sanitizeCurrency(data.currency, primaryCurrency());
     const months = clamp(Math.round(number(data.reserveMonths) || 6), 1, 60);
+    const contributionPercent = clamp(number(data.reserveContributionPercent) || 5, 1, 100);
     const mode = data.reserveMode === "manual" ? "manual" : "auto";
     const summary = summarizeMonth(state.ui.selectedMonth, "global");
-    const automaticTarget = Math.max(summary.actualOutflow || 0, summary.projectedOutflow || 0) * months;
+    const stats = emergencyReserveStats({
+      ...(current || {}),
+      reserveMode: mode,
+      reserveMonths: months,
+      reserveContributionPercent: contributionPercent,
+      targetAmount: number(data.targetAmount),
+      currency
+    }, summary);
+    const automaticTarget = stats.monthlyBase * months;
     const targetAmount = mode === "manual" && number(data.targetAmount) > 0
       ? number(data.targetAmount)
       : convert(automaticTarget, primaryCurrency(), currency, latestRate(state.ui.selectedMonth));
@@ -7774,7 +7829,9 @@
       priority: "high",
       reserveMode: mode,
       reserveMonths: months,
+      reserveContributionPercent: contributionPercent,
       reserveMonthlyBase: automaticTarget,
+      reserveIncomeBase: stats.incomeBase,
       note: mode === "manual" ? "Meta estipulada pela familia" : "Calculada pelos gastos mensais da familia",
       active: true
     }, true);

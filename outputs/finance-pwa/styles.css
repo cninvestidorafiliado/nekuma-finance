@@ -2693,6 +2693,14 @@ canvas {
   overflow-wrap: anywhere;
 }
 
+.pro-summary-grid small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  line-height: 1.15;
+}
+
 .compact-chip-list {
   display: flex;
   flex-wrap: wrap;
@@ -7054,6 +7062,93 @@ h1 {
 }
 
 @media (max-width: 640px) {
+  .desktop-dashboard-shell,
+  .desktop-dashboard-top,
+  .desktop-dashboard-month-row,
+  .desktop-dashboard-column {
+    display: contents;
+  }
+
+  .dashboard-card-vehicle-grid {
+    display: contents;
+  }
+
+  .desktop-dashboard-top {
+    order: 1;
+  }
+
+  .desktop-dashboard-month-row {
+    order: 2;
+  }
+
+  .overview-card {
+    order: 3;
+  }
+
+  .paypal-panel {
+    order: 4;
+  }
+
+  .dashboard-cards-panel {
+    order: 10;
+  }
+
+  .housing-panel {
+    order: 20;
+  }
+
+  .vehicle-panel {
+    order: 30;
+  }
+
+  .subscriptions-panel {
+    order: 40;
+  }
+
+  .financial-calendar-panel {
+    order: 50;
+  }
+
+  .work-calendar-panel {
+    order: 60;
+  }
+
+  .family-pie-panel {
+    order: 70;
+  }
+
+  .dashboard-trend-panel {
+    order: 80;
+  }
+
+  .emergency-reserve-panel {
+    order: 90;
+  }
+
+  .crypto-panel {
+    order: 100;
+  }
+
+  .goals-panel {
+    order: 110;
+  }
+
+  .debt-home-panel {
+    order: 120;
+  }
+
+  .family-tools-panel {
+    order: 130;
+  }
+
+  .family-panel {
+    order: 140;
+  }
+
+  .recent-transactions-panel {
+    order: 150;
+  }
+
   .ray-x-grid,
   .reserve-preview-box,
   .emergency-reserve-panel .pro-summary-grid {
@@ -7551,7 +7646,7 @@ h1 {
   }
 
   .vehicle-card {
-    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-columns: 64px minmax(0, 1fr) minmax(104px, 0.68fr);
     gap: 10px;
     padding: 10px;
     border-radius: 22px;
@@ -7576,22 +7671,37 @@ h1 {
     font-size: 0.98rem;
   }
 
-  .vehicle-info-card,
+  .vehicle-info-card {
+    grid-column: 3;
+    grid-row: 1;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-self: stretch;
+    min-width: 0;
+    width: 100%;
+    padding: 9px 10px;
+    border-radius: 18px;
+  }
+
   .vehicle-insurance-check {
     grid-column: 1 / -1;
     min-width: 0;
     width: 100%;
+    padding: 11px 12px;
+    grid-template-columns: auto minmax(0, 1fr);
     border-radius: 18px;
   }
 
-  .vehicle-info-card {
-    grid-template-columns: auto minmax(0, 1fr);
-    padding: 10px 12px;
+  .vehicle-info-card .row-icon {
+    width: 30px;
+    height: 30px;
   }
 
-  .vehicle-insurance-check {
-    padding: 11px 12px;
-    grid-template-columns: auto minmax(0, 1fr);
+  .vehicle-info-card strong {
+    font-size: 0.92rem;
+  }
+
+  .vehicle-info-card small {
+    font-size: 0.64rem;
   }
 
   .subscription-home-page {
