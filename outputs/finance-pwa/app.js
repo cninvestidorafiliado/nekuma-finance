@@ -376,7 +376,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=149")
+      navigator.serviceWorker.register("./service-worker.js?v=150")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -580,6 +580,18 @@
   });
 
   window.addEventListener("resize", debounce(drawVisibleCharts, 120));
+  let calendarDate = localDateKey();
+  const refreshCalendarDate = () => {
+    const next = localDateKey();
+    if (next !== calendarDate) {
+      calendarDate = next;
+      renderKeepingScroll();
+    }
+  };
+  setInterval(refreshCalendarDate, 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshCalendarDate();
+  });
   window.matchMedia('(max-width: 759px)').addEventListener('change', () => {
     if (state.ui.activeTab === 'dashboard') renderKeepingScroll();
   });
@@ -4779,28 +4791,30 @@
   }
 
   function renderFinancialCalendar(limit, mode = "all") {
+    const today = localDateKey();
+    const todayLabel = `<p class="calendar-today-label">Hoje · ${escapeHtml(formatShortDate(today))}</p>`;
     const items = mode === "upcoming"
       ? dashboardUpcomingFinancialItems(limit || 99)
       : financialCalendarItems(state.ui.selectedMonth, "global");
-    if (!items.length) return `<p class="empty-state">Nenhum evento financeiro neste mes.</p>`;
+    if (!items.length) return `${todayLabel}<p class="empty-state">Nenhum evento financeiro neste mes.</p>`;
     const visible = mode === "upcoming" ? items : (limit ? items.slice(0, limit) : items);
     return `
-      <div class="calendar-list">
+      ${todayLabel}<div class="calendar-list">
         ${visible.map((item) => {
           const titleStyle = item.titleColor ? ` style="color:${escapeAttr(item.titleColor)}"` : "";
           const canPay = canPayCalendarItem(item);
           return `
-            <div class="calendar-item ${item.kind === "income" ? "calendar-income" : "calendar-expense"} ${item.tone}">
-              <div class="calendar-date">
+            <div class="calendar-item ${item.kind === "income" ? "calendar-income" : "calendar-expense"} ${item.tone} ${item.date === today ? 'is-today' : ''}">
+              <div class="calendar-date" ${item.date === today ? 'aria-current="date"' : ''}>
                 <span>${formatCalendarDay(item.date)}</span>
-                <small>${formatCalendarWeekday(item.date)}</small>
+                <small>${item.date === today ? 'Hoje' : formatCalendarWeekday(item.date)}</small>
               </div>
               <div class="calendar-main">
                 <p class="row-title"${titleStyle}>${escapeHtml(item.title)}</p>
                 <p class="row-meta">${escapeHtml(item.meta)}</p>
               </div>
               <div class="calendar-amount ${item.kind === "income" ? "income" : "expense"}">
-                ${item.kind === "income" ? "+" : "-"} ${formatMoneyWithPrimary(item.amount, item.currency, item.date?.slice(0, 7) || state.ui.selectedMonth)}
+                <span class="calendar-value">${item.kind === "income" ? "+" : "-"} ${formatMoneyWithPrimary(item.amount, item.currency, item.date?.slice(0, 7) || state.ui.selectedMonth)}</span>
                 <span class="chip ${item.tone}">${escapeHtml(item.status)}</span>
                 ${canPay ? `<button class="small-action ghost calendar-pay-button" type="button" data-action="open-modal" data-modal="monthlyPayment" data-payment-id="${escapeAttr(item.paymentRef)}">Pagar</button>` : ""}
               </div>
@@ -5281,8 +5295,9 @@
   }
 
   function renderWorkCalendarCell(day) {
+    const isToday = day.date === localDateKey();
     return `
-      <div class="work-day-cell ${escapeAttr(day.className)} ${day.isSundayWork ? "is-sunday-work" : ""}" style="--ban-color:${escapeAttr(day.banColor)}" title="${escapeAttr(day.title)}">
+      <div class="work-day-cell ${escapeAttr(day.className)} ${day.isSundayWork ? "is-sunday-work" : ""} ${isToday ? 'is-today' : ''}" ${isToday ? 'aria-current="date"' : ''} style="--ban-color:${escapeAttr(day.banColor)}" title="${escapeAttr(day.title)}${isToday ? ' · Hoje' : ''}">
         <strong>${formatCalendarDay(day.date)}</strong>
         <span>${escapeHtml(day.label)}</span>
       </div>
