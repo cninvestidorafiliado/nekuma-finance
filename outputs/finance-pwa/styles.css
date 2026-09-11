@@ -4396,6 +4396,11 @@ canvas {
   opacity: 0.7;
 }
 
+.vehicle-list {
+  display: grid;
+  gap: 10px;
+}
+
 .vehicle-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) minmax(150px, auto) auto;
@@ -4418,6 +4423,25 @@ canvas {
   place-items: center;
   border-radius: 16px;
   background: linear-gradient(135deg, #fff4d8, #f0c38e);
+}
+
+.vehicle-visual.has-logo {
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(49, 44, 81, 0.08);
+}
+
+.vehicle-brand-logo {
+  display: block;
+  width: 52px;
+  height: 40px;
+  max-width: 82%;
+  max-height: 74%;
+  object-fit: contain;
+  filter: drop-shadow(0 7px 12px rgba(15, 38, 32, 0.14));
+}
+
+.vehicle-visual.has-logo .vehicle-image {
+  display: none;
 }
 
 .vehicle-image {
@@ -4552,6 +4576,40 @@ canvas {
   color: #247653;
   font-size: 0.84rem;
   line-height: 1;
+}
+
+.vehicle-card-actions {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.vehicle-settings-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.vehicle-settings-logo {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(86, 124, 155, 0.12);
+  color: var(--ink-2);
+  font-size: 0.84rem;
+  font-weight: 950;
+}
+
+.vehicle-settings-logo.has-logo {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(49, 44, 81, 0.08);
+}
+
+.vehicle-settings-logo img {
+  display: block;
+  max-width: 78%;
+  max-height: 70%;
+  object-fit: contain;
 }
 
 .vehicle-maintenance-list {
@@ -5383,6 +5441,7 @@ canvas {
 
 .subscriptions-panel {
   overflow: hidden;
+  align-self: start;
 }
 
 .subscription-summary {
@@ -7901,7 +7960,7 @@ h1 {
   }
 }
 
-@media (min-width: 1220px) {
+@media (min-width: 1600px) {
   .desktop-dashboard-shell {
     grid-template-columns: minmax(320px, 0.82fr) minmax(480px, 1.28fr) minmax(360px, 0.9fr);
     gap: 16px;
@@ -9167,6 +9226,200 @@ h1 {
   *::after {
     scroll-behavior: auto !important;
     transition: none !important;
+  }
+}
+
+/* Cards adapt to their column, not only to the browser width. */
+.dashboard-organizable .desktop-dashboard-column { min-height: 72px; align-items: start; }
+[data-dashboard-card] { position: relative; padding-top: 34px; }
+.dashboard-handle { position: absolute; z-index: 5; top: 3px; left: calc(50% - 22px); width: 44px; height: 28px; display: grid; place-items: center; border: 0; background: transparent; color: #64796f; cursor: grab; touch-action: none; }
+.dashboard-handle svg { width: 22px; height: 22px; }
+.dashboard-handle:focus-visible { outline: 2px solid #247653; border-radius: 6px; }
+.dashboard-drag-chosen { outline: 2px solid #42a67a; }
+.dashboard-drop-placeholder { opacity: 0.3; }
+.dashboard-dragging { cursor: grabbing; }
+.dashboard-mobile-zone { display: grid; gap: 14px; min-width: 0; }
+.country-expenses-body { display: grid; gap: 14px; }
+.expense-donut { position: relative; width: min(100%, 260px); aspect-ratio: 1; margin: 0 auto; }
+.expense-donut svg { width: 100%; height: 100%; overflow: visible; }
+.expense-donut-total { position: absolute; inset: 31%; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: none; text-align: center; gap: 5px; }
+.expense-donut-total span { color: #62766c; font-size: 0.7rem; }
+.expense-donut-total strong { font-size: 1rem; color: #173c2e; white-space: nowrap; }
+.expense-sector { cursor: pointer; pointer-events: stroke; transform-origin: 100px 100px; transform: rotate(-90deg); transition: transform 180ms ease, opacity 180ms ease, stroke-width 180ms ease; }
+.expense-sector.is-selected { transform: rotate(-90deg) scale(1.06); stroke-width: 29px; }
+.has-expense-selection .expense-sector:not(.is-selected) { opacity: 0.38; }
+.expense-sector:focus-visible { outline: none; stroke-width: 29px; }
+.expense-legend { display: grid; gap: 6px; }
+.expense-legend-row { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 10px; align-items: start; width: 100%; min-width: 0; padding: 9px; text-align: left; border: 1px solid transparent; border-radius: 8px; color: var(--ink); background: transparent; cursor: pointer; transition: background 180ms, border-color 180ms; }
+.expense-legend-row i { width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: var(--category-color); }
+.expense-legend-row strong, .expense-legend-row small { display: block; overflow-wrap: anywhere; }
+.expense-legend-row small { color: #52685f; font-size: 0.76rem; margin-top: 3px; }
+.expense-legend-row .expense-bank { font-size: 0.7rem; color: #63736c; }
+.expense-legend-row.is-selected, .expense-legend-row:focus-visible { background: #edf5ef; border-color: var(--category-color); outline: none; }
+.vehicle-card-actions svg { width: 16px; height: 16px; flex-shrink: 0; }
+.vehicle-card-actions button { display: inline-flex; align-items: center; gap: 5px; }
+@container panel (min-width: 600px) {
+  .country-expenses-body { grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1fr); align-items: center; }
+}
+@media (max-width: 759px) {
+  .desktop-dashboard-shell.dashboard-organizable { display: grid; width: 100%; gap: 14px; }
+  .dashboard-organizable .desktop-dashboard-top, .dashboard-organizable .desktop-dashboard-month-row { display: block; order: 0; }
+}
+@media (min-width: 760px) {
+  @container panel (min-width: 420px) {
+    .vehicle-card { grid-template-columns: 48px minmax(0, 1fr) minmax(90px, 0.9fr) minmax(90px, 0.8fr) 30px !important; gap: 8px; align-items: center; }
+    .vehicle-visual { grid-column: 1; grid-row: 1; width: 48px; height: 48px; }
+    .vehicle-main { grid-column: 2; grid-row: 1; }
+    .vehicle-insurance-check { grid-column: 3 !important; grid-row: 1; min-width: 0; padding: 7px; font-size: 0.7rem; }
+    .vehicle-info-card { grid-column: 4 !important; grid-row: 1; padding: 7px; grid-template-columns: minmax(0, 1fr); }
+    .vehicle-info-card .row-icon { display: none; }
+    .vehicle-card-actions { grid-column: 5 !important; grid-row: 1; display: grid; gap: 4px; }
+    .vehicle-card-actions button { width: 30px; min-width: 30px; height: 30px; padding: 5px; justify-content: center; }
+    .vehicle-card-actions button span { display: none; }
+    .vehicle-insurance-check small { overflow-wrap: anywhere; }
+  }
+}
+
+.content-panel {
+  container-type: inline-size;
+  container-name: panel;
+  min-width: 0;
+}
+
+.vehicle-card {
+  grid-template-columns: 64px minmax(0, 1fr) minmax(100px, auto);
+}
+
+.vehicle-info-card {
+  grid-column: 3;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.vehicle-insurance-check,
+.vehicle-card-actions {
+  grid-column: 1 / -1;
+}
+
+.vehicle-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.vehicle-main strong,
+.vehicle-main .mini-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 760px) and (max-width: 999px) {
+  .desktop-dashboard-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 1000px) and (max-width: 1599px) {
+  .desktop-dashboard-shell {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .desktop-dashboard-right {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1080px) {
+  .app-shell {
+    padding-right: 126px;
+  }
+}
+
+@container panel (max-width: 560px) {
+  .housing-items,
+  .crypto-token-list,
+  .crypto-wallet,
+  .reports-grid,
+  .ray-x-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .salary-formula {
+    flex-wrap: wrap;
+  }
+  .account-swipe-balance strong,
+  .account-swipe-card.has-bank-art .account-swipe-balance strong {
+    font-size: 2rem;
+    overflow-wrap: normal;
+  }
+  .calendar-amount {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+  .panel-head {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+}
+
+@media (min-width: 760px) {
+  .housing-item {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .housing-item .row-amount {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 3px 8px;
+  }
+  .housing-item .row-amount .money-converted {
+    grid-column: 1;
+  }
+  .housing-item .row-amount .row-actions {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
+
+@container panel (max-width: 380px) {
+  .vehicle-card {
+    grid-template-columns: 54px minmax(0, 1fr) 94px;
+    gap: 8px;
+  }
+  .vehicle-visual {
+    width: 54px;
+  }
+  .vehicle-info-card {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 8px;
+  }
+  .vehicle-info-card .row-icon {
+    display: none;
+  }
+  .housing-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .housing-item .row-amount {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+    text-align: left;
+  }
+  .housing-item .row-actions {
+    grid-column: 2;
+    grid-row: 3;
+  }
+  .housing-item .row-amount .row-actions {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .calendar-item {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+  .calendar-amount {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .emergency-reserve-panel .pro-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

@@ -36,6 +36,33 @@
     { key: "inter", country: "brasil", file: "inter-card.png", aliases: ["inter", "banco inter"] },
     { key: "yucho", country: "japao", file: "yucho-card.png", aliases: ["yucho", "yuucho", "ゆうちょ", "japan post bank"] }
   ];
+  const vehicleBrandAssets = [
+    { key: "toyota", file: "toyota.png", aliases: ["toyota", "トヨタ"] },
+    { key: "honda", file: "honda.png", aliases: ["honda", "ホンダ"] },
+    { key: "nissan", file: "nissan.png", aliases: ["nissan", "日産"] },
+    { key: "suzuki", file: "suzuki.png", aliases: ["suzuki", "スズキ"] },
+    { key: "daihatsu", file: "daihatsu.png", aliases: ["daihatsu", "ダイハツ"] },
+    { key: "mazda", file: "mazda.png", aliases: ["mazda", "マツダ"] },
+    { key: "mitsubishi", file: "mitsubishi.png", aliases: ["mitsubishi", "三菱"] },
+    { key: "subaru", file: "subaru.png", aliases: ["subaru", "スバル"] },
+    { key: "lexus", file: "lexus.png", aliases: ["lexus", "レクサス"] },
+    { key: "bmw", file: "bmw.png", aliases: ["bmw"] },
+    { key: "mercedes", file: "mercedes.png", aliases: ["mercedes", "mercedes-benz", "benz"] },
+    { key: "volkswagen", file: "volkswagen.png", aliases: ["volkswagen", "vw"] },
+    { key: "audi", file: "audi.png", aliases: ["audi"] },
+    { key: "byd", file: "byd.png", aliases: ["byd"] },
+    { key: "ds", file: "ds.png", aliases: ["ds", "ds automobiles"] },
+    { key: "fiat", file: "fiat.png", aliases: ["fiat"] },
+    { key: "ford", file: "ford.png", aliases: ["ford"] },
+    { key: "chevrolet", file: "chevrolet.png", aliases: ["chevrolet", "chevy"] },
+    { key: "hyundai", file: "hyundai.png", aliases: ["hyundai"] },
+    { key: "jeep", file: "jeep.png", aliases: ["jeep"] },
+    { key: "kia", file: "kia.png", aliases: ["kia"] },
+    { key: "land-rover", file: "land-rover.png", aliases: ["land rover", "land-rover", "range rover"] },
+    { key: "porsche", file: "porshe.png", aliases: ["porsche", "porshe"] },
+    { key: "tesla", file: "tesla.png", aliases: ["tesla"] },
+    { key: "volvo", file: "volvo.png", aliases: ["volvo"] }
+  ];
   const bankAccountTypes = {
     japao: {
       futsu: "Futsu - conta normal",
@@ -94,6 +121,7 @@
     goalContributions: "gc",
     cryptoAssets: "cr",
     housingCards: "hc",
+    vehicles: "vh",
     vehicleMaintenance: "vm",
     incomeSources: "is",
     workIncomes: "wi",
@@ -310,6 +338,8 @@
   const toast = document.getElementById("toast");
   let toastTimer = null;
   let cryptoFetchInFlight = false;
+  let cryptoLastAttemptAt = 0;
+  let fxLastAttemptAt = 0;
   let cryptoRefreshTimer = null;
   let fxFetchInFlight = false;
   let fxRefreshTimer = null;
@@ -340,10 +370,13 @@
     saving: false
   };
   let remoteSaveTimer = null;
+  let remoteSaveQueue = Promise.resolve();
+  let resetInProgress = false;
+  let stateGeneration = 0;
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=140")
+      navigator.serviceWorker.register("./service-worker.js?v=149")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -431,6 +464,7 @@
     if (action === "delete-transfer") deleteItem("transfers", button.dataset.id, "Transferencia removida.");
     if (action === "delete-commitment") deleteItem("commitments", button.dataset.id, "Conta removida.");
     if (action === "delete-debt") deleteItem("debts", button.dataset.id, "Contrato removido.");
+    if (action === "delete-vehicle") deleteVehicle(button.dataset.id);
     if (action === "delete-investment") deleteItem("investments", button.dataset.id, "Investimento removido.");
     if (action === "delete-credit-card") deleteItem("creditCards", button.dataset.id, "Cartao removido.");
     if (action === "delete-card-purchase") deleteItem("cardPurchases", button.dataset.id, "Compra removida.");
@@ -546,6 +580,9 @@
   });
 
   window.addEventListener("resize", debounce(drawVisibleCharts, 120));
+  window.matchMedia('(max-width: 759px)').addEventListener('change', () => {
+    if (state.ui.activeTab === 'dashboard') renderKeepingScroll();
+  });
 
   function createRemoteStore() {
     const config = window.PONTE_SUPABASE_CONFIG || {};
@@ -598,6 +635,7 @@
       remoteSession.status = "ready";
       startRemoteAutoSync();
       renderKeepingScroll();
+      restoreSavedScrollPosition();
       refreshPaypalBalance(false);
     } catch (error) {
       remoteSession.status = "error";
@@ -811,6 +849,7 @@
   }
 
   async function loadRemoteStateForHousehold(householdId, createIfEmpty) {
+    const generation = stateGeneration;
     const household = await fetchRemoteHousehold(householdId);
     if (!household) throw new Error("Familia nao encontrada para este usuario.");
     remoteSession.householdId = household.id;
@@ -825,13 +864,12 @@
       .maybeSingle();
     if (error) throw error;
 
+    if (generation !== stateGeneration || resetInProgress) return;
     let shouldRewriteRemoteState = false;
     if (data?.state && Object.keys(data.state).length) {
-      const remoteState = normalizeState(data.state);
-      const mergedCrypto = mergeCryptoAssetsWithLocal(remoteState.cryptoAssets, state.cryptoAssets);
-      const mergedLocalData = mergeLocalCollections(remoteState, state, ["incomeSources", "workIncomes", "workScheduleOverrides", "familyMembers", "familyBusinesses", "shoppingLists", "receipts"]);
-      shouldRewriteRemoteState = cryptoAssetsWereNormalized(data.state.cryptoAssets, remoteState.cryptoAssets) || mergedCrypto.changed || mergedLocalData.changed;
-      state = { ...remoteState, ...mergedLocalData.collections, cryptoAssets: mergedCrypto.items, deletedItems: mergeDeletedItems(remoteState.deletedItems, state.deletedItems) };
+      const merged = reconcileRemoteState(data.state, state);
+      shouldRewriteRemoteState = merged.changed;
+      state = merged.state;
     } else if (!createIfEmpty) {
       state = createInitialState();
     }
@@ -943,15 +981,33 @@
     }, 650);
   }
 
-  async function flushRemoteState() {
+  function flushRemoteState() {
+    const pending = remoteSaveQueue.catch(() => {}).then(writeRemoteState);
+    remoteSaveQueue = pending;
+    return pending;
+  }
+
+  async function writeRemoteState() {
     if (!remoteStore.enabled || !remoteSession.user || !remoteSession.householdId) return;
     clearTimeout(remoteSaveTimer);
     remoteSaveTimer = null;
     remoteSession.saving = true;
     const now = new Date().toISOString();
-    const nextState = withCurrentWorkOwner({ ...state, settings: { ...state.settings, dataMode: "online" } });
 
     try {
+      // A reset on another device must win over an older local snapshot.
+      const current = await remoteStore.client.from("app_states").select("state,updated_at")
+        .eq("household_id", remoteSession.householdId).maybeSingle();
+      if (current.error) throw current.error;
+      if (resetTime(current.data?.state) > resetTime(state)) {
+        state = { ...normalizeState(current.data.state), ui: state.ui };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        remoteSession.lastSyncedAt = current.data.updated_at;
+        lastLocalChangeAt = 0;
+        renderKeepingScroll();
+        return;
+      }
+      const nextState = withCurrentWorkOwner({ ...state, settings: { ...state.settings, dataMode: "online" } });
       const { data, error } = await remoteStore.client.rpc("save_app_state", {
         target_household_id: remoteSession.householdId,
         app_state: nextState
@@ -999,6 +1055,7 @@
   async function refreshAppInPlace() {
     const splash = document.getElementById("refresh-splash");
     const startedAt = Date.now();
+    saveScrollPositionForRestore();
     if (splash) {
       splash.classList.add("is-visible");
       splash.setAttribute("aria-hidden", "false");
@@ -1018,7 +1075,6 @@
       const url = new URL(window.location.href);
       url.searchParams.set("refresh", `manual-${Date.now()}`);
       if (state.ui.activeTab) url.searchParams.set("tab", state.ui.activeTab);
-      saveScrollPositionForRestore();
       window.location.replace(url.toString());
     } catch (error) {
       remoteSession.error = error.message || "Falha ao atualizar.";
@@ -1059,6 +1115,7 @@
   }
 
   function requestRemotePull(reason = "auto") {
+    if (resetInProgress) return;
     if (!remoteStore.enabled || remoteSession.status !== "ready" || !remoteSession.householdId) return;
     if (remoteSession.saving || remoteSaveTimer || Date.now() - lastLocalChangeAt < 2500) return;
     pullRemoteStateIfNewer(reason).catch((error) => {
@@ -1073,7 +1130,8 @@
   }
 
   async function pullRemoteStateIfNewer(reason = "auto") {
-    if (remotePullInFlight || !remoteStore.enabled || !remoteSession.householdId) return;
+    if (resetInProgress || remotePullInFlight || !remoteStore.enabled || !remoteSession.householdId) return;
+    const generation = stateGeneration;
     remotePullInFlight = true;
     try {
       const { data, error } = await remoteStore.client
@@ -1082,6 +1140,7 @@
         .eq("household_id", remoteSession.householdId)
         .maybeSingle();
       if (error) throw error;
+      if (generation !== stateGeneration || resetInProgress) return;
       if (!data?.state || !Object.keys(data.state).length) return;
 
       const remoteUpdatedAt = Date.parse(data.updated_at || "") || 0;
@@ -1089,15 +1148,13 @@
       if (remoteUpdatedAt && localSyncedAt && remoteUpdatedAt <= localSyncedAt) return;
       if (localSyncedAt && lastLocalChangeAt > localSyncedAt) return;
 
-      const remoteState = normalizeState(data.state);
-      const mergedCrypto = mergeCryptoAssetsWithLocal(remoteState.cryptoAssets, state.cryptoAssets);
-      const mergedLocalData = mergeLocalCollections(remoteState, state, ["incomeSources", "workIncomes", "workScheduleOverrides", "familyMembers", "familyBusinesses", "shoppingLists", "receipts"]);
-      state = { ...remoteState, ...mergedLocalData.collections, cryptoAssets: mergedCrypto.items, deletedItems: mergeDeletedItems(remoteState.deletedItems, state.deletedItems) };
+      const merged = reconcileRemoteState(data.state, state);
+      state = merged.state;
       state.settings.dataMode = "online";
       if (remoteSession.household?.name) state.settings.familyName = remoteSession.household.name;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       remoteSession.lastSyncedAt = data.updated_at || new Date().toISOString();
-      if (mergedCrypto.changed || mergedLocalData.changed) await flushRemoteState();
+      if (merged.changed) await flushRemoteState();
       await loadRemoteHouseholdMembers();
       renderKeepingScroll();
       if (reason !== "timer") showToast("Dados atualizados da nuvem.");
@@ -1145,7 +1202,10 @@
       gender: String(raw.profile?.gender || "").trim(),
       language: String(raw.profile?.language || base.profile.language).trim() || base.profile.language
     };
+    const vehicles = normalizeVehicles(raw.vehicles, raw.vehicle, base.vehicle, number(raw.vehicleSchemaVersion));
     const normalized = {
+      resetAt: raw.resetAt || "",
+      vehicleSchemaVersion: 2,
       settings,
       profile,
       ui: {
@@ -1173,7 +1233,8 @@
       fxQuotes: raw.fxQuotes || base.fxQuotes,
       paypal: normalizePaypalState(raw.paypal || base.paypal),
       web3Wallet: normalizeWeb3Wallet(raw.web3Wallet || base.web3Wallet),
-      vehicle: normalizeVehicle(raw.vehicle, base.vehicle),
+      vehicles,
+      vehicle: vehicles[0] || base.vehicle,
       vehicleMaintenance: Array.isArray(raw.vehicleMaintenance) ? raw.vehicleMaintenance : base.vehicleMaintenance,
       incomeSources: normalizeIncomeSources(raw.incomeSources, base.incomeSources),
       workIncomes: normalizeWorkItems(raw.workIncomes, base.workIncomes),
@@ -1189,9 +1250,10 @@
     if (normalized.ui.selectedDashboardAccountId && !normalized.bankAccounts.some((account) => account.id === normalized.ui.selectedDashboardAccountId && account.active !== false)) {
       normalized.ui.selectedDashboardAccountId = "";
     }
-    if (urlParams.get("tab") === "dashboard" || urlParams.get("home") === "1") {
-      normalized.ui.activeTab = "dashboard";
-    }
+    const requestedTab = urlParams.get("tab");
+    const validTabs = ["dashboard", "accounts", "crypto", "wise", "reports", "settings"];
+    if (validTabs.includes(requestedTab)) normalized.ui.activeTab = requestedTab;
+    else if (urlParams.get("home") === "1") normalized.ui.activeTab = "dashboard";
     return normalized;
   }
 
@@ -1424,11 +1486,25 @@
     const parsed = splitVehicleModel(vehicle.model || "");
     return {
       ...vehicle,
+      id: String(vehicle.id || "").trim() || uid("vh"),
       brand: String(vehicle.brand || parsed.brand || "").trim(),
       model: String(vehicle.brand ? vehicle.model || "" : parsed.model || vehicle.model || "").trim(),
       insurancePaymentType: paymentType,
       insuranceCardId: paymentType === "card" ? String(vehicle.insuranceCardId || "") : ""
     };
+  }
+
+  function normalizeVehicles(rawVehicles, legacyVehicle, baseVehicle, schemaVersion = 2) {
+    const source = Array.isArray(rawVehicles) ? rawVehicles : [];
+    const legacy = legacyVehicle && typeof legacyVehicle === "object" ? normalizeVehicle(legacyVehicle, baseVehicle) : null;
+    const list = source.map((item) => normalizeVehicle(item, baseVehicle));
+    // The legacy singleton is only a migration source, never a second source of truth.
+    if ((!Array.isArray(rawVehicles) || (schemaVersion < 2 && !list.length)) && legacy && hasVehicleData(legacy)) list.push(legacy);
+    return list.filter(hasVehicleData);
+  }
+
+  function hasVehicleData(vehicle = {}) {
+    return Boolean(String(vehicle.brand || vehicle.model || vehicle.plate || vehicle.shakenDueDate || vehicle.insuranceCompany || "").trim() || number(vehicle.insuranceAmount) > 0);
   }
 
   function normalizeCryptoSymbol(value) {
@@ -1611,6 +1687,28 @@
     }, { collections: {}, changed: false });
   }
 
+  function resetTime(snapshot) {
+    return Date.parse(snapshot?.resetAt || "") || 0;
+  }
+
+  function reconcileRemoteState(rawRemote, local) {
+    const remote = normalizeState(rawRemote);
+    const remoteReset = resetTime(remote);
+    const localReset = resetTime(local);
+    if (remoteReset !== localReset) {
+      return { state: { ...(remoteReset > localReset ? remote : local), ui: local.ui }, changed: localReset > remoteReset };
+    }
+    const crypto = mergeCryptoAssetsWithLocal(remote.cryptoAssets, local.cryptoAssets);
+    const merged = mergeLocalCollections(remote, local, ["incomeSources", "workIncomes", "workScheduleOverrides", "familyMembers", "familyBusinesses", "shoppingLists", "receipts", "vehicles"]);
+    const deletedItems = mergeDeletedItems(remote.deletedItems, local.deletedItems);
+    const next = { ...remote, ...merged.collections, cryptoAssets: crypto.items, deletedItems, ui: local.ui };
+    for (const [collection, deletions] of Object.entries(deletedItems)) {
+      if (Array.isArray(next[collection])) next[collection] = next[collection].filter(item => !deletions[item.id] || itemSyncTime(item) > Date.parse(deletions[item.id]));
+    }
+    next.vehicle = next.vehicles[0] || createInitialState().vehicle;
+    return { state: next, changed: merged.changed || crypto.changed || cryptoAssetsWereNormalized(rawRemote.cryptoAssets, remote.cryptoAssets) };
+  }
+
   function mergeCollectionWithLocal(remoteItems = [], localItems = [], collection = "") {
     const remoteList = Array.isArray(remoteItems) ? remoteItems : [];
     const localList = Array.isArray(localItems) ? localItems : [];
@@ -1783,6 +1881,7 @@
         insuranceCardId: "",
         currency: "JPY"
       },
+      vehicles: [],
       vehicleMaintenance: [],
       incomeSources: [],
       workIncomes: [],
@@ -1854,6 +1953,7 @@
   }
 
   function render() {
+    if (window.NekumaDashboard?.isDragging()) return;
     document.body.classList.toggle("auth-mode", remoteStore.enabled && remoteSession.status !== "ready");
     document.body.classList.toggle("online-mode", remoteStore.enabled && remoteSession.status === "ready");
     updateAppGreeting();
@@ -1875,6 +1975,10 @@
       item.classList.toggle("is-active", item.dataset.tab === state.ui.activeTab);
     });
 
+    window.NekumaDashboard?.setup(app, state.ui.dashboardLayouts || {}, layouts => {
+      state.ui.dashboardLayouts = layouts;
+      saveState();
+    }, state.ui.selectedMonth);
     refreshIcons();
     setupDashboardAccountCarousel();
     setupCreditCardHomeCarousel();
@@ -1903,6 +2007,7 @@
 
   function restoreSavedScrollPosition() {
     try {
+      if (remoteStore.enabled && remoteSession.status !== "ready") return;
       const raw = sessionStorage.getItem(RESTORE_SCROLL_KEY);
       if (!raw) return;
       sessionStorage.removeItem(RESTORE_SCROLL_KEY);
@@ -2545,9 +2650,9 @@
             <article class="content-panel vehicle-panel">
               <div class="panel-head">
                 <h2>Veiculo Japao</h2>
-                <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicle">Editar</button>
+                <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicle">Novo</button>
               </div>
-              ${renderVehiclePanel(3)}
+              ${renderVehiclePanel(null)}
             </article>
           </section>
 
@@ -2587,6 +2692,8 @@
           <article class="content-panel family-pie-panel">
             ${renderFamilyFinancePiePanel(summary)}
           </article>
+
+          ${window.NekumaDashboard?.expenses(countryExpenseModels(), formatMonthLabel(state.ui.selectedMonth)) || ''}
 
           <article class="content-panel recent-transactions-panel">
             <div class="panel-head">
@@ -2651,9 +2758,9 @@
 
   function ensureDashboardCurrentMonth() {
     const month = currentMonth();
-    if (state.ui.selectedMonth === month || dashboardMonthAnchored === month) return;
-    state.ui.selectedMonth = month;
+    if (dashboardMonthAnchored === month) return;
     dashboardMonthAnchored = month;
+    state.ui.selectedMonth = month;
   }
 
   function renderBalanceOverview(summary) {
@@ -2756,7 +2863,14 @@
     const workMonth = addMonths(paymentMonth, -1);
     const factoryCards = factorySources()
       .map((source) => {
-        const estimate = estimateFactorySourceSalary(source, workMonth);
+        const estimate = estimateFactorySourceSalary(source, workMonth, null);
+        const paidBonusTotal = salaryBonusesForMonth(source, paymentMonth)
+          .reduce((total, bonus) => total + number(bonus.amount), 0);
+        if (paidBonusTotal > 0) {
+          estimate.configured = true;
+          estimate.bonus = paidBonusTotal;
+          estimate.total += paidBonusTotal;
+        }
         if (!estimate.configured) return null;
         const paid = isFactorySalaryPaid(source.id, workMonth);
         const date = factorySalaryDueDate(source, paymentMonth);
@@ -2996,7 +3110,7 @@
           <div class="panel-head">
             <h2>Veiculo Japao</h2>
             <div class="chips">
-              <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicle">Editar</button>
+              <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicle">Novo veiculo</button>
               <button class="small-action" type="button" data-action="open-modal" data-modal="vehicleMaintenance">Manutencao</button>
             </div>
           </div>
@@ -4311,6 +4425,108 @@
     `;
   }
 
+  function expenseCategory(item) {
+    const text = normalizeLookupText(`${item.category || ''} ${item.type || ''} ${item.kind || ''}`);
+    if (/veiculo|vehicle|shaken|seguro.*carro|manutenc|oleo/.test(text)) return ['vehicle', 'Veículo', '#287f98'];
+    if (/moradia|aluguel|housing|\b(rent|agua|luz|gas|internet)\b/.test(text)) return ['housing', 'Moradia', '#36946d'];
+    if (/cripto|crypto/.test(text)) return ['crypto', 'Cripto', '#c78512'];
+    if (/consorcio|consortium/.test(text)) return ['consortium', 'Consórcio', '#98613f'];
+    if (/financiamento|debt|emprestimo/.test(text)) return ['debt', 'Financiamento', '#c85b56'];
+    if (/invest/.test(text)) return ['investment', 'Investimentos', '#7563ad'];
+    if (item.cardId || /cartao|card/.test(text)) return ['card', 'Cartão de crédito', '#4778c7'];
+    if (/subscri|assinatura/.test(text)) return ['subscription', 'Subscrições', '#bd5e8c'];
+    if (/aliment|food|supermerc|combini|kombini|restaurante/.test(text)) return ['food', 'Alimentação', '#b07829'];
+    if (/saude|health|farmacia/.test(text)) return ['health', 'Saúde', '#8d789e'];
+    return ['other', 'Outras despesas', '#708079'];
+  }
+
+  function countryExpenseModels(month = state.ui.selectedMonth) {
+    const rows = [];
+    const transactions = monthTransactions(month, 'global').filter(item => allOutflowTypes.includes(item.type));
+    const used = new Set();
+    const pendingCountry = [];
+    const bankName = item => {
+      const bank = bankAccountById(item.bankAccountId);
+      const card = creditCardById(item.cardId);
+      return bank ? bankAccountName(bank) : card?.issuer || item.bankName || 'Banco não informado';
+    };
+    const add = item => {
+      if (number(item.amount) <= 0) return;
+      const bank = bankAccountById(item.bankAccountId);
+      rows.push({ ...item, country: bank?.country || item.country, bankName: bankName(item) });
+    };
+    // Invoice purchases replace the invoice payment, rather than adding to it.
+    (state.creditCards || []).forEach(card => {
+      const detail = cardPurchaseRowsForCard(card.id, month);
+      detail.forEach(add);
+      const payments = transactions.filter(tx => tx.paymentRef === `card:${card.id}` ||
+        (tx.type === 'card' && tx.country === card.country && tx.title === `Fatura ${card.nickname || card.issuer}`));
+      payments.forEach(tx => used.add(tx.id));
+      const paid = payments.reduce((total, tx) => total + convert(tx.amount, tx.currency, card.currency, latestRate(month)), 0);
+      const detailed = detail.reduce((total, item) => total + number(item.amount), 0);
+      const total = Math.max(creditCardMonthBill(card, month).total, paid);
+      add({ country: card.country, cardId: card.id, type: 'card', amount: Math.max(0, total - detailed), currency: card.currency });
+    });
+    transactions.filter(tx => !used.has(tx.id)).forEach(tx => {
+      const debt = (state.debts || []).find(item => tx.paymentRef === `debt:${item.id}` || tx.title === `Parcela ${item.title}`);
+      add({ ...tx, category: debt?.type === 'consortium' ? 'Consórcio' : tx.category, bankName: debt?.provider });
+    });
+    vehicleMonthlyCosts(month).filter(item => !isVehiclePaymentPaid(item.id, month)).forEach(add);
+    autoPaidSubscriptionEntries(month, 'global').forEach(item => add({ ...item, bankAccountId: findItem('subscriptions', item.id)?.bankAccountId }));
+    plannedSubscriptionEntries(month, 'global').forEach(item => add({ ...item, bankAccountId: findItem('subscriptions', item.id)?.bankAccountId }));
+    plannedCommitmentEntries(month, 'global').filter(item => allOutflowTypes.includes(item.type)).forEach(item => {
+      const source = findItem('commitments', item.id);
+      add({ ...item, bankAccountId: source?.bankAccountId, bankName: source?.provider });
+    });
+    plannedDebtEntries(month, 'global').forEach(item => {
+      const source = findItem('debts', item.debtId || item.id);
+      add({ ...item, category: source?.type === 'consortium' ? 'Consórcio' : 'Financiamento', bankName: source?.provider, bankAccountId: source?.bankAccountId });
+    });
+    (state.housingCards || []).filter(card => card.active !== false).forEach(card => {
+      housingCardMonthRows(card, month).filter(item => !item.paid).forEach(item => {
+        // Card housing already entered as a purchase must not appear a second time.
+        const title = `${item.label} - ${card.name || 'Moradia'}`;
+        const exists = item.paymentMethod === 'card' && (state.cardPurchases || []).some(p => p.cardId === item.cardId && p.title === title && p.firstBillMonth === month);
+        if (!exists) add({ ...item, country: card.country, category: 'Moradia' });
+      });
+    });
+    const matchedContributions = new Set();
+    (state.investments || []).forEach(item => {
+      if (item.active === false || (item.createdAt && item.createdAt.slice(0, 7) > month)) return;
+      const matches = transactions.filter(tx => !matchedContributions.has(tx.id) && expenseCategory(tx)[0] === 'investment' && tx.country === item.country &&
+        (tx.investmentId === item.id || tx.title === item.title || (item.provider && bankName(tx) === item.provider)));
+      matches.forEach(tx => matchedContributions.add(tx.id));
+      const recorded = matches.reduce((sum, tx) => sum + convert(tx.amount, tx.currency, item.currency, latestRate(month)), 0);
+      add({ ...item, type: 'investment', amount: Math.max(0, number(item.monthlyContribution) - recorded), bankName: item.provider });
+    });
+    const matchedCrypto = new Set();
+    (state.cryptoAssets || []).filter(item => item.purchaseDate?.slice(0, 7) === month).forEach(item => {
+      const country = bankAccountById(item.bankAccountId)?.country || item.country || ({ BRL: 'brasil', JPY: 'japao' }[item.costCurrency]);
+      const recorded = transactions.find(tx => !matchedCrypto.has(tx.id) && expenseCategory(tx)[0] === 'crypto' &&
+        (tx.cryptoAssetId === item.id || (tx.date === item.purchaseDate && tx.currency === item.costCurrency && number(tx.amount) === number(item.costAmount))));
+      if (recorded) { matchedCrypto.add(recorded.id); return; }
+      if (!country && number(item.costAmount) > 0) { pendingCountry.push({ id: item.id, name: item.symbol }); return; }
+      add({ ...item, country, category: 'Cripto', amount: item.costAmount, currency: item.costCurrency });
+    });
+    const countries = new Set(activeBankAccounts().map(account => account.country).filter(country => ['brasil', 'japao'].includes(country)));
+    rows.forEach(row => { if (['brasil', 'japao'].includes(row.country)) countries.add(row.country); });
+    if (!countries.size) countries.add('japao');
+    return [...countries].sort().map((country, index) => {
+      const currency = country === 'brasil' ? 'BRL' : 'JPY';
+      const categories = new Map();
+      rows.filter(row => row.country === country).forEach(row => {
+        const [key, label, color] = expenseCategory(row);
+        const amount = convert(number(row.amount), row.currency, currency, latestRate(month));
+        const category = categories.get(key) || { key, label, color, amount: 0, banks: new Map() };
+        category.amount += amount;
+        category.banks.set(row.bankName, (category.banks.get(row.bankName) || 0) + amount);
+        categories.set(key, category);
+      });
+      const items = [...categories.values()].sort((a, b) => b.amount - a.amount).map(item => ({ ...item, banks: [...item.banks].map(([name, amount]) => ({ name, amount })) }));
+      return { country, currency, categories: items, total: items.reduce((sum, item) => sum + item.amount, 0), pendingCountry: index === 0 ? pendingCountry : [] };
+    });
+  }
+
   function renderFamilyFinancePiePanel(summary) {
     const currency = primaryCurrency();
     const rate = latestRate(state.ui.selectedMonth);
@@ -4967,6 +5183,44 @@
     `;
   }
 
+  function renderVehiclesSettingsPanel() {
+    const vehicles = vehicleList();
+    if (!vehicles.length) {
+      return `
+        <div class="empty-action">
+          <p class="empty-state">Nenhum veiculo cadastrado.</p>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="vehicle">Cadastrar veiculo</button>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="list vehicle-settings-list">
+        ${vehicles.map((vehicle) => {
+          const logo = vehicleBrandLogoAsset(vehicle);
+          const brand = vehicleBrand(vehicle);
+          const model = vehicleModelName(vehicle);
+          return `
+            <div class="list-row compact vehicle-settings-row">
+              <span class="vehicle-settings-logo ${logo ? "has-logo" : ""}" aria-hidden="true">
+                ${logo ? `<img src="./assets/vehicles/${escapeAttr(logo.file)}" alt="" loading="lazy" onerror="this.remove();" />` : "V"}
+              </span>
+              <div>
+                <p class="row-title">${escapeHtml([brand, model].filter(Boolean).join(" ") || "Veiculo")}</p>
+                <p class="row-meta">Placa: ${escapeHtml(vehicle.plate || "--")} - Shaken: ${vehicle.shakenDueDate ? formatShortDate(vehicle.shakenDueDate) : "--"}</p>
+                ${vehicleHasInsurance(vehicle) ? `<p class="row-meta">Seguro: ${formatMoneyWithPrimary(vehicle.insuranceAmount || 0, "JPY", state.ui.selectedMonth)}</p>` : ""}
+              </div>
+              <div class="row-actions">
+                <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicle" data-id="${escapeAttr(vehicle.id)}">Editar</button>
+                <button class="small-action ghost" type="button" data-action="delete-vehicle" data-id="${escapeAttr(vehicle.id)}">Excluir</button>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
   function renderWorkCalendarPanel() {
     const source = primaryFactorySource();
     const month = state.ui.selectedMonth;
@@ -5077,13 +5331,10 @@
   }
 
   function renderVehiclePanel(limit) {
-    const vehicle = state.vehicle || {};
-    const hasInsurance = vehicleHasInsurance(vehicle);
-    const insuranceCard = vehicle.insurancePaymentType === "card" ? creditCardById(vehicle.insuranceCardId) : null;
-    const brand = vehicleBrand(vehicle);
-    const model = vehicleModelName(vehicle);
+    const vehicles = vehicleList();
+    const visible = limit ? vehicles.slice(0, limit) : vehicles;
 
-    if (!brand && !model && !vehicle.plate) {
+    if (!visible.length) {
       return `
         <div class="empty-action">
           <p class="empty-state">Nenhum veiculo cadastrado.</p>
@@ -5093,8 +5344,23 @@
     }
 
     return `
+      <div class="vehicle-list">
+        ${visible.map((vehicle) => renderVehicleCard(vehicle)).join("")}
+      </div>
+    `;
+  }
+
+  function renderVehicleCard(vehicle) {
+    const hasInsurance = vehicleHasInsurance(vehicle);
+    const insuranceCard = vehicle.insurancePaymentType === "card" ? creditCardById(vehicle.insuranceCardId) : null;
+    const brand = vehicleBrand(vehicle);
+    const model = vehicleModelName(vehicle);
+    const logo = vehicleBrandLogoAsset(vehicle);
+
+    return `
       <div class="vehicle-card">
-        <div class="vehicle-visual" aria-hidden="true">
+        <div class="vehicle-visual ${logo ? "has-logo" : ""}" aria-hidden="true">
+          ${logo ? `<img class="vehicle-brand-logo" src="./assets/vehicles/${escapeAttr(logo.file)}" alt="" loading="lazy" onerror="this.closest('.vehicle-visual')?.classList.remove('has-logo');this.remove();" />` : ""}
           <div class="vehicle-image">
             <span class="vehicle-car-body"></span>
             <span class="vehicle-car-window"></span>
@@ -5121,6 +5387,10 @@
           ${hasInsurance ? `<strong>${formatMoneyWithPrimary(vehicle.insuranceAmount || 0, "JPY", state.ui.selectedMonth)}</strong>` : ""}
           ${insuranceCard || vehicle.insuranceCompany ? `<small>${escapeHtml(insuranceCard?.nickname || insuranceCard?.issuer || vehicle.insuranceCompany)}</small>` : ""}
         </label>
+        <div class="vehicle-card-actions">
+          <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicle" data-id="${escapeAttr(vehicle.id)}" title="Editar veiculo" aria-label="Editar ${escapeAttr(model)}"><i data-lucide="pencil" aria-hidden="true"></i><span>Editar</span></button>
+          <button class="small-action ghost" type="button" data-action="delete-vehicle" data-id="${escapeAttr(vehicle.id)}" title="Excluir veiculo" aria-label="Excluir ${escapeAttr(model)}"><i data-lucide="trash-2" aria-hidden="true"></i><span>Excluir</span></button>
+        </div>
       </div>
     `;
   }
@@ -6607,6 +6877,10 @@
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="crypto">
+        <div class="two-cols">
+          <div class="field"><label for="cryptoCountry">País</label><select id="cryptoCountry" name="country" required><option value="">Selecione</option><option value="brasil" ${selectedAttr(item?.country || (item?.costCurrency === 'BRL' ? 'brasil' : ''), 'brasil')}>Brasil</option><option value="japao" ${selectedAttr(item?.country || (item?.costCurrency === 'JPY' ? 'japao' : ''), 'japao')}>Japão</option></select></div>
+          <div class="field"><label for="cryptoBank">Conta de origem</label><select id="cryptoBank" name="bankAccountId"><option value="">Não informada</option>${activeBankAccounts().map(account => `<option value="${escapeAttr(account.id)}" ${selectedAttr(item?.bankAccountId, account.id)}>${escapeHtml(bankAccountName(account))}</option>`).join('')}</select></div>
+        </div>
         ${editHidden(item)}
         <div class="three-cols">
           <div class="field">
@@ -6776,8 +7050,8 @@
     `;
   }
 
-  function renderVehicleModal() {
-    const vehicle = state.vehicle || {};
+  function renderVehicleModal(item = null) {
+    const vehicle = item || {};
     const cards = state.creditCards || [];
     const insurancePaymentType = normalizeVehicleInsurancePaymentType(vehicle);
     const brand = vehicleBrand(vehicle);
@@ -6788,10 +7062,12 @@
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="vehicle">
+        <input type="hidden" name="id" value="${escapeAttr(vehicle.id || "")}" />
         <div class="two-cols">
           <div class="field">
             <label for="vehicleBrand">Marca</label>
-            <input id="vehicleBrand" name="brand" value="${escapeAttr(brand)}" placeholder="Ex: Daihatsu" />
+            <input id="vehicleBrand" name="brand" list="vehicle-brand-options" value="${escapeAttr(brand)}" placeholder="Ex: Daihatsu" />
+            <datalist id="vehicle-brand-options">${vehicleBrandAssets.map(asset => `<option value="${escapeAttr(asset.aliases[0])}"></option>`).join("")}</datalist>
           </div>
           <div class="field">
             <label for="vehicleModel">Modelo</label>
@@ -6996,7 +7272,7 @@
           </div>
           <div class="three-cols">
             <div class="field">
-              <label for="salaryNightStart">Noturno inicio</label>
+              <label for="salaryNightStart">Adicional noturno</label>
               <input id="salaryNightStart" name="salaryNightStart" type="time" value="${escapeAttr(item?.salaryNightStart || "22:00")}" />
             </div>
             <div class="field">
@@ -7257,7 +7533,7 @@
       if (!source.id || normalizedSourceType(source.type) !== "factory") return null;
       const workMonth = refMonth || addMonths(state.ui.selectedMonth, -1);
       const paymentMonth = refPaymentMonth || addMonths(workMonth, 1);
-      const estimate = estimateFactorySourceSalary(source, workMonth);
+      const estimate = estimateFactorySourceSalary(source, workMonth, paymentMonth);
       if (!estimate.configured) return null;
       const date = factorySalaryDueDate(source, paymentMonth);
       return {
@@ -8000,6 +8276,8 @@
     const data = formData(form);
     const symbol = normalizeCryptoSymbol(data.symbol || "BTC");
     const updated = upsertItem("cryptoAssets", data.id, {
+      country: bankAccountById(data.bankAccountId)?.country || data.country,
+      bankAccountId: data.bankAccountId || '',
       symbol,
       customName: data.customName.trim(),
       quantity: cryptoQuantityText(data.quantity),
@@ -8065,7 +8343,8 @@
       showToast("Selecione o cartao do seguro.");
       return;
     }
-    state.vehicle = {
+    state.vehicles = normalizeVehicles(state.vehicles, state.vehicle, createInitialState().vehicle);
+    const updated = upsertItem("vehicles", data.id, {
       brand: data.brand.trim(),
       model: data.model.trim(),
       plate: data.plate.trim(),
@@ -8078,11 +8357,26 @@
       insuranceCardId: insurancePaymentType === "card" ? data.insuranceCardId : "",
       currency: "JPY",
       updatedAt: new Date().toISOString()
-    };
+    });
+    state.vehicles = normalizeVehicles(state.vehicles, null, createInitialState().vehicle);
+    state.vehicle = state.vehicles[0] || createInitialState().vehicle;
     saveState({ remoteNow: true });
     closeModal();
     render();
-    showToast("Veiculo salvo.");
+    showToast(updated ? "Veiculo atualizado." : "Veiculo salvo.");
+  }
+
+  function deleteVehicle(id) {
+    if (!id) return;
+    const ok = window.confirm("Excluir este veiculo?");
+    if (!ok) return;
+    state.vehicles = (state.vehicles || []).filter((vehicle) => vehicle.id !== id);
+    state.deletedItems = normalizeDeletedItems(state.deletedItems);
+    state.deletedItems.vehicles = { ...(state.deletedItems.vehicles || {}), [id]: new Date().toISOString() };
+    state.vehicle = state.vehicles[0] || createInitialState().vehicle;
+    saveState({ remoteNow: true });
+    render();
+    showToast("Veiculo removido.");
   }
 
   function saveVehicleMaintenance(form) {
@@ -8332,6 +8626,8 @@
       bankAccountId: data.bankAccountId || "",
       paymentMethod: data.paymentMethod || "balance",
       note: monthlyPaymentNote(target, data),
+      paymentRef: data.paymentRef,
+      paymentKey: key,
       createdAt: new Date().toISOString(),
       createdBy: author.id,
       createdByName: author.name
@@ -8612,14 +8908,46 @@
     showToast(message);
   }
 
-  function resetDemo() {
+  async function resetDemo() {
+    if (resetInProgress) return;
     const ok = window.confirm(remoteStore.enabled ? "Resetar dados desta familia na nuvem?" : "Resetar todos os dados locais?");
     if (!ok) return;
+    if (remoteStore.enabled && remoteSession.status !== "ready") {
+      showToast("Conecte sua conta antes de resetar os dados da familia.");
+      return;
+    }
+    resetInProgress = true;
+    stateGeneration += 1;
+    clearTimeout(remoteSaveTimer);
+    remoteSaveTimer = null;
+    stopRemoteAutoSync();
+    await remoteSaveQueue.catch(() => {});
+    const previousUi = state.ui;
     state = createInitialState();
-    if (remoteStore.enabled && remoteSession.status === "ready") state.settings.dataMode = "online";
-    saveState();
-    render();
-    showToast("Dados resetados.");
+    state.resetAt = new Date().toISOString();
+    state.ui = { ...state.ui, activeTab: previousUi.activeTab };
+    for (const key of [...LEGACY_STORAGE_KEYS, DUE_ALERT_KEY, SALARY_RECEIPT_ALERT_KEY]) localStorage.removeItem(key);
+    if (remoteStore.enabled && remoteSession.status === "ready") {
+      state.settings.dataMode = "online";
+      if (remoteSession.household?.name) state.settings.familyName = remoteSession.household.name;
+    }
+    lastLocalChangeAt = Date.now();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    renderKeepingScroll();
+    try {
+      if (remoteStore.enabled && remoteSession.status === "ready") {
+        await flushRemoteState();
+        lastLocalChangeAt = Date.parse(remoteSession.lastSyncedAt || "") || Date.now();
+      }
+      showToast("Dados resetados.");
+    } catch (error) {
+      remoteSession.error = error.message || "Nao foi possivel resetar na nuvem.";
+      showToast("Dados limpos neste aparelho. Falha ao salvar o reset na nuvem; tente sincronizar novamente.");
+    } finally {
+      resetInProgress = false;
+      startRemoteAutoSync();
+      renderKeepingScroll();
+    }
   }
 
   function updateTransferPreview() {
@@ -9244,8 +9572,9 @@
     const ids = Array.from(new Set(assets.map((item) => cryptoCatalog[item.symbol]?.id).filter(Boolean)));
     if (!ids.length) return;
     const updatedAt = state.cryptoQuotes?.updatedAt ? new Date(state.cryptoQuotes.updatedAt).getTime() : 0;
-    if (!force && Date.now() - updatedAt < 60000) return;
+    if (!force && Date.now() - Math.max(updatedAt, cryptoLastAttemptAt) < 60000) return;
 
+    cryptoLastAttemptAt = Date.now();
     cryptoFetchInFlight = true;
     state.cryptoQuotes = {
       ...(state.cryptoQuotes || {}),
@@ -9306,8 +9635,9 @@
   async function refreshFxQuotes(force) {
     if (fxFetchInFlight) return;
     const updatedAt = state.fxQuotes?.updatedAt ? new Date(state.fxQuotes.updatedAt).getTime() : 0;
-    if (!force && Date.now() - updatedAt < 300000) return;
+    if (!force && Date.now() - Math.max(updatedAt, fxLastAttemptAt) < 300000) return;
 
+    fxLastAttemptAt = Date.now();
     fxFetchInFlight = true;
     state.fxQuotes = {
       ...(state.fxQuotes || {}),
@@ -9724,7 +10054,7 @@
 
     if (country === "global" || country === "japao") {
       vehicleMonthlyCosts(month).forEach((item) => {
-        const isPlannedVehicle = item.id === "vehicle-insurance" || item.id === "vehicle-shaken";
+        const isPlannedVehicle = isPlannedVehicleCost(item);
         if (isPlannedVehicle && isVehiclePaymentPaid(item.id, month)) return;
         const converted = convert(item.amount, item.currency, targetCurrency, rate);
         expenses += converted;
@@ -10145,7 +10475,7 @@
   function vehicleCalendarEntries(month, country) {
     if (country !== "global" && country !== "japao") return [];
     return vehicleMonthlyCosts(month)
-      .filter((item) => item.id === "vehicle-insurance" || item.id === "vehicle-shaken")
+      .filter((item) => isPlannedVehicleCost(item))
       .map((item) => {
         const paid = isVehiclePaymentPaid(item.id, month);
         const dueState = dueStateForDate(item.date, paid);
@@ -10345,19 +10675,22 @@
   }
 
   function vehicleInsuranceCardRows(month, country) {
-    const vehicle = state.vehicle || {};
-    const card = creditCardById(vehicle.insuranceCardId);
-    if (!card || country !== "global" && card.country !== country) return [];
-    const row = vehicleInsuranceCardRow(vehicle, card, month);
-    return row ? [row] : [];
+    return vehicleList().flatMap((vehicle) => {
+      const card = creditCardById(vehicle.insuranceCardId);
+      if (!card || country !== "global" && card.country !== country) return [];
+      const row = vehicleInsuranceCardRow(vehicle, card, month);
+      return row ? [row] : [];
+    });
   }
 
   function vehicleInsuranceCardRowsForCard(cardId, month) {
-    const vehicle = state.vehicle || {};
     const card = creditCardById(cardId);
-    if (!card || vehicle.insuranceCardId !== cardId) return [];
-    const row = vehicleInsuranceCardRow(vehicle, card, month);
-    return row ? [row] : [];
+    if (!card) return [];
+    return vehicleList().flatMap((vehicle) => {
+      if (vehicle.insuranceCardId !== cardId) return [];
+      const row = vehicleInsuranceCardRow(vehicle, card, month);
+      return row ? [row] : [];
+    });
   }
 
   function vehicleInsuranceCardRow(vehicle, card, month) {
@@ -10366,7 +10699,7 @@
     if (paymentType !== "card" || !rawAmount || !vehicle.insuranceCardId) return null;
     const rawCurrency = vehicle.currency || "JPY";
     return {
-      id: `vehicle-insurance-${month}`,
+      id: `vehicle-insurance-${vehicle.id || assetFileSlug(vehicle.plate || vehicle.model || "carro")}-${month}`,
       generated: true,
       editModal: "vehicle",
       cardId: card.id,
@@ -10724,7 +11057,7 @@
     return totals;
   }
 
-  function estimateFactorySourceSalary(source, month = state.ui.selectedMonth) {
+  function estimateFactorySourceSalary(source, month = state.ui.selectedMonth, bonusMonth = month) {
     const currency = source.currency || primaryCurrency();
     const baseHourlyRate = number(source.salaryHourlyRate || source.hourlyRate);
     const teijiHours = number(source.salaryTeijiHours);
@@ -10736,7 +11069,8 @@
     const saturdayRate = number(source.salarySaturdayRate) / 100;
     const sundayAllDay = source.salarySundayAllDay !== false;
     const hasHourlyConfig = (baseHourlyRate > 0 || normalizeSalaryProgressions(source.salaryProgressions).some((item) => item.hourlyRate > 0)) && teijiHours > 0;
-    const hasBonusConfig = salaryBonusesForMonth(source, month).some((item) => item.amount > 0);
+    const monthBonuses = bonusMonth ? salaryBonusesForMonth(source, bonusMonth) : [];
+    const hasBonusConfig = monthBonuses.some((item) => item.amount > 0);
     const configured = hasHourlyConfig || hasBonusConfig;
     const workedDays = daysInMonth(month)
       .map((date) => ({ date, day: factoryScheduleDay(source, date) }))
@@ -10756,7 +11090,7 @@
     };
     if (!configured) return base;
     if (!hasHourlyConfig) {
-      base.bonus = salaryBonusesForMonth(source, month).reduce((total, item) => total + item.amount, 0);
+      base.bonus = monthBonuses.reduce((total, item) => total + item.amount, 0);
       base.total = base.bonus;
       return base;
     }
@@ -10783,7 +11117,7 @@
         return current;
       }, base);
 
-    salary.bonus = salaryBonusesForMonth(source, month).reduce((total, item) => total + item.amount, 0);
+    salary.bonus = monthBonuses.reduce((total, item) => total + item.amount, 0);
     salary.total = salary.teiji + salary.overtime + salary.night + salary.sunday + salary.saturday + salary.bonus;
     return salary;
   }
@@ -10794,7 +11128,7 @@
 
   function salaryBonusesForMonth(source, month) {
     return normalizeSalaryBonuses(source.salaryBonuses).flatMap((bonus) => {
-      const occurrences = salaryBonusOccurrencesInMonth(bonus, month);
+      const occurrences = salaryBonusOccurrencesPaidInMonth(bonus, month);
       return Array.from({ length: occurrences }, () => ({
         ...bonus,
         amount: number(bonus.amount)
@@ -10802,11 +11136,11 @@
     });
   }
 
-  function salaryBonusOccurrencesInMonth(bonus, month) {
+  function salaryBonusOccurrencesPaidInMonth(bonus, paymentMonth) {
     const start = parseLocalDate(bonus.nextPaymentDate);
     if (!start) return 0;
-    const monthStart = parseLocalDate(dateInMonth(month, 1));
-    const monthEnd = parseLocalDate(dateInMonth(month, 31));
+    const monthStart = parseLocalDate(dateInMonth(paymentMonth, 1));
+    const monthEnd = parseLocalDate(dateInMonth(paymentMonth, 31));
     if (monthEnd < start) return 0;
 
     if (bonus.frequency === "weekly") {
@@ -10822,7 +11156,8 @@
 
     const meta = salaryBonusFrequencyMeta[bonus.frequency] || salaryBonusFrequencyMeta.monthly;
     const interval = meta.months || 1;
-    const diff = monthDiff(bonus.nextPaymentDate.slice(0, 7), month);
+    const firstPaymentMonth = bonus.nextPaymentDate.slice(0, 7);
+    const diff = monthDiff(firstPaymentMonth, paymentMonth);
     return diff >= 0 && diff % interval === 0 ? 1 : 0;
   }
 
@@ -11302,6 +11637,12 @@
     return "bank";
   }
 
+  function vehicleList() {
+    const vehicles = Array.isArray(state.vehicles) ? state.vehicles : [];
+    if (Array.isArray(state.vehicles)) return vehicles.filter(hasVehicleData);
+    return hasVehicleData(state.vehicle) ? [normalizeVehicle(state.vehicle, createInitialState().vehicle)] : [];
+  }
+
   function splitVehicleModel(value) {
     const text = String(value || "").trim().replace(/\s+/g, " ");
     if (!text) return { brand: "", model: "" };
@@ -11310,11 +11651,23 @@
     return { brand: parts[0], model: parts.slice(1).join(" ") };
   }
 
-  function vehicleBrand(vehicle = state.vehicle || {}) {
+  function vehicleBrand(vehicle = {}) {
     return String(vehicle.brand || splitVehicleModel(vehicle.model).brand || "").trim();
   }
 
-  function vehicleModelName(vehicle = state.vehicle || {}) {
+  function vehicleBrandLogoAsset(vehicle = {}) {
+    const rawBrand = vehicleBrand(vehicle);
+    const brand = normalizeLookupText(rawBrand);
+    if (!brand) return null;
+    const listed = vehicleBrandAssets.find((asset) => {
+      return asset.aliases.some((alias) => brand.includes(normalizeLookupText(alias)));
+    });
+    if (listed) return listed;
+    const fileSlug = assetFileSlug(rawBrand);
+    return fileSlug ? { key: fileSlug, file: `${fileSlug}.png`, aliases: [rawBrand] } : null;
+  }
+
+  function vehicleModelName(vehicle = {}) {
     const parsed = splitVehicleModel(vehicle.model);
     return String(vehicle.brand ? vehicle.model || "" : parsed.model || vehicle.model || "").trim();
   }
@@ -11327,31 +11680,32 @@
     }[type] || "Conta/debito";
   }
 
-  function vehicleHasInsurance(vehicle = state.vehicle || {}) {
+  function vehicleHasInsurance(vehicle = {}) {
     return number(vehicle.insuranceAmount) > 0 || Boolean(String(vehicle.insuranceCompany || "").trim());
   }
 
   function vehicleMonthlyCosts(month) {
-    const vehicle = state.vehicle || {};
     const items = [];
-    const insuranceAmount = number(vehicle.insuranceAmount);
-    const insurancePaymentType = normalizeVehicleInsurancePaymentType(vehicle);
+    vehicleList().forEach((vehicle) => {
+      const insuranceAmount = number(vehicle.insuranceAmount);
+      const insurancePaymentType = normalizeVehicleInsurancePaymentType(vehicle);
 
-    if (insuranceAmount && insurancePaymentType !== "card") {
-      items.push({
-        id: "vehicle-insurance",
-        generated: true,
-        country: "japao",
-        type: "vehicle",
-        title: `Seguro ${vehicle.insuranceCompany || "veiculo"}`,
-        category: "Veiculo",
-        amount: insuranceAmount,
-        currency: "JPY",
-        date: dateInMonth(month, vehicle.insuranceDay || 1),
-        note: vehicle.insurancePaymentMethod || vehicleInsurancePaymentLabel(insurancePaymentType),
-        icon: "V"
-      });
-    }
+      if (insuranceAmount && insurancePaymentType !== "card") {
+        items.push({
+          id: `vehicle-insurance-${vehicle.id || assetFileSlug(vehicle.plate || vehicle.model || "carro")}`,
+          generated: true,
+          country: "japao",
+          type: "vehicle",
+          title: `Seguro ${vehicle.insuranceCompany || vehicleModelName(vehicle) || "veiculo"}`,
+          category: "Veiculo",
+          amount: insuranceAmount,
+          currency: "JPY",
+          date: dateInMonth(month, vehicle.insuranceDay || 1),
+          note: vehicle.insurancePaymentMethod || vehicleInsurancePaymentLabel(insurancePaymentType),
+          icon: "V"
+        });
+      }
+    });
 
     (state.vehicleMaintenance || [])
       .filter((item) => item.date && item.date.slice(0, 7) === month)
@@ -11440,7 +11794,7 @@
     });
     if (country === "global" || country === "japao") {
       vehicleMonthlyCosts(month).forEach((item) => {
-        if ((item.id === "vehicle-insurance" || item.id === "vehicle-shaken") && isVehiclePaymentPaid(item.id, month)) return;
+        if (isPlannedVehicleCost(item) && isVehiclePaymentPaid(item.id, month)) return;
         const current = totals.get("Veiculo") || 0;
         totals.set("Veiculo", current + convert(item.amount, item.currency, currency, rate));
       });
@@ -12010,6 +12364,11 @@
     return Boolean(state.paidCommitments[vehiclePaymentKey(id, month)]);
   }
 
+  function isPlannedVehicleCost(item) {
+    const id = String(item?.id || "");
+    return id === "vehicle-insurance" || id === "vehicle-shaken" || id.startsWith("vehicle-insurance-") || id.startsWith("vehicle-shaken-");
+  }
+
   function vehiclePaymentKey(id, month) {
     return `${month}:vehicle:${id}`;
   }
@@ -12351,10 +12710,18 @@
 
   function normalizeLookupText(value) {
     return String(value || "")
+      .normalize("NFKC")
       .trim()
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function assetFileSlug(value) {
+    return normalizeLookupText(value)
+      .replace(/&/g, " and ")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
   }
 
   function editableItem(type, id) {
@@ -12372,6 +12739,7 @@
       subscription: "subscriptions",
       crypto: "cryptoAssets",
       housingCard: "housingCards",
+      vehicle: "vehicles",
       vehicleMaintenance: "vehicleMaintenance",
       incomeSource: "incomeSources",
       familyMember: "familyMembers",

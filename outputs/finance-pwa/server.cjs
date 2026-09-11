@@ -4,10 +4,14 @@ const path = require("path");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 4173);
-const host = process.env.HOST || "0.0.0.0";
+const host = process.env.HOST || "127.0.0.1";
 const authUser = process.env.FINANCE_USER || "familia";
 const authPassword = process.env.FINANCE_PASSWORD || "";
 const mime = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
@@ -19,7 +23,7 @@ const mime = {
 };
 
 function isAuthorized(request) {
-  if (!authPassword) return false;
+  if (!authPassword) return host === "127.0.0.1";
   const header = request.headers.authorization || "";
   if (!header.startsWith("Basic ")) return false;
 

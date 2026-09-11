@@ -11,6 +11,7 @@ const publicFiles = [
   "app.html",
   "clean.html",
   "app.js",
+  "dashboard.js",
   "styles.css",
   "service-worker.js",
   "manifest.webmanifest",
@@ -59,6 +60,7 @@ function withVersion(fileName, content) {
     return content
       .replace(/styles\.css\?v=\d+/g, `styles.css?v=${version}`)
       .replace(/supabase-config\.js\?v=\d+/g, `supabase-config.js?v=${version}`)
+      .replace(/dashboard\.js\?v=\d+/g, `dashboard.js?v=${version}`)
       .replace(/app\.js\?v=\d+/g, `app.js?v=${version}`);
   }
 
@@ -69,6 +71,7 @@ function withVersion(fileName, content) {
   if (fileName === "service-worker.js") {
     return content
       .replace(/nekuma-finance-v\d+/g, `nekuma-finance-v${version}`)
+      .replace(/dashboard\.js\?v=\d+/g, `dashboard.js?v=${version}`)
       .replace(/styles\.css\?v=\d+/g, `styles.css?v=${version}`)
       .replace(/supabase-config\.js\?v=\d+/g, `supabase-config.js?v=${version}`)
       .replace(/app\.js\?v=\d+/g, `app.js?v=${version}`);
