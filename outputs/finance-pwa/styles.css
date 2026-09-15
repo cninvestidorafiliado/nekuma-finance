@@ -4372,7 +4372,7 @@ canvas {
 
 .housing-form-row {
   display: grid;
-  grid-template-columns: minmax(92px, 0.8fr) repeat(5, minmax(0, 1fr));
+  grid-template-columns: minmax(92px, 0.8fr) repeat(4, minmax(0, 1fr));
   gap: 8px;
   align-items: end;
   padding: 10px;
@@ -4969,6 +4969,12 @@ canvas {
   font-size: 0.72rem;
   font-weight: 900;
 }
+
+.housing-custom-label { min-width: 0; width: 100%; }
+.housing-recurring-check { display: flex; align-items: center; gap: 7px; min-height: 38px; font-size: .76rem; font-weight: 800; }
+.housing-recurring-check input { width: 18px; height: 18px; flex: 0 0 18px; accent-color: #247653; }
+.housing-add-other { justify-self: start; }
+.housing-remove-other { align-self: center; }
 
 .card-mini-wave {
   grid-area: wave;
@@ -9231,6 +9237,8 @@ h1 {
 
 /* Cards adapt to their column, not only to the browser width. */
 .dashboard-organizable .desktop-dashboard-column { min-height: 72px; align-items: start; }
+.dashboard-masonry-list { grid-column: 1 / -1; min-width: 0; column-count: 1; column-gap: 14px; }
+.dashboard-masonry-list > [data-dashboard-card] { display: inline-block; width: 100%; margin: 0 0 14px; break-inside: avoid; vertical-align: top; }
 [data-dashboard-card] { position: relative; padding-top: 34px; }
 .dashboard-handle { position: absolute; z-index: 5; top: 3px; left: calc(50% - 22px); width: 44px; height: 28px; display: grid; place-items: center; border: 0; background: transparent; color: #64796f; cursor: grab; touch-action: none; }
 .dashboard-handle svg { width: 22px; height: 22px; }
@@ -9266,6 +9274,7 @@ h1 {
   .dashboard-organizable .desktop-dashboard-top, .dashboard-organizable .desktop-dashboard-month-row { display: block; order: 0; }
 }
 @media (min-width: 760px) {
+  .dashboard-masonry-list { column-count: 2; }
   @container panel (min-width: 420px) {
     .vehicle-card { grid-template-columns: 48px minmax(0, 1fr) minmax(90px, 0.9fr) minmax(90px, 0.8fr) 30px !important; gap: 8px; align-items: center; }
     .vehicle-visual { grid-column: 1; grid-row: 1; width: 48px; height: 48px; }
@@ -9278,6 +9287,10 @@ h1 {
     .vehicle-card-actions button span { display: none; }
     .vehicle-insurance-check small { overflow-wrap: anywhere; }
   }
+}
+
+@media (min-width: 1600px) {
+  .dashboard-masonry-list { column-count: 3; column-gap: 16px; }
 }
 
 .content-panel {
@@ -9423,6 +9436,28 @@ h1 {
   }
 }
 
+.salary-contract-fields { min-width: 0; }
+.salary-weekends { display: grid; gap: 10px; }
+.salary-weekend-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 6px 12px; align-items: center; border-bottom: 1px solid rgba(20, 62, 43, .12); padding: 8px 0; }
+.salary-weekend-check { display: flex; align-items: center; gap: 8px; }
+.salary-weekend-check input { width: 20px; height: 20px; flex: 0 0 20px; accent-color: #247653; }
+.salary-weekend-row output { grid-column: 1 / -1; font-size: .75rem; color: #456354; }
+.salary-other-fields summary { padding: 8px 0; cursor: pointer; font-weight: 700; }
+.salary-deduction-fields { display: grid; gap: 10px; padding: 12px; border: 1px solid rgba(33, 98, 70, .18); border-radius: 8px; background: rgba(230, 248, 237, .52); }
+.salary-deduction-body { display: grid; gap: 8px; }
+.salary-deduction-rates summary { cursor: pointer; padding: 6px 0; font-weight: 700; }
+.salary-contract-fields summary, .salary-breakdown summary { cursor: pointer; padding: 8px 0; font-weight: 700; }
+.salary-contract-fields .field { margin-top: 8px; }
+.salary-contract-fields label { overflow-wrap: anywhere; }
+.salary-breakdown { min-width: 0; font-size: 0.75rem; }
+.salary-breakdown dl { margin: 8px 0; }
+.salary-breakdown dl > div { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; flex-wrap: wrap; }
+.salary-breakdown dd { margin: 0; font-weight: 700; }
+.salary-prediction-breakdown > small { display: block; margin-bottom: 6px; color: rgba(18, 49, 79, .62); font-size: .66rem; }
+.salary-prediction-breakdown dl + dl { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(18, 49, 79, .14); }
+.salary-prediction-breakdown .salary-detail-total { margin-top: 4px; padding-top: 7px; border-top: 1px solid rgba(18, 49, 79, .14); color: #12314f; font-weight: 850; }
+.salary-prediction-breakdown .salary-detail-net { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 9px 10px; border-radius: 8px; background: rgba(217, 255, 117, .32); color: #0b6f4e; font-weight: 900; }
+.salary-prediction-breakdown .salary-detail-net strong { font-size: .88rem; color: #078257; }
 .calendar-today-label { margin: 0 0 8px; color: #24604a; font-size: 0.75rem; font-weight: 750; }
 .calendar-item.is-today { outline: 2px solid #287653; outline-offset: -2px; }
 .work-day-cell.is-today { outline: 2px solid #287653; outline-offset: -2px; position: relative; }

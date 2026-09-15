@@ -154,13 +154,20 @@
     { key: "electricity", label: "Luz", icon: "L" },
     { key: "gas", label: "Gas", icon: "G" },
     { key: "water", label: "Agua", icon: "W" },
-    { key: "internet", label: "Internet", icon: "I" }
+    { key: "internet", label: "Internet", icon: "I" },
+    { key: "parking", label: "Estacionamento", icon: "E" }
   ];
   const housingPaymentMethodMeta = {
     bank: "Conta/debito",
     pix: "Pix",
     cash: "Dinheiro",
-    card: "Cartao"
+    card: "Cartao",
+    company: "Desconto pela empresa"
+  };
+  const cardPaymentMethodMeta = {
+    bank: "Debito automatico em conta",
+    kombini: "Pagamento no kombini",
+    manual: "Pagamento manual"
   };
   const incomeSourceTypeMeta = {
     factory: "Fabrica",
@@ -171,6 +178,7 @@
     other: "Outros"
   };
   const salaryBonusFrequencyMeta = {
+    once: { label: "Pagamento unico", months: 0 },
     weekly: { label: "Semanal", months: 0, days: 7 },
     monthly: { label: "Mensal", months: 1 },
     bimonthly: { label: "Bimestral", months: 2 },
@@ -376,7 +384,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=150")
+      navigator.serviceWorker.register("./service-worker.js?v=159")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -499,6 +507,8 @@
     if (action === "remove-salary-progression-step") removeSalaryProgressionRow(button);
     if (action === "add-salary-bonus-step") addSalaryBonusRow();
     if (action === "remove-salary-bonus-step") removeSalaryBonusRow(button);
+    if (action === "add-housing-other") addHousingOtherRow(button);
+    if (action === "remove-housing-other") button.closest(".housing-form-row")?.remove();
     if (action === "dismiss-salary-receipt") closeModal();
     if (action === "dismiss-due-alert") closeModal();
     if (action === "copy-invite-code") copyInviteCode();
@@ -555,10 +565,14 @@
     if (event.target.id === "import-file") importData(event.target.files[0]);
     if (event.target.id === "sourceType") updateIncomeSourceDynamicFields();
     if (event.target.id === "shiftSystem") updateIncomeSourceDynamicFields();
+    if (event.target.id === "salaryCalculationMode") updateIncomeSourceDynamicFields();
+    if (["salaryNightMethod", "salarySaturdayLegal", "salarySundayLegal", "salarySaturdayLegalRate", "salarySundayLegalRate", "salaryDeductionsEnabled"].includes(event.target.id)) updateIncomeSourceDynamicFields();
     if (event.target.id === "banNaming") updateIncomeSourceDynamicFields();
     if (event.target.id === "incomeSourceId") updateWorkIncomeCurrencyField();
     if (event.target.id === "commitmentCategory") updateCommitmentCategoryField();
     if (event.target.id === "commitmentType") updateCommitmentProviderField();
+    if (event.target.closest(".housing-form-row") && event.target.id.endsWith("PaymentMethod")) updateHousingPaymentFields();
+    if (event.target.id === "cardPaymentMethod") updateCreditCardPaymentFields();
     if (event.target.id === "bankAccountCountry") updateBankAccountCountryFields();
     if (event.target.id === "country" && event.target.closest("[data-form='transaction']")) updateTransactionBankFields();
     if (event.target.id === "type" && event.target.closest("[data-form='transaction']")) updateTransactionBankFields();
@@ -1271,15 +1285,37 @@
 
   function normalizeIncomeSources(items, fallback = []) {
     if (!Array.isArray(items)) return fallback;
-    return items.map((item) => ({
-      ...item,
-      ownerId: item.ownerId || item.createdBy || "",
-      salaryPayDay: number(item.salaryPayDay || item.payDay || item.paymentDay),
-      salaryMonthlyOvertimeHours: number(item.salaryMonthlyOvertimeHours),
-      salarySaturdayRate: number(item.salarySaturdayRate),
-      salaryProgressions: normalizeSalaryProgressions(item.salaryProgressions),
-      salaryBonuses: normalizeSalaryBonuses(item.salaryBonuses)
-    }));
+    return items.map((item) => {
+      const preset = salaryContractPreset(item);
+      const presetActive = preset && number(item.salaryStandardRemuneration) <= 0;
+      return {
+        ...item,
+        ownerId: item.ownerId || item.createdBy || "",
+        salaryPayDay: number(item.salaryPayDay || item.payDay || item.paymentDay),
+        salaryMonthlyOvertimeHours: number(item.salaryMonthlyOvertimeHours),
+        salarySaturdayRate: number(item.salarySaturdayRate),
+        salaryWeekendRulesVersion: item.salaryWeekendRulesVersion >= 1 ? 2 : item.salaryWeekendRulesVersion,
+        salarySaturdayLegalRate: salaryLegalAdditionalRate(item.salarySaturdayLegalRate, 25),
+        salarySundayLegalRate: salaryLegalAdditionalRate(item.salarySundayLegalRate, 35),
+        salaryRestRate: salaryLegalAdditionalRate(item.salaryRestRate, 25),
+        salaryHolidayRate: salaryLegalAdditionalRate(item.salaryHolidayRate, 35),
+        salaryDeductionsEnabled: presetActive ? true : item.salaryDeductionsEnabled,
+        salaryStandardRemuneration: presetActive ? preset.standardRemuneration : number(item.salaryStandardRemuneration),
+        salaryHealthRate: item.salaryHealthRate == null ? preset?.healthRate ?? 5.065 : number(item.salaryHealthRate),
+        salaryPensionRate: item.salaryPensionRate == null ? preset?.pensionRate ?? 9.15 : number(item.salaryPensionRate),
+        salaryLongTermCareRate: item.salaryLongTermCareRate == null ? preset?.longTermCareRate ?? 0.81 : number(item.salaryLongTermCareRate),
+        salaryEmploymentRate: item.salaryEmploymentRate == null ? preset?.employmentRate ?? 0.5 : number(item.salaryEmploymentRate),
+        salaryChildSupportRate: item.salaryChildSupportRate == null ? preset?.childSupportRate ?? 0.115 : number(item.salaryChildSupportRate),
+        salaryProgressions: normalizeSalaryProgressions(item.salaryProgressions),
+        salaryBonuses: normalizeSalaryBonuses(item.salaryBonuses)
+      };
+    });
+  }
+
+  function salaryContractPreset(source = {}) {
+    const employer = normalizeLookupText(`${source.name || ""} ${source.payRule || ""}`);
+    if (!/(murata|fujarte|fujialte|fujilarte)/.test(employer)) return null;
+    return { standardRemuneration: 260000, healthRate: 5.065, pensionRate: 9.15, longTermCareRate: 0.81, employmentRate: 0.5, childSupportRate: 0.115 };
   }
 
   function normalizeFamilyMembers(items, fallback = []) {
@@ -1562,21 +1598,28 @@
   }
 
   function normalizeHousingItems(items, fallbackCurrency = PRIMARY_CURRENCY) {
-    const byKey = new Map((Array.isArray(items) ? items : []).map((item) => [item.key, item]));
-    return housingItemTemplates.map((template) => {
-      const item = byKey.get(template.key) || {};
-      return {
-        key: template.key,
-        label: item.label || template.label,
-        active: item.active !== false,
-        amount: number(item.amount),
-        currency: sanitizeCurrency(item.currency, fallbackCurrency),
-        dueDay: item.dueDay ? clamp(Math.round(number(item.dueDay)), 1, 31) : 1,
-        paymentMethod: housingPaymentMethodMeta[item.paymentMethod] ? item.paymentMethod : "bank",
-        cardId: item.cardId || "",
-        bankAccountId: item.bankAccountId || ""
-      };
+    const rawItems = Array.isArray(items) ? items : [];
+    const byKey = new Map(rawItems.map((item) => [item.key, item]));
+    const normalizeItem = (item, template = null) => ({
+      key: item.key || template?.key || uid("housing-other"),
+      label: String(item.label || template?.label || "Outro").trim(),
+      icon: item.icon || template?.icon || "O",
+      custom: Boolean(item.custom || !template),
+      active: item.active !== false,
+      amount: number(item.amount),
+      currency: sanitizeCurrency(item.currency, fallbackCurrency),
+      dueDay: item.dueDay ? clamp(Math.round(number(item.dueDay)), 1, 31) : 1,
+      paymentMethod: housingPaymentMethodMeta[item.paymentMethod] ? item.paymentMethod : "bank",
+      cardId: item.cardId || "",
+      bankAccountId: item.bankAccountId || "",
+      companyId: item.companyId || "",
+      recurring: item.recurring == null ? ["rent", "parking"].includes(template?.key) : item.recurring === true,
+      startMonth: item.startMonth || String(item.createdAt || "").slice(0, 7) || currentMonth()
     });
+    const standard = housingItemTemplates.map((template) => normalizeItem(byKey.get(template.key) || {}, template));
+    const known = new Set(housingItemTemplates.map((template) => template.key));
+    const custom = rawItems.filter((item) => item && !known.has(item.key)).map((item) => normalizeItem(item));
+    return [...standard, ...custom];
   }
 
   function normalizePaypalState(raw = {}) {
@@ -1976,6 +2019,8 @@
       return;
     }
 
+    if (reconcileRecordedPayments()) saveState();
+
     app.innerHTML = state.ui.activeTab === "dashboard"
       ? renderCurrentTab()
       : [
@@ -1998,6 +2043,41 @@
     scheduleFxRefresh(false);
     scheduleCryptoRefresh(false);
     setTimeout(showDueAlertIfNeeded, 250);
+  }
+
+  function reconcileRecordedPayments() {
+    let changed = false;
+    const author = currentUserAuthor();
+    const now = new Date().toISOString();
+
+    Object.entries(state.paidCommitments || {}).forEach(([key, receipt]) => {
+      const match = key.match(/^(\d{4}-\d{2}):salary:(.+)$/);
+      if (!match) return;
+      const [, workMonth, sourceId] = match;
+      const source = incomeSourceById(sourceId);
+      if (!source?.id || normalizedSourceType(source.type) !== "factory") return;
+      const paymentMonth = receipt?.paymentMonth || addMonths(workMonth, 1);
+      const income = (state.transactions || []).find((item) => item.type === "income" && item.title === `Salario ${source.name}` && String(item.date || "").slice(0, 7) === paymentMonth);
+      const gross = number(receipt?.grossAmount) || number(income?.amount) || estimateFactorySourceSalary(source, workMonth, paymentMonth).total;
+      const deductions = estimateSalaryDeductions(source, gross, paymentMonth);
+      if (!deductions.configured || (state.transactions || []).some((item) => String(item.payrollKey || "").startsWith(`${workMonth}:salary-deduction:${sourceId}:`))) return;
+      recordSalaryDeductionTransactions({ target: { sourceId, month: workMonth, paymentMonth }, source, deductions, date: income?.date || factorySalaryDueDate(source, paymentMonth), bankAccountId: receipt?.bankAccountId || income?.bankAccountId || "", currency: receipt?.currency || income?.currency || source.currency || "JPY", author, now });
+      state.paidCommitments[key] = { ...(typeof receipt === "object" ? receipt : {}), amount: deductions.net, grossAmount: gross, deductions: deductions.total, paymentMonth };
+      changed = true;
+    });
+
+    const month = currentMonth();
+    (state.creditCards || []).forEach((card) => {
+      if (normalizeCardPaymentMethod(card.paymentMethod) !== "bank" || !card.bankAccountId) return;
+      const dueDate = dateInMonth(month, card.dueDay || 1);
+      const bill = creditCardMonthBill(card, month);
+      const key = cardBillKey(card.id, month);
+      if (!bill.total || state.paidCommitments[key] || !isDateReached(dueDate)) return;
+      state.paidCommitments[key] = { paidAt: now, method: "bank", bankAccountId: card.bankAccountId, automatic: true };
+      state.transactions.unshift({ id: uid("tx"), date: dueDate, country: card.country, type: "card", title: `Fatura ${card.nickname || card.issuer}`, category: "Cartao", amount: bill.total, currency: card.currency, bankAccountId: card.bankAccountId, paymentMethod: "bank", paymentRef: `card:${card.id}`, paymentKey: key, settlementOnly: true, note: "Pago automaticamente por debito em conta", createdAt: now, createdBy: author.id, createdByName: author.name });
+      changed = true;
+    });
+    return changed;
   }
 
   function renderKeepingScroll() {
@@ -2814,9 +2894,10 @@
     return `
       <div class="salary-card-row ${cards.length === 1 ? "single-card" : ""}">
         ${cards.map((card) => `
-          <article class="salary-estimate-card balance-salary-card ${card.paid ? "is-paid" : ""} ${number(card.bonus) > 0 ? "has-bonus" : ""}" ${salaryCardStyleAttrs(card)}>
-            <span><i data-lucide="${card.paid ? "check-circle-2" : "wallet"}" aria-hidden="true"></i>Salario bruto previsto</span>
+          <article class="salary-estimate-card balance-salary-card ${card.paid ? "is-paid" : ""}" ${salaryCardStyleAttrs(card)}>
+            <span><i data-lucide="${card.paid ? "check-circle-2" : "wallet"}" aria-hidden="true"></i>Salario previsto</span>
             ${renderSalaryFormula(card, hideBalance)}
+            ${!hideBalance ? renderSalaryPredictionDetails(card) : ""}
             <div class="salary-card-footer">
               <small>${escapeHtml(card.title)}</small>
               ${card.canConfirm ? `
@@ -2833,34 +2914,51 @@
     if (card.kind !== "factory") {
       return `<strong>${hideBalance ? "*****" : formatMoneyWithPrimary(card.amount, card.currency, card.month)}</strong>`;
     }
-    const teiji = number(card.teiji);
-    const extras = number(card.zangyou);
-    const bonus = number(card.bonus);
-    const total = number(card.amount);
-    const hasBonus = bonus > 0;
+    const gross = number(card.amount);
+    const deductions = card.deductions?.configured ? number(card.deductions.total) : 0;
+    const net = Math.max(0, gross - deductions);
     if (hideBalance) {
       return `
-        <div class="salary-formula ${hasBonus ? "has-bonus" : ""}">
-          <div><em>teiji</em><strong>*****</strong></div>
-          <b>+</b>
-          <div><em>zangyou</em><strong>*****</strong></div>
-          ${hasBonus ? `<b>+</b><div><em>bonus</em><strong>*****</strong></div>` : ""}
+        <div class="salary-formula salary-net-formula">
+          <div><em>bruto</em><strong>*****</strong></div>
+          <b>-</b>
+          <div><em>descontos</em><strong>*****</strong></div>
           <b>=</b>
-          <div class="is-total"><em>total</em><strong>*****</strong></div>
+          <div class="is-total"><em>liquido previsto</em><strong>*****</strong></div>
         </div>
       `;
     }
     return `
-      <div class="salary-formula ${hasBonus ? "has-bonus" : ""}">
-        <div><em>teiji</em><strong>${formatMoney(teiji, card.currency)}</strong></div>
-        <b>+</b>
-        <div><em>zangyou</em><strong>${formatMoney(extras, card.currency)}</strong></div>
-        ${hasBonus ? `<b>+</b><div><em>bonus</em><strong>${formatMoney(bonus, card.currency)}</strong></div>` : ""}
+      <div class="salary-formula salary-net-formula">
+        <div><em>bruto</em><strong>${formatMoney(gross, card.currency)}</strong></div>
+        <b>-</b>
+        <div><em>descontos</em><strong>${formatMoney(deductions, card.currency)}</strong></div>
         <b>=</b>
-        <div class="is-total"><em>total</em><strong>${formatMoney(total, card.currency)}</strong></div>
+        <div class="is-total"><em>liquido previsto</em><strong>${formatMoney(net, card.currency)}</strong></div>
       </div>
-      ${renderSalaryTotalConverted(total, card.currency, card.month)}
+      ${renderSalaryTotalConverted(net, card.currency, card.month)}
     `;
+  }
+
+  function renderSalaryPredictionDetails(card) {
+    if (card.kind !== "factory") return "";
+    const breakdown = card.breakdown;
+    const grossRows = breakdown ? [
+      ["Base / remuneradas", breakdown.regularHours, breakdown.teiji],
+      ["Horas extras", breakdown.overtimeHours, breakdown.overtime],
+      ["Adicional noturno", breakdown.nightHours, breakdown.night],
+      ["Folga trabalhada", breakdown.restHours, breakdown.saturday],
+      ["Feriado legal", breakdown.holidayHours, breakdown.sunday]
+    ] : [["Teiji", 0, card.teiji], ["Zangyou", 0, card.zangyou]];
+    const deductionRows = card.deductions?.entries || [];
+    const net = card.deductions?.configured ? card.deductions.net : card.amount;
+    return `<details class="salary-breakdown salary-prediction-breakdown">
+      <summary>Detalhamento do salario previsto</summary>
+      ${breakdown ? `<small>${breakdown.actualDays ? "Escala com apontamentos" : "Previsao pela escala"} · Fechamento ${formatShortDate(breakdown.periodEnd)}</small>` : ""}
+      <dl>${grossRows.map(([label, hours, value]) => `<div><dt>${label}${hours ? ` (${number(hours).toFixed(2)}h)` : ""}</dt><dd>${formatMoney(value, card.currency)}</dd></div>`).join("")}${number(card.bonus) > 0 ? `<div><dt>Bonus</dt><dd>${formatMoney(card.bonus, card.currency)}</dd></div>` : ""}<div class="salary-detail-total"><dt>Salario bruto</dt><dd>${formatMoney(card.amount, card.currency)}</dd></div></dl>
+      ${deductionRows.length ? `<dl>${deductionRows.map((item) => `<div><dt>${escapeHtml(item.label)}</dt><dd>- ${formatMoney(item.amount, card.currency)}</dd></div>`).join("")}<div class="salary-detail-total"><dt>Total de descontos</dt><dd>- ${formatMoney(card.deductions.total, card.currency)}</dd></div></dl>` : `<p class="row-meta">Nenhum desconto salarial configurado.</p>`}
+      <div class="salary-detail-net"><span>Liquido previsto</span><strong>${formatMoney(net, card.currency)}</strong></div>
+    </details>`;
   }
 
   function renderSalaryTotalConverted(total, currency, month = state.ui.selectedMonth) {
@@ -2885,6 +2983,7 @@
         }
         if (!estimate.configured) return null;
         const paid = isFactorySalaryPaid(source.id, workMonth);
+        const deductions = estimateSalaryDeductions(source, estimate.total, paymentMonth);
         const date = factorySalaryDueDate(source, paymentMonth);
         return {
           kind: "factory",
@@ -2892,6 +2991,9 @@
           id: source.id,
           title: source.name || "Fabrica",
           amount: estimate.total,
+          breakdown: source.salaryCalculationMode === "contract" ? estimate : null,
+          deductions,
+          netAmount: deductions.configured ? deductions.net : estimate.total,
           teiji: estimate.teiji,
           zangyou: estimate.overtime + estimate.night + estimate.sunday + estimate.saturday,
           bonus: estimate.bonus,
@@ -3066,7 +3168,6 @@
         payables: fallbackBreakdown.payables
       };
     }
-    const activity = bankAccountMonthlyActivity(account, state.ui.selectedMonth);
     const currency = sanitizeCurrency(account.currency, primaryCurrency());
     const rate = latestRate(state.ui.selectedMonth);
     const payables = dashboardUpcomingFinancialItems(99)
@@ -3074,7 +3175,7 @@
       .reduce((total, item) => total + convert(item.amount, item.currency, currency, rate), 0);
     return {
       currency,
-      paid: activity.paid,
+      paid: convert(fallbackBreakdown.paid, fallbackBreakdown.currency, currency, rate),
       payables
     };
   }
@@ -4289,7 +4390,7 @@
     const housingOpen = (state.housingCards || [])
       .filter((item) => item.active !== false)
       .flatMap((card) => housingCardMonthRows(card, state.ui.selectedMonth))
-      .filter((item) => !item.paid)
+      .filter((item) => !item.paid && item.paymentMethod !== "company")
       .reduce((total, item) => total + convert(item.amount, item.currency, primaryCurrency(), latestRate(state.ui.selectedMonth)), 0);
     return `
       <div class="panel-head">
@@ -4495,7 +4596,7 @@
       add({ ...item, category: source?.type === 'consortium' ? 'Consórcio' : 'Financiamento', bankName: source?.provider, bankAccountId: source?.bankAccountId });
     });
     (state.housingCards || []).filter(card => card.active !== false).forEach(card => {
-      housingCardMonthRows(card, month).filter(item => !item.paid).forEach(item => {
+      housingCardMonthRows(card, month).filter(item => !item.paid && item.paymentMethod !== "company").forEach(item => {
         // Card housing already entered as a purchase must not appear a second time.
         const title = `${item.label} - ${card.name || 'Moradia'}`;
         const exists = item.paymentMethod === 'card' && (state.cardPurchases || []).some(p => p.cardId === item.cardId && p.title === title && p.firstBillMonth === month);
@@ -4707,7 +4808,7 @@
     const rows = housingCardMonthRows(card, month);
     const totalCurrency = primaryCurrency();
     const totalOpen = rows
-      .filter((item) => !item.paid)
+      .filter((item) => !item.paid && item.paymentMethod !== "company")
       .reduce((total, item) => total + convert(item.amount, item.currency, totalCurrency, latestRate(month)), 0);
     const paidCount = rows.filter((item) => item.paid).length;
     return `
@@ -4728,6 +4829,8 @@
           ${rows.length ? rows.map((item) => {
             const cardLabel = item.paymentMethod === "card"
               ? creditCardById(item.cardId)?.nickname || creditCardById(item.cardId)?.issuer || "cartao"
+              : item.paymentMethod === "company"
+                ? incomeSourceById(item.companyId)?.name || "Empresa"
               : item.paymentMethod === "bank" && item.bankAccountId
                 ? bankAccountName(bankAccountById(item.bankAccountId))
                 : housingPaymentMethodLabel(item.paymentMethod);
@@ -4736,12 +4839,12 @@
                 <span class="row-icon ${item.paid ? "green" : "blue"}">${escapeHtml(item.icon)}</span>
                 <div class="row-main">
                   <p class="row-title">${escapeHtml(item.label)}</p>
-                  <p class="row-meta">vence ${formatShortDate(item.date)} - ${escapeHtml(cardLabel)}</p>
+                  <p class="row-meta">${item.paymentMethod === "company" ? (item.paid ? "descontado no salario" : "desconto no proximo salario") : `vence ${formatShortDate(item.date)}`} - ${escapeHtml(cardLabel)}</p>
                 </div>
                 <div class="row-amount ${item.paid ? "income" : "expense"}">
                   ${formatMoneyWithPrimary(item.amount, item.currency, month)}
                   <div class="row-actions">
-                    <button class="small-action ${item.paid ? "ghost" : ""}" type="button" data-action="pay-housing-item" data-id="${card.id}" data-item-key="${item.key}" ${item.paid ? "disabled" : ""}>${item.paid ? "Pago" : "Pagar"}</button>
+                    <button class="small-action ${item.paid ? "ghost" : ""}" type="button" data-action="pay-housing-item" data-id="${card.id}" data-item-key="${item.key}" ${item.paid || item.paymentMethod === "company" ? "disabled" : ""}>${item.paid ? "Pago" : item.paymentMethod === "company" ? "No salario" : "Pagar"}</button>
                   </div>
                 </div>
               </div>
@@ -5273,7 +5376,7 @@
         </div>
         <div class="chips">
           <span class="chip work-ban-chip" style="--ban-color:${escapeAttr(schedule.myBanColor)}">${escapeHtml(schedule.myBanName || "Meu ban")}</span>
-          <button class="small-action ghost" type="button" data-action="open-modal" data-modal="workOverride">Folga extra</button>
+          <button class="small-action ghost" type="button" data-action="open-modal" data-modal="workOverride">Apontamento</button>
         </div>
       </div>
       <div class="work-calendar-summary">
@@ -5587,6 +5690,8 @@
     updateSubscriptionCustomField();
     updateSubscriptionCycleField();
     updateVehicleInsuranceCardField();
+    updateHousingPaymentFields();
+    updateCreditCardPaymentFields();
   }
 
   function closeModal() {
@@ -6350,6 +6455,7 @@
     const activeCountry = item?.country || (state.ui.activeCountry === "global" ? "japao" : state.ui.activeCountry);
     const currency = countryMeta[activeCountry].currency;
     const selectedCurrency = item?.currency || currency;
+    const paymentMethod = normalizeCardPaymentMethod(item?.paymentMethod);
     return `
       <div class="modal-head">
         <h2>${item ? "Editar cartao" : "Novo cartao"}</h2>
@@ -6417,8 +6523,16 @@
           </div>
           <div class="field">
             <label for="cardPaymentMethod">Como paga</label>
-            <input id="cardPaymentMethod" name="paymentMethod" placeholder="Debito, Wise, conta..." value="${escapeAttr(item?.paymentMethod || "")}" />
+            <select id="cardPaymentMethod" name="paymentMethod">
+              ${Object.entries(cardPaymentMethodMeta).map(([value, label]) => `<option value="${value}" ${selectedAttr(value, paymentMethod)}>${escapeHtml(label)}</option>`).join("")}
+            </select>
           </div>
+        </div>
+        <div class="field card-payment-bank-field ${paymentMethod === "bank" ? "" : "is-hidden"}">
+          <label for="cardBankAccountId">Conta para debito automatico</label>
+          <select id="cardBankAccountId" name="bankAccountId">
+            ${bankAccountSelectOptions(activeCountry, item?.bankAccountId || "", "Selecione a conta")}
+          </select>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -6993,6 +7107,7 @@
     const services = normalizeHousingItems(item?.items, selectedCurrency);
     const cards = state.creditCards || [];
     const bankAccounts = activeBankAccounts();
+    const companies = factorySources();
     return `
       <div class="modal-head">
         <h2>${item ? "Editar moradia" : "Nova moradia"}</h2>
@@ -7014,8 +7129,9 @@
           </select>
         </div>
         <div class="housing-form-list">
-          ${services.map((service) => renderHousingServiceFormRow(service, cards, bankAccounts, activeCountry)).join("")}
+          ${services.map((service) => renderHousingServiceFormRow(service, cards, bankAccounts, companies, activeCountry)).join("")}
         </div>
+        <button class="secondary-button housing-add-other" type="button" data-action="add-housing-other">Adicionar outro</button>
         ${!cards.length ? `<p class="empty-state">Para pagar algum item no cartao, cadastre um cartao primeiro.</p>` : ""}
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
@@ -7025,20 +7141,21 @@
     `;
   }
 
-  function renderHousingServiceFormRow(service, cards, bankAccounts, country) {
+  function renderHousingServiceFormRow(service, cards, bankAccounts, companies, country) {
     const key = service.key;
+    const method = service.paymentMethod || "bank";
     const scopedAccounts = bankAccounts.filter((account) => account.country === country);
     return `
-      <div class="housing-form-row">
+      <div class="housing-form-row" data-housing-key="${escapeAttr(key)}" data-custom="${service.custom ? "true" : "false"}">
         <label class="housing-service-toggle">
           <input type="checkbox" name="${key}Active" ${service.active !== false ? "checked" : ""} />
-          <span>${escapeHtml(service.label)}</span>
+          ${service.custom ? `<input class="housing-custom-label" name="${key}Label" required placeholder="Ex: Mercado" value="${escapeAttr(service.label === "Outro" ? "" : service.label)}" />` : `<span>${escapeHtml(service.label)}</span>`}
         </label>
         <div class="field">
           <label for="${key}Amount">Valor</label>
           <input id="${key}Amount" name="${key}Amount" type="number" min="0" step="0.01" value="${number(service.amount) || ""}" />
         </div>
-        <div class="field">
+        <div class="field housing-due-field ${method === "company" ? "is-hidden" : ""}">
           <label for="${key}DueDay">Vencimento</label>
           <input id="${key}DueDay" name="${key}DueDay" type="number" min="1" max="31" value="${service.dueDay || 1}" />
         </div>
@@ -7048,21 +7165,42 @@
             ${Object.entries(housingPaymentMethodMeta).map(([value, label]) => `<option value="${value}" ${selectedAttr(value, service.paymentMethod)}>${label}</option>`).join("")}
           </select>
         </div>
-        <div class="field">
+        <div class="field housing-bank-field ${method === "bank" ? "" : "is-hidden"}">
           <label for="${key}BankAccountId">Conta debito</label>
           <select id="${key}BankAccountId" name="${key}BankAccountId">
             ${bankAccountSelectOptions(country, service.bankAccountId, scopedAccounts.length ? "Escolha a conta" : "Sem conta cadastrada")}
           </select>
         </div>
-        <div class="field">
+        <div class="field housing-card-field ${method === "card" ? "" : "is-hidden"}">
           <label for="${key}CardId">Cartao</label>
           <select id="${key}CardId" name="${key}CardId">
             <option value="">Sem cartao</option>
             ${cards.map((card) => `<option value="${card.id}" ${selectedAttr(card.id, service.cardId)}>${escapeHtml(card.nickname || card.issuer)} - ${card.currency}</option>`).join("")}
           </select>
         </div>
+        <div class="field housing-company-field ${method === "company" ? "" : "is-hidden"}">
+          <label for="${key}CompanyId">Empresa</label>
+          <select id="${key}CompanyId" name="${key}CompanyId">
+            <option value="">Selecione a empresa</option>
+            ${companies.map((company) => `<option value="${company.id}" ${selectedAttr(company.id, service.companyId)}>${escapeHtml(company.name || "Empresa")}</option>`).join("")}
+          </select>
+        </div>
+        <label class="housing-recurring-check"><input type="checkbox" name="${key}Recurring" ${service.recurring ? "checked" : ""} />Conta fixa mensal</label>
+        ${service.custom ? `<button class="small-action ghost housing-remove-other" type="button" data-action="remove-housing-other" aria-label="Remover item">Remover</button>` : ""}
       </div>
     `;
+  }
+
+  function addHousingOtherRow(button) {
+    const form = button.closest("form[data-form='housing-card']");
+    const list = form?.querySelector(".housing-form-list");
+    if (!list) return;
+    const country = form.querySelector("[name='country']")?.value || "japao";
+    const currency = form.querySelector("[name='currency']")?.value || countryMeta[country]?.currency || primaryCurrency();
+    const service = { key: uid("housing-other"), label: "Outro", icon: "O", custom: true, active: true, amount: 0, currency, dueDay: 1, paymentMethod: "bank", recurring: false, startMonth: state.ui.selectedMonth };
+    list.insertAdjacentHTML("beforeend", renderHousingServiceFormRow(service, state.creditCards || [], activeBankAccounts(), factorySources(), country));
+    updateHousingPaymentFields();
+    list.querySelector(`[data-housing-key="${CSS.escape(service.key)}"] .housing-custom-label`)?.focus();
   }
 
   function renderVehicleModal(item = null) {
@@ -7249,59 +7387,7 @@
               ${bankAccountSelectOptions("global", item?.bankAccountId || "", activeBankAccounts().length ? "Escolha a conta" : "Cadastre uma conta primeiro")}
             </select>
           </div>
-          <div class="three-cols">
-            <div class="field">
-              <label for="salaryHourlyRate">Valor hora</label>
-              <input id="salaryHourlyRate" name="salaryHourlyRate" inputmode="decimal" placeholder="Ex: 1550" value="${escapeAttr(item?.salaryHourlyRate || item?.hourlyRate || "")}" />
-            </div>
-            <div class="field">
-              <label for="salaryTeijiHours">Horas teiji/dia</label>
-              <input id="salaryTeijiHours" name="salaryTeijiHours" inputmode="decimal" placeholder="Ex: 9" value="${escapeAttr(item?.salaryTeijiHours || "")}" />
-            </div>
-            <div class="field">
-              <label for="salaryFixedOvertimeHours">Hora extra fixa/dia</label>
-              <input id="salaryFixedOvertimeHours" name="salaryFixedOvertimeHours" inputmode="decimal" placeholder="Ex: 2" value="${escapeAttr(item?.salaryFixedOvertimeHours || "")}" />
-            </div>
-          </div>
-          <div class="three-cols">
-            <div class="field">
-              <label for="salaryMonthlyOvertimeHours">Hora extra no mes</label>
-              <input id="salaryMonthlyOvertimeHours" name="salaryMonthlyOvertimeHours" inputmode="decimal" placeholder="Ex: 70" value="${escapeAttr(item?.salaryMonthlyOvertimeHours || "")}" />
-            </div>
-            <div class="field">
-              <label for="salaryOvertimeRate">Hora extra %</label>
-              <input id="salaryOvertimeRate" name="salaryOvertimeRate" inputmode="decimal" placeholder="Ex: 25" value="${escapeAttr(item?.salaryOvertimeRate || "")}" />
-            </div>
-            <div class="field">
-              <label for="salaryNightRate">Noturno %</label>
-              <input id="salaryNightRate" name="salaryNightRate" inputmode="decimal" placeholder="Ex: 25" value="${escapeAttr(item?.salaryNightRate || "")}" />
-            </div>
-            <div class="field">
-              <label for="salarySundayRate">Domingo %</label>
-              <input id="salarySundayRate" name="salarySundayRate" inputmode="decimal" placeholder="Ex: 35" value="${escapeAttr(item?.salarySundayRate || "")}" />
-            </div>
-          </div>
-          <div class="field">
-            <label for="salarySaturdayRate">Sabado %</label>
-            <input id="salarySaturdayRate" name="salarySaturdayRate" inputmode="decimal" placeholder="Ex: 25" value="${escapeAttr(item?.salarySaturdayRate || "")}" />
-          </div>
-          <div class="three-cols">
-            <div class="field">
-              <label for="salaryNightStart">Adicional noturno</label>
-              <input id="salaryNightStart" name="salaryNightStart" type="time" value="${escapeAttr(item?.salaryNightStart || "22:00")}" />
-            </div>
-            <div class="field">
-              <label for="salaryNightEnd">Noturno fim</label>
-              <input id="salaryNightEnd" name="salaryNightEnd" type="time" value="${escapeAttr(item?.salaryNightEnd || "05:00")}" />
-            </div>
-            <div class="field">
-              <label for="salarySundayAllDay">Domingo</label>
-              <select id="salarySundayAllDay" name="salarySundayAllDay">
-                <option value="yes" ${selectedAttr("yes", item?.salarySundayAllDay === false ? "no" : "yes")}>Adicional o dia inteiro</option>
-                <option value="no" ${selectedAttr("no", item?.salarySundayAllDay === false ? "no" : "yes")}>Nao calcular domingo</option>
-              </select>
-            </div>
-          </div>
+          ${renderSimpleSalaryFields(item)}
           <div class="two-cols">
             <div class="field">
               <label for="shiftSystem">Sistema de turnos</label>
@@ -7502,7 +7588,7 @@
     }
     return `
       <div class="modal-head">
-        <h2>${item ? "Editar folga extra" : "Folga extra"}</h2>
+        <h2>${item ? "Editar apontamento" : "Apontamento diario"}</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="work-override">
@@ -7526,6 +7612,9 @@
               <option value="forcedOff" ${selectedAttr("forcedOff", item?.type || "forcedOff")}>Folga forcada</option>
               <option value="paidOff" ${selectedAttr("paidOff", item?.type)}>Yukyu / folga remunerada</option>
               <option value="manualOff" ${selectedAttr("manualOff", item?.type)}>Folga manual</option>
+              <option value="regular" ${selectedAttr("regular", item?.type)}>Trabalho normal / atraso</option>
+              <option value="rest" ${selectedAttr("rest", item?.type)}>Folga trabalhada</option>
+              <option value="holiday" ${selectedAttr("holiday", item?.type)}>Feriado legal trabalhado</option>
             </select>
           </div>
           <div class="field">
@@ -7533,9 +7622,12 @@
             <input id="overrideNote" name="note" placeholder="Ex: folga forcada da fabrica" value="${escapeAttr(item?.note || "")}" />
           </div>
         </div>
+        <div class="three-cols">
+          ${[["actualRegularHours", "Horas normais / folga trabalhada"], ["actualOvertimeHours", "Horas extras"], ["actualNightHours", "Horas com adicional noturno"]].map(([key, label]) => `<div class="field"><label for="${key}">${label}</label><input type="number" min="0" max="24" step="0.01" id="${key}" name="${key}" value="${escapeAttr(item?.[key] ?? 0)}" /></div>`).join("")}
+        </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
-          <button class="primary-button" type="submit">Salvar folga</button>
+          <button class="primary-button" type="submit">Salvar apontamento</button>
         </div>
       </form>
     `;
@@ -7550,14 +7642,19 @@
       const paymentMonth = refPaymentMonth || addMonths(workMonth, 1);
       const estimate = estimateFactorySourceSalary(source, workMonth, paymentMonth);
       if (!estimate.configured) return null;
+      const deductions = estimateSalaryDeductions(source, estimate.total, paymentMonth);
       const date = factorySalaryDueDate(source, paymentMonth);
       return {
         kind,
         id: source.id,
         sourceId: source.id,
         title: source.name || "Fabrica",
-        category: "Salario bruto previsto",
+        category: deductions.configured ? "Salario bruto e liquido previstos" : "Salario bruto previsto",
         amount: round(estimate.total, estimate.currency === "JPY" ? 0 : 2),
+        grossAmount: round(estimate.total, estimate.currency === "JPY" ? 0 : 2),
+        deductions: deductions.total,
+        deductionEstimate: deductions,
+        netAmount: round(deductions.configured ? deductions.net : estimate.total, estimate.currency === "JPY" ? 0 : 2),
         currency: estimate.currency,
         month: workMonth,
         paymentMonth,
@@ -7623,11 +7720,12 @@
         <div class="payment-confirm-card salary-receipt-card">
           <p class="mini-label">${escapeHtml(target.category)}</p>
           <strong>${escapeHtml(target.title)}</strong>
-          <span>${formatMoneyWithPrimary(target.amount, target.currency, target.month)} - previsto ${formatShortDate(target.date)}</span>
+          <span>Bruto ${formatMoney(target.grossAmount, target.currency)}${target.deductionEstimate?.configured ? ` - descontos ${formatMoney(target.deductions, target.currency)} - liquido ${formatMoney(target.netAmount, target.currency)}` : ""}</span>
+          <small>Previsto para ${formatShortDate(target.date)}</small>
         </div>
         <div class="two-cols">
           <div class="field">
-            <label for="salaryReceiptAmount">Valor recebido</label>
+            <label for="salaryReceiptAmount">Salario bruto confirmado</label>
             <input id="salaryReceiptAmount" name="amount" type="number" min="0" step="0.01" required value="${escapeAttr(target.amount)}" />
           </div>
           <div class="field">
@@ -7690,12 +7788,13 @@
           <div class="field">
             <label for="monthlyPaymentMethod">Forma de pagamento</label>
             <select id="monthlyPaymentMethod" name="paymentMethod">
-              <option value="balance">Saldo atual</option>
-              <option value="extra">Ganho extra</option>
-              <option value="pix">Pix</option>
-              <option value="bank">Debito em conta</option>
-              <option value="cash">Dinheiro</option>
-              <option value="other">Outro</option>
+              <option value="balance" ${selectedAttr("balance", target.paymentMethod || "balance")}>Saldo atual</option>
+              <option value="extra" ${selectedAttr("extra", target.paymentMethod)}>Ganho extra</option>
+              <option value="pix" ${selectedAttr("pix", target.paymentMethod)}>Pix</option>
+              <option value="bank" ${selectedAttr("bank", target.paymentMethod)}>Debito em conta</option>
+              <option value="kombini" ${selectedAttr("kombini", target.paymentMethod)}>Kombini</option>
+              <option value="cash" ${selectedAttr("cash", target.paymentMethod)}>Dinheiro</option>
+              <option value="other" ${selectedAttr("other", target.paymentMethod)}>Outro</option>
             </select>
           </div>
           <div class="field">
@@ -7709,7 +7808,7 @@
         <div class="field">
           <label for="monthlyPaymentBankAccountId">Conta usada</label>
           <select id="monthlyPaymentBankAccountId" name="bankAccountId">
-            ${bankAccountSelectOptions(target.country, "", "Sem conta vinculada")}
+            ${bankAccountSelectOptions(target.country, target.bankAccountId || "", "Sem conta vinculada")}
           </select>
         </div>
         <div class="two-cols">
@@ -8057,6 +8156,11 @@
 
   function saveCreditCard(form) {
     const data = formData(form);
+    const paymentMethod = normalizeCardPaymentMethod(data.paymentMethod);
+    if (paymentMethod === "bank" && !data.bankAccountId) {
+      showToast("Selecione a conta do debito automatico.");
+      return;
+    }
     const updated = upsertItem("creditCards", data.id, {
       country: data.country,
       issuer: data.issuer.trim(),
@@ -8070,7 +8174,8 @@
       currency: data.currency,
       closingDay: data.closingDay ? clamp(Math.round(number(data.closingDay)), 1, 31) : "",
       dueDay: data.dueDay ? clamp(Math.round(number(data.dueDay)), 1, 31) : "",
-      paymentMethod: data.paymentMethod.trim()
+      paymentMethod,
+      bankAccountId: paymentMethod === "bank" ? data.bankAccountId || "" : ""
     });
     saveState();
     closeModal();
@@ -8314,25 +8419,39 @@
     try {
       const data = formData(form);
       const currency = sanitizeCurrency(data.currency, primaryCurrency());
-      const items = housingItemTemplates.map((template) => {
-        const paymentMethod = housingPaymentMethodMeta[data[`${template.key}PaymentMethod`]]
-          ? data[`${template.key}PaymentMethod`]
+      const previous = findItem("housingCards", data.id);
+      const previousItems = new Map(normalizeHousingItems(previous?.items, currency).map((item) => [item.key, item]));
+      const items = [...form.querySelectorAll(".housing-form-row")].map((row) => {
+        const key = row.dataset.housingKey;
+        const template = housingItemTemplates.find((item) => item.key === key);
+        const label = String(data[`${key}Label`] || template?.label || "Outro").trim();
+        const paymentMethod = housingPaymentMethodMeta[data[`${key}PaymentMethod`]]
+          ? data[`${key}PaymentMethod`]
           : "bank";
-        const cardId = paymentMethod === "card" ? data[`${template.key}CardId`] || "" : "";
-        const bankAccountId = paymentMethod === "bank" ? data[`${template.key}BankAccountId`] || "" : "";
-        if (paymentMethod === "card" && !cardId && data[`${template.key}Active`]) {
-          throw new Error(`Selecione o cartao de ${template.label}.`);
+        const cardId = paymentMethod === "card" ? data[`${key}CardId`] || "" : "";
+        const bankAccountId = paymentMethod === "bank" ? data[`${key}BankAccountId`] || "" : "";
+        const companyId = paymentMethod === "company" ? data[`${key}CompanyId`] || "" : "";
+        if (paymentMethod === "card" && !cardId && data[`${key}Active`]) {
+          throw new Error(`Selecione o cartao de ${label}.`);
+        }
+        if (paymentMethod === "company" && !companyId && data[`${key}Active`]) {
+          throw new Error(`Selecione a empresa que desconta ${label}.`);
         }
         return {
-          key: template.key,
-          label: template.label,
-          active: data[`${template.key}Active`] === "on",
-          amount: number(data[`${template.key}Amount`]),
+          key,
+          label,
+          icon: template?.icon || "O",
+          custom: !template,
+          active: data[`${key}Active`] === "on",
+          amount: number(data[`${key}Amount`]),
           currency,
-          dueDay: clamp(Math.round(number(data[`${template.key}DueDay`])), 1, 31),
+          dueDay: clamp(Math.round(number(data[`${key}DueDay`])), 1, 31),
           paymentMethod,
           cardId,
-          bankAccountId
+          bankAccountId,
+          companyId,
+          recurring: data[`${key}Recurring`] === "on",
+          startMonth: previousItems.get(key)?.startMonth || state.ui.selectedMonth
         };
       });
       const updated = upsertItem("housingCards", data.id, {
@@ -8416,6 +8535,28 @@
 
   function saveIncomeSource(form) {
     const data = formData(form);
+    const isContract = data.salaryCalculationMode === 'contract';
+    const fixedNight = data.salaryNightMethod === 'fixed';
+    const nightHour = number(data.salaryNightHoursWhole);
+    const nightMinute = number(data.salaryNightMinutes);
+    if (isContract && fixedNight && (String(data.salaryNightHoursWhole ?? '').trim() === '' || !Number.isInteger(nightHour) || !Number.isInteger(nightMinute) || nightHour < 0 || nightHour > 23 || nightMinute < 0 || nightMinute > 59)) {
+      showToast('Informe as horas e minutos noturnos por turno, por exemplo 6 horas e 15 minutos.');
+      return;
+    }
+    if (isContract && (number(data.salaryTeijiHours) + number(data.salaryFixedOvertimeHours) > 24 || number(data.salaryLegalHours) > 24)) {
+      showToast('As horas de trabalho por dia nao podem superar 24h.');
+      return;
+    }
+    if (data.salaryDeductionsEnabled === 'on' && number(data.salaryStandardRemuneration) <= 0) {
+      showToast('Informe a remuneracao mensal padrao para calcular os seguros sociais.');
+      return;
+    }
+    const contractKeys = ["salaryDayBreaks", "salaryNightBreaks", "salaryShift1Breaks", "salaryShift2Breaks", "salaryShift3Breaks"];
+    const validTime = /^(?:[01]\d|2[0-3]):[0-5]\d\s*-\s*(?:[01]\d|2[0-3]):[0-5]\d$/;
+    if (contractKeys.some(key => contractBreaks(data[key]).some(value => !validTime.test(value) || shiftDurationHours(value) === 24))) {
+      showToast("Confira os intervalos: HH:MM-HH:MM, separados por virgula.");
+      return;
+    }
     const sourceType = normalizedSourceType(data.type);
     const isFactory = sourceType === "factory";
     const banNaming = isFactory ? String(data.banNaming || "colors") : "";
@@ -8427,6 +8568,36 @@
       customType: sourceType === "other" ? String(data.customType || "").trim() : "",
       hourlyRate: isFactory ? number(data.salaryHourlyRate) : 0,
       salaryHourlyRate: isFactory ? number(data.salaryHourlyRate) : 0,
+      salaryCalculationMode: data.salaryCalculationMode === "contract" ? "contract" : "legacy",
+      salaryStartDate: String(data.salaryStartDate || ""),
+      salaryClosingDay: clamp(Math.round(number(data.salaryClosingDay) || 31), 1, 31),
+      salaryLegalRestDay: "",
+      salaryWeekendRulesVersion: 2,
+      salarySaturdayLegal: data.salarySaturdayLegal === 'on',
+      salarySundayLegal: data.salarySundayLegal === 'on',
+      salarySaturdayLegalRate: salaryLegalAdditionalRate(data.salarySaturdayLegalRate, 25),
+      salarySundayLegalRate: salaryLegalAdditionalRate(data.salarySundayLegalRate, 35),
+      salaryLegalHours: Math.max(0, number(data.salaryLegalHours)),
+      salaryNightMethod: fixedNight ? 'fixed' : 'clock',
+      salaryNightMinutesPerShift: fixedNight ? nightHour * 60 + nightMinute : null,
+      salaryDeductionsEnabled: data.salaryDeductionsEnabled === 'on',
+      salaryStandardRemuneration: Math.max(0, number(data.salaryStandardRemuneration)),
+      salaryHealthRate: Math.max(0, number(data.salaryHealthRate ?? 5.065)),
+      salaryPensionRate: Math.max(0, number(data.salaryPensionRate ?? 9.15)),
+      salaryLongTermCareEnabled: data.salaryLongTermCareEnabled === 'on',
+      salaryLongTermCareRate: Math.max(0, number(data.salaryLongTermCareRate ?? 0.81)),
+      salaryEmploymentRate: Math.max(0, number(data.salaryEmploymentRate ?? 0.5)),
+      salaryChildSupportRate: Math.max(0, number(data.salaryChildSupportRate ?? 0.115)),
+      salaryIncomeTaxFixed: Math.max(0, number(data.salaryIncomeTaxFixed)),
+      salaryResidentTaxFixed: Math.max(0, number(data.salaryResidentTaxFixed)),
+      salaryHousingDeduction: Math.max(0, number(data.salaryHousingDeduction)),
+      salaryParkingDeduction: Math.max(0, number(data.salaryParkingDeduction)),
+      salaryOtherDeduction: Math.max(0, number(data.salaryOtherDeduction)),
+      salaryRestRate: salaryLegalAdditionalRate(data.salarySaturdayLegalRate, 25),
+      salaryHolidayRate: salaryLegalAdditionalRate(data.salarySundayLegalRate, 35),
+      salaryOvertimeThreshold: Math.max(0, number(data.salaryOvertimeThreshold)),
+      salaryOvertimeHighRate: Math.max(0, number(data.salaryOvertimeHighRateTotal) - 100),
+      ...Object.fromEntries(contractKeys.map(key => [key, String(data[key] || "").trim()])),
       salaryTeijiHours: isFactory ? number(data.salaryTeijiHours) : 0,
       salaryFixedOvertimeHours: isFactory ? number(data.salaryFixedOvertimeHours) : 0,
       salaryMonthlyOvertimeHours: isFactory ? number(data.salaryMonthlyOvertimeHours) : 0,
@@ -8527,10 +8698,14 @@
         render();
         return;
       }
+      const source = incomeSourceById(target.sourceId);
+      const deductions = estimateSalaryDeductions(source, amount, target.paymentMonth || date.slice(0, 7));
       state.paidCommitments[key] = {
         receivedAt: now,
         bankAccountId,
-        amount,
+        amount: deductions.configured ? deductions.net : amount,
+        grossAmount: amount,
+        deductions: deductions.total,
         currency,
         paymentMonth: target.paymentMonth || date.slice(0, 7)
       };
@@ -8553,6 +8728,7 @@
         updatedBy: author.id,
         updatedByName: author.name
       });
+      recordSalaryDeductionTransactions({ target, source, deductions, date, bankAccountId, currency, author, now });
     }
 
     if (target.kind === "work") {
@@ -8580,9 +8756,61 @@
     showToast("Recebimento confirmado.");
   }
 
+  function recordSalaryDeductionTransactions({ target, source, deductions, date, bankAccountId, currency, author, now }) {
+    if (!deductions?.configured || !deductions.entries?.length) return;
+    const paymentMonth = target.paymentMonth || date.slice(0, 7);
+    deductions.entries.forEach((entry) => {
+      const payrollKey = `${target.month}:salary-deduction:${target.sourceId}:${entry.key}`;
+      if ((state.transactions || []).some((item) => item.payrollKey === payrollKey)) return;
+      if (entry.housingId && entry.housingItemKey) {
+        state.paidCommitments[housingPaymentKey(entry.housingId, entry.housingItemKey, paymentMonth)] = {
+          paidAt: now,
+          paymentMethod: "company",
+          companyId: source.id,
+          salaryMonth: target.month
+        };
+      }
+      state.transactions.unshift({
+        id: uid("tx"),
+        date,
+        country: entry.country || bankAccountById(bankAccountId)?.country || "japao",
+        type: "expense",
+        title: `${entry.label} - ${source.name || "Empresa"}`,
+        category: entry.category || "Descontos salariais",
+        amount: round(entry.amount, currency === "JPY" ? 0 : 2),
+        currency,
+        bankAccountId,
+        paymentMethod: "company",
+        paymentRef: `salary:${target.sourceId}`,
+        payrollKey,
+        note: "Descontado automaticamente no salario",
+        createdAt: now,
+        createdBy: author.id,
+        createdByName: author.name,
+        updatedAt: now,
+        updatedBy: author.id,
+        updatedByName: author.name
+      });
+    });
+  }
+
   function saveWorkOverride(form) {
     const data = formData(form);
     const source = incomeSourceById(data.sourceId);
+    const actual = ["regular", "rest", "holiday"].includes(data.type);
+    const hours = ["actualRegularHours", "actualOvertimeHours", "actualNightHours"].map(key => number(data[key]));
+    if (actual && (hours.some(value => value < 0 || value > 24) || hours[0] + hours[1] > 24 || hours[2] > hours[0] + hours[1])) {
+      showToast("Confira as horas: total ate 24h; noturno nao pode superar as horas trabalhadas.");
+      return;
+    }
+    if (actual && source.salaryCalculationMode !== "contract") {
+      showToast("Selecione Contrato e apontamentos no cadastro da empresa primeiro.");
+      return;
+    }
+    if (userWorkScheduleOverrides().some(item => item.sourceId === data.sourceId && item.date === data.date && item.id !== data.id)) {
+      showToast("Ja existe um apontamento nesta data. Edite o registro existente.");
+      return;
+    }
     const author = currentUserAuthor();
     const updated = upsertItem("workScheduleOverrides", data.id, {
       ownerId: author.id,
@@ -8590,13 +8818,16 @@
       sourceName: source.name,
       date: data.date,
       type: data.type || "forcedOff",
+      actualRegularHours: hours[0],
+      actualOvertimeHours: hours[1],
+      actualNightHours: hours[2],
       note: String(data.note || "").trim()
     }, true);
     state.ui.selectedMonth = data.date.slice(0, 7);
     saveState();
     closeModal();
     render();
-    showToast(updated ? "Folga atualizada." : "Folga extra salva.");
+    showToast(updated ? "Apontamento atualizado." : "Apontamento salvo.");
   }
 
   function saveMonthlyPayment(form) {
@@ -8620,11 +8851,12 @@
       return;
     }
 
+    const bankAccountId = data.bankAccountId || target.bankAccountId || "";
     state.paidCommitments[key] = {
       paidAt: new Date().toISOString(),
       method: data.paymentMethod || "balance",
       sourceId: data.sourceId || "",
-      bankAccountId: data.bankAccountId || "",
+      bankAccountId,
       note: String(data.note || "").trim()
     };
 
@@ -8638,11 +8870,12 @@
       category: target.category,
       amount: number(target.amount),
       currency: target.currency,
-      bankAccountId: data.bankAccountId || "",
+      bankAccountId,
       paymentMethod: data.paymentMethod || "balance",
       note: monthlyPaymentNote(target, data),
       paymentRef: data.paymentRef,
       paymentKey: key,
+      settlementOnly: target.kind === "card",
       createdAt: new Date().toISOString(),
       createdBy: author.id,
       createdByName: author.name
@@ -8684,6 +8917,10 @@
     if (!card) return;
     const item = housingItemByKey(card, itemKey);
     if (!item || item.active === false) return;
+    if (item.paymentMethod === "company") {
+      showToast("Este item sera pago automaticamente no recebimento do salario.");
+      return;
+    }
     const month = state.ui.selectedMonth;
     const key = housingPaymentKey(housingId, itemKey, month);
     if (state.paidCommitments[key]) {
@@ -8718,6 +8955,9 @@
         firstBillMonth: month,
         purchaseDate: dueDate,
         note: "Criado a partir do card de moradia",
+        housingId,
+        housingItemKey: itemKey,
+        paidAtPurchase: true,
         createdAt: new Date().toISOString(),
         createdBy: author.id,
         createdByName: author.name
@@ -8832,7 +9072,9 @@
         amount: bill.total,
         currency: card.currency,
         date: dateInMonth(month, card.dueDay || 1),
-        month
+        month,
+        paymentMethod: normalizeCardPaymentMethod(card.paymentMethod) === "bank" ? "bank" : normalizeCardPaymentMethod(card.paymentMethod) === "kombini" ? "kombini" : "balance",
+        bankAccountId: card.bankAccountId || ""
       };
     }
 
@@ -8884,11 +9126,25 @@
       extra: "ganho extra",
       pix: "Pix",
       bank: "debito em conta",
+      company: "desconto pela empresa",
       card: "cartao",
+      kombini: "kombini",
       cash: "dinheiro",
       other: "outro"
     };
     return labels[method] || "saldo atual";
+  }
+
+  function normalizeCardPaymentMethod(method) {
+    const value = normalizeLookupText(method || "manual");
+    if (value === "bank" || /debito|conta/.test(value)) return "bank";
+    if (value === "kombini" || /kombini|combini|convenience/.test(value)) return "kombini";
+    return "manual";
+  }
+
+  function updateCreditCardPaymentFields() {
+    const method = normalizeCardPaymentMethod(modalRoot.querySelector("#cardPaymentMethod")?.value);
+    modalRoot.querySelector(".card-payment-bank-field")?.classList.toggle("is-hidden", method !== "bank");
   }
 
   function deleteItem(collection, id, message) {
@@ -10016,7 +10272,7 @@
         income += converted;
         actualIncome += converted;
       }
-      if (outflowTypes.includes(item.type)) {
+      if (outflowTypes.includes(item.type) && !item.settlementOnly) {
         expenses += converted;
         actualExpenses += converted;
       }
@@ -10024,6 +10280,12 @@
         investments += converted;
         actualInvestments += converted;
       }
+    });
+
+    cardPurchaseExpenseEntries(month, country).forEach((item) => {
+      const converted = convert(item.amount, item.currency, targetCurrency, rate);
+      expenses += converted;
+      actualExpenses += converted;
     });
 
     plannedCommitmentEntries(month, country).forEach((item) => {
@@ -10038,7 +10300,8 @@
     });
 
     plannedCardBillEntries(month, country).forEach((item) => {
-      const converted = convert(item.amount, item.currency, targetCurrency, rate);
+      const detailed = cardPurchaseRowsForCard(item.cardId, month).reduce((total, row) => total + number(row.amount), 0);
+      const converted = convert(Math.max(0, item.amount - detailed), item.currency, targetCurrency, rate);
       expenses += converted;
       plannedExpenses += converted;
     });
@@ -10296,7 +10559,7 @@
   }
 
   function housingCardMonthSummary(card, month) {
-    const rows = housingCardMonthRows(card, month);
+    const rows = housingCardMonthRows(card, month).filter((item) => item.paymentMethod !== "company" || item.paid);
     const currency = card.currency || primaryCurrency();
     const rate = latestRate(month);
     const total = rows.reduce((sumValue, item) => sumValue + convert(item.amount, item.currency, currency, rate), 0);
@@ -10323,9 +10586,10 @@
     return normalizeHousingItems(card.items, card.currency || primaryCurrency())
       .filter((item) => item.active !== false)
       .filter((item) => number(item.amount) > 0)
+      .filter((item) => item.recurring || item.startMonth === month)
       .map((item) => ({
         ...item,
-        icon: housingItemTemplates.find((template) => template.key === item.key)?.icon || "M",
+        icon: item.icon || housingItemTemplates.find((template) => template.key === item.key)?.icon || "M",
         date: housingItemDateForMonth(item, month),
         paid: isHousingItemPaid(card.id, item.key, month)
       }));
@@ -10337,6 +10601,10 @@
   }
 
   function housingItemDateForMonth(item, month) {
+    if (item?.paymentMethod === "company" && item.companyId) {
+      const company = incomeSourceById(item.companyId);
+      if (company?.id) return factorySalaryDueDate(company, month);
+    }
     return dateInMonth(month, item?.dueDay || 1);
   }
 
@@ -11073,6 +11341,7 @@
   }
 
   function estimateFactorySourceSalary(source, month = state.ui.selectedMonth, bonusMonth = month) {
+    if (source.salaryCalculationMode === "contract") return estimateContractSalary(source, month, bonusMonth);
     const currency = source.currency || primaryCurrency();
     const baseHourlyRate = number(source.salaryHourlyRate || source.hourlyRate);
     const teijiHours = number(source.salaryTeijiHours);
@@ -11141,6 +11410,239 @@
     return activeSalaryProgressionForDate(source, date).hourlyRate;
   }
 
+  function contractBreaks(value) {
+    return String(value || "").split(/[,;\n]+/).map(value => value.trim()).filter(Boolean);
+  }
+
+  function renderContractFields(item) {
+    const numeric = [["salaryClosingDay", "Fechamento (31 = ultimo dia)", 31], ["salaryOvertimeThreshold", "Limite mensal de extras (h)", 60], ["salaryOvertimeHighRate", "Acima do limite: total %", 50]];
+    return `<input type="hidden" id="salaryCalculationMode" name="salaryCalculationMode" value="contract" />
+      <details class="salary-contract-fields salary-contract-only"><summary>Intervalos e regras avancadas</summary>
+      <div class="field"><label for="salaryStartDate">Inicio do contrato</label><input type="date" id="salaryStartDate" name="salaryStartDate" value="${escapeAttr(item?.salaryStartDate || "")}" /></div>
+      <div class="two-cols">${numeric.map(([key, label, fallback]) => { const total = key.endsWith("Rate"); return `<div class="field"><label for="${key}">${label}</label><input id="${key}" name="${key}${total ? 'Total' : ''}" type="number" min="${total ? 100 : key === 'salaryClosingDay' ? 1 : 0}" ${key === 'salaryClosingDay' ? 'max="31" step="1"' : 'step="0.01"'} value="${escapeAttr(number(item?.[key] ?? fallback) + (total ? 100 : 0))}" /></div>`; }).join("")}</div>
+      ${[["salaryDayBreaks", "diurno"], ["salaryNightBreaks", "noturno"], ["salaryShift1Breaks", "turno 1"], ["salaryShift2Breaks", "turno 2"], ["salaryShift3Breaks", "turno 3"]].map(([key, label]) => `<div class="field"><label for="${key}">Intervalos nao pagos - ${label}</label><input id="${key}" name="${key}" placeholder="00:00-00:45, 05:00-05:25" value="${escapeAttr(item?.[key] || "")}" /></div>`).join("")}</details>`;
+  }
+
+  function renderSimpleSalaryFields(item) {
+    const input = (key, label, value, max = 1000000) => `<div class="field"><label for="${key}">${label}</label><input id="${key}" name="${key}" type="number" min="0" max="${max}" step="0.01" value="${escapeAttr(value ?? '')}" /></div>`;
+    const rule = day => salaryWeekendRule(item || {}, day);
+    const duration = item?.salaryNightMinutesPerShift;
+    const fixed = item?.salaryNightMethod === "fixed" || (!item && duration == null);
+    return `<div class="two-cols">
+      ${input('salaryHourlyRate', 'Salario por hora', item?.salaryHourlyRate ?? item?.hourlyRate)}
+      ${input('salaryTeijiHours', 'Horas normais por dia', item?.salaryTeijiHours, 24)}
+      ${input('salaryFixedOvertimeHours', 'Extras por dia normal (h)', item?.salaryFixedOvertimeHours, 24)}
+      ${input('salaryOvertimeRate', 'Adicional de extras (%)', item?.salaryOvertimeRate ?? 25)}
+      </div>
+      <div class="salary-contract-only salary-weekends">
+        ${[[6, 'Saturday', 'Sabado'], [0, 'Sunday', 'Domingo']].map(([day, key, label]) => `<div class="salary-weekend-row"><label class="salary-weekend-check"><input type="checkbox" name="salary${key}Legal" id="salary${key}Legal" ${rule(day).enabled ? 'checked' : ''} />${label}: feriado legal</label>${input('salary' + key + 'LegalRate', 'Percentual total (%)', 100 + rule(day).rate, 300)}<output data-salary-total="salary${key}LegalRate">Contrato: ${100 + rule(day).rate}% da hora</output></div>`).join('')}
+        ${input('salaryLegalHours', 'Horas por feriado legal trabalhado', item?.salaryLegalHours ?? (number(item?.salaryTeijiHours) + number(item?.salaryFixedOvertimeHours) || 11), 24)}
+      </div>
+      <div class="two-cols">
+        ${input('salaryNightRate', 'Adicional noturno (%)', item?.salaryNightRate ?? 25)}
+        <div class="field salary-contract-only"><label for="salaryNightMethod">Horas noturnas</label><select id="salaryNightMethod" name="salaryNightMethod"><option value="fixed" ${fixed ? 'selected' : ''}>Informar por turno</option><option value="clock" ${!fixed ? 'selected' : ''}>Calcular pelos horarios</option></select></div>
+      </div>
+      <div class="two-cols salary-fixed-night salary-contract-only">
+        ${input('salaryNightHoursWhole', 'Noturno por turno: horas', duration == null ? '' : Math.floor(duration / 60), 23)}
+        ${input('salaryNightMinutes', 'Minutos', duration == null ? '' : duration % 60, 59)}
+      </div>
+      ${renderSalaryDeductionFields(item)}
+      ${renderContractFields(item)}
+      <details class="salary-other-fields"><summary>Outros ajustes salariais</summary>
+        ${input('salaryMonthlyOvertimeHours', 'Extras normais previstas no mes (opcional)', item?.salaryMonthlyOvertimeHours)}
+        <div class="two-cols">${input('salarySundayRate', 'Domingo % (formula anterior)', item?.salarySundayRate)}${input('salarySaturdayRate', 'Sabado % (formula anterior)', item?.salarySaturdayRate)}</div>
+        <div class="field"><label for="salarySundayAllDay">Domingo (formula anterior)</label><select id="salarySundayAllDay" name="salarySundayAllDay"><option value="yes" ${item?.salarySundayAllDay !== false ? 'selected' : ''}>Adicional o dia inteiro</option><option value="no" ${item?.salarySundayAllDay === false ? 'selected' : ''}>Nao calcular domingo</option></select></div>
+        <div class="two-cols">${[['salaryNightStart', 'Inicio da faixa noturna', '22:00'], ['salaryNightEnd', 'Fim da faixa noturna', '05:00']].map(([key, label, fallback]) => `<div class="field"><label for="${key}">${label}</label><input type="time" id="${key}" name="${key}" value="${escapeAttr(item?.[key] || fallback)}" /></div>`).join('')}</div>
+      </details>`;
+  }
+
+  function renderSalaryDeductionFields(item) {
+    const configured = item?.salaryDeductionsEnabled === true || (item?.salaryDeductionsEnabled == null && number(item?.salaryStandardRemuneration) > 0);
+    const input = (key, label, value) => `<div class="field"><label for="${key}">${label}</label><input id="${key}" name="${key}" type="number" min="0" step="0.001" value="${escapeAttr(value ?? '')}" /></div>`;
+    return `<section class="salary-deduction-fields salary-contract-only">
+      <label class="salary-weekend-check"><input type="checkbox" id="salaryDeductionsEnabled" name="salaryDeductionsEnabled" ${configured ? 'checked' : ''} />Calcular descontos e salario liquido</label>
+      <div class="salary-deduction-body">
+        ${input('salaryStandardRemuneration', 'Remuneracao mensal padrao', item?.salaryStandardRemuneration)}
+        <p class="field-help">Valor-base definido pela previdencia. No holerite analisado: ¥260.000.</p>
+        <div class="two-cols">${input('salaryIncomeTaxFixed', 'Imposto de renda estimado', item?.salaryIncomeTaxFixed)}${input('salaryResidentTaxFixed', 'Imposto residencial', item?.salaryResidentTaxFixed)}</div>
+        <div class="two-cols">${input('salaryHousingDeduction', 'Aluguel manual (opcional)', item?.salaryHousingDeduction)}${input('salaryParkingDeduction', 'Estacionamento manual (opcional)', item?.salaryParkingDeduction)}</div>
+        <p class="field-help">Itens marcados como Desconto pela empresa no card Moradia entram automaticamente e substituem estes valores manuais.</p>
+        ${input('salaryOtherDeduction', 'Outros descontos fixos', item?.salaryOtherDeduction)}
+        <details class="salary-deduction-rates"><summary>Taxas do contrato</summary>
+          <div class="two-cols">${input('salaryHealthRate', 'Seguro-saude (%)', item?.salaryHealthRate ?? 5.065)}${input('salaryPensionRate', 'Previdencia social (%)', item?.salaryPensionRate ?? 9.15)}</div>
+          <div class="two-cols">${input('salaryEmploymentRate', 'Seguro-desemprego sobre o bruto (%)', item?.salaryEmploymentRate ?? 0.5)}${input('salaryChildSupportRate', 'Apoio a criacao de filhos (%)', item?.salaryChildSupportRate ?? 0.115)}</div>
+          <label class="salary-weekend-check"><input type="checkbox" id="salaryLongTermCareEnabled" name="salaryLongTermCareEnabled" ${item?.salaryLongTermCareEnabled ? 'checked' : ''} />Aplicar seguro de cuidados de longo prazo</label>
+          ${input('salaryLongTermCareRate', 'Cuidados de longo prazo (%)', item?.salaryLongTermCareRate ?? 0.81)}
+        </details>
+      </div>
+    </section>`;
+  }
+
+  function salaryWeekendRule(source, day) {
+    const key = day === 6 ? 'Saturday' : 'Sunday';
+    if (source.salaryWeekendRulesVersion >= 1) return { enabled: source[`salary${key}Legal`] === true, rate: salaryLegalAdditionalRate(source[`salary${key}LegalRate`]) };
+    return { enabled: String(source.salaryLegalRestDay ?? '') === String(day), rate: salaryLegalAdditionalRate(source.salaryHolidayRate ?? 35) };
+  }
+
+  function salaryLegalAdditionalRate(value, fallback = 35) {
+    const parsed = value == null || value === "" ? fallback : Math.max(0, number(value));
+    return parsed >= 100 ? parsed - 100 : parsed;
+  }
+
+  function companyHousingDeductionEntries(source, paymentMonth) {
+    if (!source?.id || !paymentMonth) return [];
+    const salaryCurrency = sanitizeCurrency(source.currency, "JPY");
+    return (state.housingCards || []).flatMap((card) => normalizeHousingItems(card.items, card.currency || salaryCurrency)
+      .filter((item) => card.active !== false && item.active !== false && (item.recurring || item.startMonth === paymentMonth) && item.paymentMethod === "company" && item.companyId === source.id && number(item.amount) > 0)
+      .map((item) => ({
+        key: `housing:${card.id}:${item.key}`,
+        label: `${item.label} - ${card.name || "Moradia"}`,
+        category: "Moradia",
+        amount: Math.round(convert(item.amount, item.currency, salaryCurrency, latestRate(paymentMonth))),
+        housingId: card.id,
+        housingItemKey: item.key,
+        country: card.country || "japao"
+      })));
+  }
+
+  function estimateSalaryDeductions(source, gross, paymentMonth = "") {
+    const base = Math.max(0, number(source.salaryStandardRemuneration));
+    const rounded = value => Math.round(Math.max(0, value));
+    const companyHousing = companyHousingDeductionEntries(source, paymentMonth);
+    const calculatePayroll = source.salaryDeductionsEnabled === true || (source.salaryDeductionsEnabled == null && base > 0);
+    const configured = calculatePayroll || companyHousing.length > 0;
+    const linkedAmount = key => companyHousing.filter((entry) => entry.housingItemKey === key).reduce((sum, entry) => sum + entry.amount, 0);
+    const hasLinked = key => companyHousing.some((entry) => entry.housingItemKey === key);
+    const result = {
+      configured,
+      health: calculatePayroll ? rounded(base * number(source.salaryHealthRate ?? 5.065) / 100) : 0,
+      pension: calculatePayroll ? rounded(base * number(source.salaryPensionRate ?? 9.15) / 100) : 0,
+      longTermCare: calculatePayroll && source.salaryLongTermCareEnabled ? rounded(base * number(source.salaryLongTermCareRate ?? 0.81) / 100) : 0,
+      employment: calculatePayroll ? rounded(number(gross) * number(source.salaryEmploymentRate ?? 0.5) / 100) : 0,
+      childSupport: calculatePayroll ? rounded(base * number(source.salaryChildSupportRate ?? 0.115) / 100) : 0,
+      incomeTax: calculatePayroll ? rounded(number(source.salaryIncomeTaxFixed)) : 0,
+      residentTax: calculatePayroll ? rounded(number(source.salaryResidentTaxFixed)) : 0,
+      housing: hasLinked("rent") ? linkedAmount("rent") : calculatePayroll ? rounded(number(source.salaryHousingDeduction)) : 0,
+      electricity: linkedAmount("electricity"),
+      gas: linkedAmount("gas"),
+      water: linkedAmount("water"),
+      internet: linkedAmount("internet"),
+      parking: hasLinked("parking") ? linkedAmount("parking") : calculatePayroll ? rounded(number(source.salaryParkingDeduction)) : 0,
+      other: calculatePayroll ? rounded(number(source.salaryOtherDeduction)) : 0,
+      entries: []
+    };
+    const add = (key, label, amount, category = "Descontos salariais") => {
+      if (number(amount) > 0) result.entries.push({ key, label, category, amount: number(amount), country: "japao" });
+    };
+    add("health", "Seguro-saude", result.health, "Saude");
+    add("pension", "Previdencia social", result.pension);
+    add("long-term-care", "Seguro de cuidados de longo prazo", result.longTermCare, "Saude");
+    add("employment", "Seguro-desemprego", result.employment);
+    add("child-support", "Apoio a criacao de filhos", result.childSupport);
+    add("income-tax", "Imposto de renda", result.incomeTax);
+    add("resident-tax", "Imposto residencial", result.residentTax);
+    companyHousing.forEach((entry) => result.entries.push(entry));
+    if (!hasLinked("rent")) add("housing", "Aluguel descontado", result.housing, "Moradia");
+    if (!hasLinked("parking")) add("parking", "Estacionamento descontado", result.parking, "Moradia");
+    add("other", "Outros descontos", result.other);
+    if (!configured) result.entries = [];
+    result.total = configured ? result.entries.reduce((sum, entry) => sum + number(entry.amount), 0) : 0;
+    result.net = Math.max(0, number(gross) - result.total);
+    return result;
+  }
+
+  // Count minutes once, including overnight breaks, instead of rounding each shift.
+  function contractShiftHours(range, breaks, nightStart, nightEnd) {
+    const shift = parseTimeRange(range);
+    if (!shift) return { paid: 0, night: 0 };
+    const end = shift.end <= shift.start ? shift.end + 1440 : shift.end;
+    const windows = contractBreaks(breaks).map(parseTimeRange).filter(Boolean);
+    const night = parseTimeRange(`${nightStart}-${nightEnd}`);
+    const inside = (minute, window) => {
+      const stop = window.end <= window.start ? window.end + 1440 : window.end;
+      return [-1440, 0, 1440].some(offset => minute >= window.start + offset && minute < stop + offset);
+    };
+    let paid = 0, nocturnal = 0;
+    for (let minute = shift.start; minute < end; minute++) {
+      if (windows.some(window => inside(minute, window))) continue;
+      paid++;
+      if (night && inside(minute, night)) nocturnal++;
+    }
+    return { paid: paid / 60, night: nocturnal / 60 };
+  }
+
+  function estimateContractSalary(source, month, bonusMonth) {
+    const close = clamp(Math.round(number(source.salaryClosingDay) || 31), 1, 31);
+    const end = dateInMonth(month, close);
+    const previous = dateInMonth(addMonths(month, -1), close);
+    const dates = [...daysInMonth(addMonths(month, -1)), ...daysInMonth(month)].filter(date => date > previous && date <= end && (!source.salaryStartDate || date >= source.salaryStartDate));
+    const overrides = workScheduleOverridesForSource(source.id);
+    const rows = dates.map(date => ({ date, day: factoryScheduleDay(source, date), actual: overrides.find(item => item.date === date) }));
+    const result = { configured: number(source.salaryTeijiHours) > 0 && (number(source.salaryHourlyRate || source.hourlyRate) > 0 || normalizeSalaryProgressions(source.salaryProgressions).length > 0), currency: source.currency || primaryCurrency(), total: 0, teiji: 0, overtime: 0, night: 0, sunday: 0, saturday: 0, bonus: 0, workDays: 0, regularHours: 0, overtimeHours: 0, nightHours: 0, holidayHours: 0, restHours: 0, actualDays: 0, periodEnd: end };
+    const actualTypes = ["regular", "rest", "holiday"];
+    const legalRule = date => {
+      const weekday = parseLocalDate(date).getDay();
+      if (weekday === 0 || weekday === 6) return salaryWeekendRule(source, weekday);
+      return { enabled: String(source.salaryLegalRestDay ?? '') === String(weekday), rate: salaryLegalAdditionalRate(source.salaryHolidayRate) };
+    };
+    const dayType = (date, actual) => actual?.type || (legalRule(date).enabled ? "holiday" : "regular");
+    const eligible = rows.filter(({ date, day, actual }) => isWorkedScheduleDay(day) && !actualTypes.includes(actual?.type) && dayType(date, actual) === "regular");
+    const recordedExtra = rows.reduce((sum, { actual }) => sum + (actual?.type === "regular" ? number(actual.actualOvertimeHours) : 0), 0);
+    const monthlyExtra = number(source.salaryMonthlyOvertimeHours);
+    const projectedExtra = monthlyExtra > 0 ? Math.max(0, monthlyExtra - recordedExtra) / Math.max(1, eligible.length) : number(source.salaryFixedOvertimeHours);
+    let accumulatedExtra = 0;
+    for (const { date, day, actual } of rows) {
+      const rate = salaryHourlyRateForDate(source, date);
+      if (rate <= 0) continue;
+      const type = dayType(date, actual);
+      if (type === "paidOff") {
+        const hours = number(source.salaryTeijiHours);
+        result.teiji += rate * hours;
+        result.regularHours += hours;
+        result.actualDays++;
+        continue;
+      }
+      if (!isWorkedScheduleDay(day)) continue;
+      const recorded = actualTypes.includes(actual?.type);
+      const key = { day: "salaryDayBreaks", night: "salaryNightBreaks", shift1: "salaryShift1Breaks", shift2: "salaryShift2Breaks", shift3: "salaryShift3Breaks" }[day.type];
+      const shift = contractShiftHours(day.time, source[key], source.salaryNightStart || "22:00", source.salaryNightEnd || "05:00");
+      const normal = recorded ? number(actual.actualRegularHours) : number(source.salaryTeijiHours);
+      const extra = recorded ? number(actual.actualOvertimeHours) : type === "regular" ? projectedExtra : number(source.salaryFixedOvertimeHours);
+      const legalHours = recorded ? normal + extra : source.salaryLegalHours == null ? normal + extra : number(source.salaryLegalHours);
+      const paidHours = type === 'holiday' || type === 'rest' ? legalHours : normal + extra;
+      const fixedNight = source.salaryNightMethod === 'fixed' && source.salaryNightMinutesPerShift != null;
+      const estimatedNight = fixedNight ? (shift.night > 0 ? number(source.salaryNightMinutesPerShift) / 60 : 0) : shift.night;
+      const night = recorded ? number(actual.actualNightHours) : Math.min(estimatedNight, paidHours);
+      result.workDays++;
+      if (recorded) result.actualDays++;
+      if (type === "holiday" || type === "rest") {
+        const hours = legalHours;
+        if (type === "holiday") {
+          const premium = !recorded && legalRule(date).enabled ? legalRule(date).rate : salaryLegalAdditionalRate(source.salaryHolidayRate);
+          result.sunday += rate * hours * (1 + premium / 100);
+          result.holidayHours += hours;
+        } else {
+          result.saturday += rate * hours * (1 + salaryLegalAdditionalRate(source.salaryRestRate, 25) / 100);
+          result.restHours += hours;
+        }
+      } else {
+        const threshold = number(source.salaryOvertimeThreshold);
+        const lower = threshold > 0 ? Math.min(extra, Math.max(0, threshold - accumulatedExtra)) : extra;
+        result.teiji += rate * normal;
+        result.overtime += rate * (lower * (1 + number(source.salaryOvertimeRate) / 100) + (extra - lower) * (1 + number(source.salaryOvertimeHighRate) / 100));
+        result.regularHours += normal;
+        result.overtimeHours += extra;
+        accumulatedExtra += extra;
+      }
+      result.nightHours += night;
+      result.night += rate * night * number(source.salaryNightRate) / 100;
+    }
+    result.bonus = bonusMonth ? salaryBonusesForMonth(source, bonusMonth).reduce((sum, item) => sum + item.amount, 0) : 0;
+    result.total = result.teiji + result.overtime + result.night + result.sunday + result.saturday + result.bonus;
+    result.configured ||= result.bonus > 0;
+    return result;
+  }
+
   function salaryBonusesForMonth(source, month) {
     return normalizeSalaryBonuses(source.salaryBonuses).flatMap((bonus) => {
       const occurrences = salaryBonusOccurrencesPaidInMonth(bonus, month);
@@ -11157,6 +11659,7 @@
     const monthStart = parseLocalDate(dateInMonth(paymentMonth, 1));
     const monthEnd = parseLocalDate(dateInMonth(paymentMonth, 31));
     if (monthEnd < start) return 0;
+    if (bonus.frequency === "once") return bonus.nextPaymentDate.slice(0, 7) === paymentMonth ? 1 : 0;
 
     if (bonus.frequency === "weekly") {
       let count = 0;
@@ -11294,6 +11797,9 @@
   function factoryScheduleDay(source, date) {
     const schedule = factoryScheduleConfig(source);
     const override = workScheduleOverridesForSource(source.id).find((item) => item.date === date);
+    if (override && ["regular", "rest", "holiday"].includes(override.type)) {
+      return { date, type: "day", className: "is-day", label: workOverrideTypeShortLabel(override.type), time: "", title: `${workOverrideTypeLabel(override.type)} - ${number(override.actualRegularHours) + number(override.actualOvertimeHours)}h`, banColor: schedule.myBanColor };
+    }
     if (override) {
       return {
         date,
@@ -11411,12 +11917,16 @@
     const map = {
       forcedOff: "Folga forcada",
       paidOff: "Yukyu",
-      manualOff: "Folga manual"
+      manualOff: "Folga manual",
+      regular: "Trabalho normal",
+      rest: "Folga trabalhada",
+      holiday: "Feriado legal"
     };
     return map[type] || "Folga extra";
   }
 
   function workOverrideTypeShortLabel(type) {
+    if (["regular", "rest", "holiday"].includes(type)) return { regular: "Real", rest: "Folga trab.", holiday: "Feriado" }[type];
     return type === "paidOff" ? "Yukyu" : "Extra";
   }
 
@@ -11484,6 +11994,24 @@
   }
 
   function updateIncomeSourceDynamicFields() {
+    const contract = modalRoot.querySelector("#salaryCalculationMode")?.value === "contract";
+    modalRoot.querySelectorAll(".salary-contract-only").forEach(element => element.classList.toggle("is-hidden", !contract));
+    modalRoot.querySelector('.salary-fixed-night')?.classList.toggle('is-hidden', !contract || modalRoot.querySelector('#salaryNightMethod')?.value !== 'fixed');
+    const deductionBody = modalRoot.querySelector('.salary-deduction-body');
+    if (deductionBody) deductionBody.classList.toggle('is-hidden', !modalRoot.querySelector('#salaryDeductionsEnabled')?.checked);
+    ['Saturday', 'Sunday'].forEach(day => {
+      const enabled = modalRoot.querySelector(`#salary${day}Legal`)?.checked;
+      const rate = modalRoot.querySelector(`#salary${day}LegalRate`);
+      if (rate) rate.readOnly = !enabled;
+      const total = modalRoot.querySelector(`[data-salary-total="salary${day}LegalRate"]`);
+      if (total) total.textContent = enabled ? `Contrato: ${number(rate?.value)}% da hora` : 'Dia normal / folga da escala';
+    });
+    ["salarySundayRate", "salarySaturdayRate", "salarySundayAllDay"].forEach(id => modalRoot.querySelector(`#${id}`)?.closest(".field")?.classList.toggle("is-hidden", contract));
+    const shift = modalRoot.querySelector("#shiftSystem")?.value || "nikoutai";
+    ["salaryDayBreaks", "salaryNightBreaks", "salaryShift1Breaks", "salaryShift2Breaks", "salaryShift3Breaks"].forEach(id => {
+      const visible = shift === "sankoutai" ? id.includes("Shift") : shift === "day" ? id === "salaryDayBreaks" : shift === "night" ? id === "salaryNightBreaks" : !id.includes("Shift");
+      modalRoot.querySelector(`#${id}`)?.closest(".field")?.classList.toggle("is-hidden", !visible);
+    });
     const select = modalRoot.querySelector("#sourceType");
     const field = modalRoot.querySelector(".other-source-field");
     const input = modalRoot.querySelector("#sourceCustomType");
@@ -11566,6 +12094,20 @@
     field.classList.toggle("is-hidden", !show);
     cardSelect.required = show;
     if (!show) cardSelect.value = "";
+  }
+
+  function updateHousingPaymentFields() {
+    modalRoot.querySelectorAll(".housing-form-row").forEach((row) => {
+      const method = row.querySelector('select[id$="PaymentMethod"]')?.value || "bank";
+      row.querySelector(".housing-due-field")?.classList.toggle("is-hidden", method === "company");
+      row.querySelector(".housing-bank-field")?.classList.toggle("is-hidden", method !== "bank");
+      row.querySelector(".housing-card-field")?.classList.toggle("is-hidden", method !== "card");
+      row.querySelector(".housing-company-field")?.classList.toggle("is-hidden", method !== "company");
+      const company = row.querySelector('select[id$="CompanyId"]');
+      const card = row.querySelector('select[id$="CardId"]');
+      if (company) company.required = method === "company";
+      if (card) card.required = method === "card";
+    });
   }
 
   function updateSubscriptionCycleField() {
@@ -11772,7 +12314,32 @@
         };
       })
       : [];
-    return [...txs, ...autoSubscriptions, ...vehicle, ...incomes].sort((a, b) => b.date.localeCompare(a.date));
+    return [...txs, ...cardPurchaseExpenseEntries(month, country), ...autoSubscriptions, ...vehicle, ...incomes].sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  function cardPurchaseExpenseEntries(month, country) {
+    const detailed = cardPurchaseRows(month, country).map((item) => ({
+      ...item,
+      generated: true,
+      type: "expense",
+      amount: number(item.amount),
+      currency: item.currency,
+      date: item.purchaseDate || dateInMonth(month, 1),
+      paymentMethod: "card",
+      note: `Pago no cartao ${item.cardName || ""}`.trim(),
+      icon: "C"
+    }));
+    const manual = (state.creditCards || [])
+      .filter((card) => country === "global" || card.country === country)
+      .filter((card) => isCardBillPaid(card.id, month))
+      .map((card) => {
+        const bill = creditCardMonthBill(card, month);
+        const detailedTotal = cardPurchaseRowsForCard(card.id, month).reduce((total, row) => total + number(row.amount), 0);
+        const amount = Math.max(0, bill.total - detailedTotal);
+        return amount ? { id: `card-manual:${card.id}:${month}`, generated: true, cardId: card.id, cardName: card.nickname || card.issuer, country: card.country, type: "expense", title: `Compras da fatura ${card.nickname || card.issuer}`, category: "Cartao", amount, currency: card.currency, date: dateInMonth(month, card.dueDay || 1), paymentMethod: normalizeCardPaymentMethod(card.paymentMethod), note: "Fatura paga", icon: "C" } : null;
+      })
+      .filter(Boolean);
+    return [...detailed, ...manual];
   }
 
   function categoryTotals(month, country) {
@@ -11780,7 +12347,7 @@
     const rate = latestRate(month);
     const totals = new Map();
     monthTransactions(month, country).forEach((item) => {
-      if (!allOutflowTypes.includes(item.type)) return;
+      if (!allOutflowTypes.includes(item.type) || item.settlementOnly) return;
       const key = item.category || typeMeta[item.type]?.label || "Outros";
       const current = totals.get(key) || 0;
       totals.set(key, current + convert(item.amount, item.currency, currency, rate));
@@ -11791,9 +12358,9 @@
       const current = totals.get(key) || 0;
       totals.set(key, current + convert(item.amount, item.currency, currency, rate));
     });
-    plannedCardBillEntries(month, country).forEach((item) => {
-      const current = totals.get("Cartao") || 0;
-      totals.set("Cartao", current + convert(item.amount, item.currency, currency, rate));
+    cardPurchaseExpenseEntries(month, country).forEach((item) => {
+      const key = item.category || "Cartao";
+      totals.set(key, (totals.get(key) || 0) + convert(item.amount, item.currency, currency, rate));
     });
     plannedSubscriptionEntries(month, country).forEach((item) => {
       const current = totals.get("Subscricao") || 0;

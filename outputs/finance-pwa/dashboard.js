@@ -90,7 +90,7 @@
       });
     });
     const mobile = window.matchMedia('(max-width: 759px)').matches;
-    const mode = mobile ? 'mobile' : 'desktop';
+    const mode = mobile ? 'mobile' : 'desktopFlow';
     let targets = zones;
     if (mobile) {
       const zone = document.createElement('div');
@@ -100,16 +100,21 @@
       new Set(order).forEach(key => { if (cards.has(key)) zone.append(cards.get(key)); });
       zones.forEach(column => column.remove());
       targets = [zone];
-    } else if (Array.isArray(layouts.desktop)) {
-      const placed = new Set();
-      layouts.desktop.slice(0, 3).forEach((keys, column) => {
-        if (!Array.isArray(keys)) return;
-        keys.forEach(key => { if (cards.has(key) && !placed.has(key)) { zones[column].append(cards.get(key)); placed.add(key); } });
-      });
+    } else {
+      const zone = document.createElement('div');
+      zone.className = 'dashboard-masonry-list';
+      shell.append(zone);
+      const legacyOrder = Array.isArray(layouts.desktop)
+        ? layouts.desktop.flatMap(column => Array.isArray(column) ? column : [])
+        : [];
+      const order = [...(Array.isArray(layouts.desktopFlow) ? layouts.desktopFlow : legacyOrder), ...cardClasses];
+      new Set(order).forEach(key => { if (cards.has(key)) zone.append(cards.get(key)); });
+      zones.forEach(column => column.remove());
+      targets = [zone];
     }
     const remember = () => {
       const orders = targets.map(zone => [...zone.children].filter(card => card.dataset.dashboardCard).map(card => card.dataset.dashboardCard));
-      save({ ...layouts, [mode]: mobile ? orders[0] : orders });
+      save({ ...layouts, [mode]: mobile || mode === 'desktopFlow' ? orders[0] : orders });
     };
     targets.forEach(zone => {
       if (!window.Sortable) return;
