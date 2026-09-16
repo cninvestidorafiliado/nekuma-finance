@@ -57,6 +57,9 @@ function copyPublicDir(dirName) {
 }
 
 function withVersion(fileName, content) {
+  if (fileName === "metamask.js") {
+    return content.replace(/metamask-connect\.js\?v=\d+/g, `metamask-connect.js?v=${version}`);
+  }
   if (fileName === "index.html" || fileName === "app.html") {
     return content
       .replace(/styles\.css\?v=\d+/g, `styles.css?v=${version}`)

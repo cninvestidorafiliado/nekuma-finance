@@ -358,7 +358,7 @@
   let cdiFetchInFlight = false;
   let cdiLastAttemptAt = 0;
   let cdiRefreshTimer = null;
-  let web3ListenersAttached = false;
+  const web3ListenerProviders = new WeakSet();
   let remotePullTimer = null;
   let remotePullInFlight = false;
   let dashboardCarouselTimer = null;
@@ -390,7 +390,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=175")
+      navigator.serviceWorker.register("./service-worker.js?v=177")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -633,7 +633,10 @@
     }
   }, 60000);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') refreshCalendarDate();
+    if (document.visibilityState === 'visible') {
+      refreshCalendarDate();
+      if (state.web3Wallet?.address && web3ProviderAvailable() && !web3FetchInFlight) refreshWeb3Wallet(true);
+    }
   });
   window.matchMedia('(max-width: 759px)').addEventListener('change', () => {
     if (state.ui.activeTab === 'dashboard') renderKeepingScroll();
@@ -1820,13 +1823,14 @@
     const crypto = mergeCryptoAssetsWithLocal(remote.cryptoAssets, local.cryptoAssets);
     const merged = mergeLocalCollections(remote, local, ["incomeSources", "workIncomes", "workScheduleOverrides", "familyMembers", "familyBusinesses", "shoppingLists", "receipts", "vehicles", "nubankBoxes", "nubankBoxContributions"]);
     const deletedItems = mergeDeletedItems(remote.deletedItems, local.deletedItems);
-    const preferLocalWallet = Date.parse(local.web3Wallet?.updatedAt || 0) > Date.parse(remote.web3Wallet?.updatedAt || 0);
-    const next = { ...remote, ...merged.collections, cryptoAssets: crypto.items, deletedItems, ui: local.ui, web3Wallet: preferLocalWallet ? local.web3Wallet : remote.web3Wallet };
+    const mergedWallet = window.NekumaMetaMask.mergeWallets(remote.web3Wallet, local.web3Wallet);
+    const walletChanged = JSON.stringify(mergedWallet) !== JSON.stringify(remote.web3Wallet);
+    const next = { ...remote, ...merged.collections, cryptoAssets: crypto.items, deletedItems, ui: local.ui, web3Wallet: mergedWallet };
     for (const [collection, deletions] of Object.entries(deletedItems)) {
       if (Array.isArray(next[collection])) next[collection] = next[collection].filter(item => !deletions[item.id] || itemSyncTime(item) > Date.parse(deletions[item.id]));
     }
     next.vehicle = next.vehicles[0] || createInitialState().vehicle;
-    return { state: next, changed: preferLocalWallet || merged.changed || crypto.changed || cryptoAssetsWereNormalized(rawRemote.cryptoAssets, remote.cryptoAssets) };
+    return { state: next, changed: walletChanged || merged.changed || crypto.changed || cryptoAssetsWereNormalized(rawRemote.cryptoAssets, remote.cryptoAssets) };
   }
 
   function mergeCollectionWithLocal(remoteItems = [], localItems = [], collection = "") {
@@ -5408,7 +5412,7 @@
   function renderMetaMaskGroup() {
     const wallet = normalizeWeb3Wallet(state.web3Wallet);
     const wallets = wallet.wallets.length ? wallet.wallets : wallet.address ? [wallet] : [];
-    const busy = wallet.status === "loading";
+    const busy = web3FetchInFlight;
     return `
       <div class="crypto-origin-group metamask-group">
         <div class="panel-head">
@@ -5436,7 +5440,6 @@
           </div>
         `).join("") : `<p class="empty-state">Nenhuma carteira MetaMask conectada.</p>`}
         ${wallets.length ? `</details>` : ""}
-        ${!web3ProviderAvailable() && location.protocol === "https:" ? `<a class="small-action ghost" href="https://metamask.app.link/dapp/${escapeAttr((location.host + location.pathname).replace(/^\/+/, ""))}">Abrir no navegador da MetaMask</a>` : ""}
         ${wallets.length ? `<button class="small-action ghost" type="button" data-action="disconnect-web3">Remover conexoes do Nekuma</button>` : ""}
       </div>
     `;
@@ -10553,8 +10556,8 @@
 
   function setupWeb3Listeners() {
     const provider = web3Provider();
-    if (web3ListenersAttached || !provider?.on) return;
-    web3ListenersAttached = true;
+    if (!provider?.on || web3ListenerProviders.has(provider)) return;
+    web3ListenerProviders.add(provider);
 
     provider.on("accountsChanged", (accounts = []) => {
       const address = Array.isArray(accounts) ? accounts[0] : "";
@@ -10575,36 +10578,13 @@
     });
 
     provider.on("chainChanged", (chainId) => {
-      const meta = web3NetworkMeta(chainId);
-      state.web3Wallet = normalizeWeb3Wallet({
-        ...(state.web3Wallet || {}),
-        chainId,
-        networkName: meta.name,
-        symbol: meta.symbol,
-        tokens: [],
-        status: state.web3Wallet?.address ? "connected" : "idle",
-        error: ""
-      });
-      saveState({ remoteNow: true });
+      // Keep the previous snapshot visible until the new network has been read.
       refreshWeb3Wallet();
     });
   }
 
   async function connectWeb3Wallet() {
     const generation = stateGeneration;
-    const provider = web3Provider();
-    if (!provider?.request) {
-      state.web3Wallet = normalizeWeb3Wallet({
-        ...(state.web3Wallet || {}),
-        status: "error",
-        error: "MetaMask nao encontrada. No PC, instale a extensao MetaMask. No celular, abra o app no navegador da MetaMask."
-      });
-      saveState();
-      render();
-      showToast("Carteira Web3 nao encontrada.");
-      return;
-    }
-    setupWeb3Listeners();
 
     if (web3FetchInFlight) return;
     web3FetchInFlight = true;
@@ -10616,7 +10596,9 @@
     render();
 
     try {
-      const accounts = await provider.request({ method: "eth_requestAccounts" });
+      const { accounts, provider } = await window.NekumaMetaMask.connectAccounts(state.web3Wallet?.chainId);
+      if (generation !== stateGeneration) return;
+      setupWeb3Listeners();
       const address = Array.isArray(accounts) ? accounts[0] : "";
       if (!address) throw new Error("Nenhuma conta foi autorizada na carteira.");
       for (const authorizedAddress of accounts) {
@@ -10641,25 +10623,33 @@
       showToast("Nao consegui conectar a carteira.");
     } finally {
       web3FetchInFlight = false;
+      if (generation === stateGeneration) renderKeepingScroll();
     }
   }
 
   async function refreshWeb3Wallet(silent = false) {
     const generation = stateGeneration;
-    const provider = web3Provider();
+    let provider = web3Provider();
     if (!state.web3Wallet?.address) {
       await connectWeb3Wallet();
       return;
     }
     if (!provider?.request) {
+      try {
+        await window.NekumaMetaMask.prepareConnect();
+        if (generation !== stateGeneration) return;
+        provider = web3Provider();
+        setupWeb3Listeners();
+      } catch (error) {
       state.web3Wallet = normalizeWeb3Wallet({
         ...(state.web3Wallet || {}),
         status: "error",
-        error: "Carteira Web3 nao encontrada neste navegador."
+        error: web3ErrorMessage(error)
       });
       saveState();
       renderKeepingScroll();
       return;
+      }
     }
     if (web3FetchInFlight) return;
     web3FetchInFlight = true;
@@ -10693,6 +10683,7 @@
       if (!silent) showToast("Nao consegui atualizar a carteira.");
     } finally {
       web3FetchInFlight = false;
+      if (generation === stateGeneration) renderKeepingScroll();
     }
   }
 
@@ -10702,6 +10693,7 @@
     closeModal();
     render();
     showToast("Carteira removida do app.");
+    window.NekumaMetaMask.disconnect().catch(() => {});
   }
 
   async function readWeb3WalletSnapshot(provider, address) {

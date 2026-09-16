@@ -110,6 +110,24 @@ Quando `url` e `anonKey` estiverem preenchidos, o app mostra a tela de login e s
 
 Se o Supabase mostrar `new row violates row-level security policy for table "app_states"`, rode `supabase-app-state-rls-fix.sql` no SQL Editor. Ele recria a politica RLS do estado da familia e adiciona a funcao segura `save_app_state`.
 
+## MetaMask no celular
+
+O botao Conectar MetaMask usa a extensao quando disponivel e o MetaMask Connect
+no Safari, Chrome e PWA. No celular, autorize no aplicativo MetaMask e retorne ao
+Nekuma. No PC sem extensao, utilize o QR code da janela de conexao. Publique em
+HTTPS para testar no celular; localhost do PC nao e acessivel pelo telefone.
+
+A conexao somente consulta saldos: nao solicita assinatura ou envio de fundos.
+O SDK conserva a sessao no navegador e os ultimos saldos continuam disponiveis
+quando uma consulta falha. As consultas RPC utilizam PublicNode; a conexao mobile
+utiliza o relay da MetaMask. Telemetria opcional do SDK desativada. Esta integracao
+nao descobre automaticamente todos os tokens: consulta moeda nativa, USDC e
+USDC.e na Polygon. Tron e outras redes nao EVM nao fazem parte desta etapa.
+
+O SDK e empacotado localmente, carregado apenas ao conectar ou atualizar uma
+carteira sem extensao. Execute npm ci e npm run build para preparar o deploy.
+O build inclui os ajustes de compatibilidade da interface do SDK 2.1.1.
+
 ## Multiusuario
 
 O schema cria uma familia (`households`) e salva os dados em `app_states`. Em **Ajustes > Nuvem**, o dono ve o codigo da familia. Outro usuario pode informar esse codigo no login, no cadastro ou em **Entrar em outra familia** para virar membro da mesma familia. As politicas RLS usam `household_members`, entao um usuario so acessa os dados das familias em que e membro.

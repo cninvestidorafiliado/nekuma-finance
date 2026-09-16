@@ -6,6 +6,7 @@ const files = [
   "outputs/finance-pwa/metamask.js",
   "outputs/finance-pwa/service-worker.js",
   "scripts/build-deploy.cjs",
+  "scripts/build-metamask-connect.cjs",
   "scripts/check.cjs"
 ];
 

@@ -61,6 +61,13 @@ function mock(chain = '0x1', failToken = false, changed = false) {
   const metamask = { isMetaMask: true };
   window.ethereum = { providers: [{ isMetaMask: false }, metamask] };
   assert.equal(api.provider(), metamask);
+  const localPolygon = { address, chainId: '0x89', updatedAt: '2026-09-16T01:00:00Z', tokens: [{ symbol: 'USDC.e', contract: '0x2791', balance: '3.426' }], wallets: [] };
+  const remoteEth = { address, chainId: '0x1', updatedAt: '2026-09-16T02:00:00Z', tokens: [], wallets: [] };
+  assert.equal(api.mergeWallets(remoteEth, localPolygon).wallets.length, 2);
+  const incompletePolygon = { ...localPolygon, updatedAt: '2026-09-16T03:00:00Z', tokens: [] };
+  assert.equal(api.mergeWallets(incompletePolygon, localPolygon).wallets[0].tokens[0].balance, '3.426');
+  const removed = { address: '', wallets: [], updatedAt: '2026-09-16T04:00:00Z' };
+  assert.equal(api.mergeWallets(removed, localPolygon).wallets.length, 0);
   const source = fs.readFileSync('outputs/finance-pwa/app.js', 'utf8');
   const start = source.indexOf('  function storeWeb3Snapshot(');
   const state = { web3Wallet: { address, chainId: '0x89', tokens: [{ symbol: 'USDC.e', contract: '0x2791', balance: '3.426' }], wallets: [] } };

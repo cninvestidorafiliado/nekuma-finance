@@ -4,11 +4,25 @@
   "private": true,
   "description": "PWA financeiro familiar com deploy estatico no Cloudflare Pages.",
   "scripts": {
-    "build": "node scripts/build-deploy.cjs",
+    "build": "node scripts/build-metamask-connect.cjs && node scripts/build-deploy.cjs",
+    "build:wallet": "node scripts/build-metamask-connect.cjs",
     "check": "node scripts/check.cjs",
-    "prepare:deploy": "node scripts/build-deploy.cjs"
+    "prepare:deploy": "npm run build"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "@metamask/connect-evm": "2.1.1",
+    "esbuild": "0.28.2"
+  },
+  "overrides": {
+    "uuid": "11.1.1"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "29.0.3",
+    "@rollup/plugin-json": "6.1.0",
+    "@rollup/plugin-node-resolve": "16.0.3",
+    "rollup": "4.63.3"
   }
 }

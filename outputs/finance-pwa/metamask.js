@@ -1,6 +1,18 @@
 (function () {
   'use strict';
   let discoveredProvider = null;
+  let connectClient = null;
+  let connectInitialization = null;
+  const supportedNetworks = {
+    '0x1': 'https://ethereum-rpc.publicnode.com',
+    '0x89': 'https://polygon-bor-rpc.publicnode.com',
+    '0x38': 'https://bsc-rpc.publicnode.com',
+    '0xa': 'https://optimism-rpc.publicnode.com',
+    '0xa4b1': 'https://arbitrum-one-rpc.publicnode.com',
+    '0xa86a': 'https://avalanche-c-chain-rpc.publicnode.com',
+    '0x2105': 'https://base-rpc.publicnode.com',
+    '0xaa36a7': 'https://ethereum-sepolia-rpc.publicnode.com'
+  };
   const usdcContracts = {
     '0x1': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
     '0x89': '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
@@ -22,7 +34,41 @@
     const injected = window.ethereum;
     return discoveredProvider
       || injected?.providers?.find(item => item.isMetaMask)
-      || (injected?.isMetaMask ? injected : null);
+      || (injected?.isMetaMask ? injected : null)
+      || connectClient?.getProvider() || null;
+  }
+
+  async function prepareConnect() {
+    if (connectClient) return connectClient;
+    if (!connectInitialization) {
+      connectInitialization = (async () => {
+        const { createEVMClient } = await import('./assets/vendor/metamask-connect.js?v=177');
+        connectClient = await createEVMClient({
+          dapp: { name: 'Nekuma Finance', url: window.location.origin },
+          api: { supportedNetworks },
+          analytics: { enabled: false },
+          skipAutoAnnounce: true,
+          ui: { preferExtension: true }
+        });
+        return connectClient;
+      })().catch(error => { connectInitialization = null; throw error; });
+    }
+    return connectInitialization;
+  }
+
+  async function connectAccounts(chainId) {
+    const existing = provider();
+    if (existing && existing !== connectClient?.getProvider()) {
+      return { provider: existing, accounts: await existing.request({ method: 'eth_requestAccounts' }) };
+    }
+    const client = await prepareConnect();
+    const selected = supportedNetworks[chainId] ? chainId : '0x89';
+    const result = await client.connect({ chainIds: [...new Set([selected, '0x1'])] });
+    return { provider: client.getProvider(), accounts: result.accounts };
+  }
+
+  async function disconnect() {
+    if (connectClient) await connectClient.disconnect();
   }
 
   function decimalUnits(hex, decimals) {
@@ -64,5 +110,28 @@
     return { address, chainId, balance: Number(decimalUnits(balanceHex, 18)), tokens, tokenError, blockNumber: block, updatedAt: new Date().toISOString(), status: 'connected', error: '' };
   }
 
-  window.NekumaMetaMask = { provider, snapshot, decimalUnits, usdcContracts };
+  function mergeWallets(remote, local) {
+    const time = value => Date.parse(value?.updatedAt || '') || 0;
+    const records = value => value.wallets?.length ? value.wallets : value.address ? [value] : [];
+    const remoteRecords = records(remote);
+    const localRecords = records(local);
+    // An explicit removal has a timestamp and must win over older saved balances.
+    if (!remoteRecords.length && time(remote) > time(local)) return remote;
+    if (!localRecords.length && time(local) > time(remote)) return local;
+    const wallets = new Map();
+    for (const wallet of [...remoteRecords, ...localRecords]) {
+      const key = wallet.chainId + ':' + wallet.address.toLowerCase();
+      const previous = wallets.get(key);
+      if (!previous) { wallets.set(key, { ...wallet, wallets: [] }); continue; }
+      const newer = time(wallet) >= time(previous) ? wallet : previous;
+      const older = newer === wallet ? previous : wallet;
+      const tokens = new Map((older.tokens || []).map(token => [token.contract.toLowerCase(), { ...token, stale: true }]));
+      for (const token of newer.tokens || []) tokens.set(token.contract.toLowerCase(), token);
+      wallets.set(key, { ...newer, wallets: [], tokens: [...tokens.values()] });
+    }
+    const latest = time(local) >= time(remote) ? local : remote;
+    return { ...latest, wallets: [...wallets.values()] };
+  }
+
+  window.NekumaMetaMask = { provider, snapshot, decimalUnits, usdcContracts, mergeWallets, prepareConnect, connectAccounts, disconnect };
 })();
