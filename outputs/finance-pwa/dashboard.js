@@ -99,7 +99,7 @@
       });
     });
     const mobile = window.matchMedia('(max-width: 759px)').matches;
-    const mode = mobile ? 'mobile' : 'desktopFlow';
+    const mode = mobile ? 'mobile' : 'desktopLanes';
     let targets = zones;
     if (mobile) {
       const zone = document.createElement('div');
@@ -111,15 +111,33 @@
       targets = [zone];
     } else {
       const zone = document.createElement('div');
-      zone.className = 'dashboard-masonry-list';
+      zone.className = 'dashboard-stable-columns';
       shell.append(zone);
       const legacyOrder = Array.isArray(layouts.desktop)
         ? layouts.desktop.flatMap(column => Array.isArray(column) ? column : [])
         : [];
       const order = [...(Array.isArray(layouts.desktopFlow) ? layouts.desktopFlow : legacyOrder), ...cardClasses];
-      new Set(order).forEach(key => { if (cards.has(key)) zone.append(cards.get(key)); });
+      const count = window.matchMedia('(min-width: 1600px)').matches ? 3 : window.matchMedia('(min-width: 760px)').matches ? 2 : 1;
+      const lanes = Array.from({ length: count }, () => {
+        const lane = document.createElement('div');
+        lane.className = 'dashboard-stable-lane';
+        zone.append(lane);
+        return lane;
+      });
+      const saved = Array.isArray(layouts.desktopLanes) ? layouts.desktopLanes : [];
+      const placed = new Set();
+      saved.forEach((keys, index) => (Array.isArray(keys) ? keys : []).forEach(key => {
+        if (cards.has(key) && !placed.has(key)) { lanes[index % count].append(cards.get(key)); placed.add(key); }
+      }));
+      new Set(order).forEach(key => {
+        if (!cards.has(key) || placed.has(key)) return;
+        const lane = lanes.reduce((best, item) => item.offsetHeight < best.offsetHeight ? item : best);
+        lane.append(cards.get(key));
+        placed.add(key);
+      });
       zones.forEach(column => column.remove());
-      targets = [zone];
+      targets = lanes;
+      if (!saved.length) save({ ...layouts, desktopLanes: lanes.map(lane => [...lane.children].map(card => card.dataset.dashboardCard)) });
     }
     const remember = () => {
       const orders = targets.map(zone => [...zone.children].filter(card => card.dataset.dashboardCard).map(card => card.dataset.dashboardCard));

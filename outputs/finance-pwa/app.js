@@ -390,7 +390,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=170")
+      navigator.serviceWorker.register("./service-worker.js?v=175")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -616,6 +616,22 @@
     }
   };
   setInterval(refreshCalendarDate, 60000);
+  app.addEventListener("change", event => {
+    if (!event.target.matches('[data-metamask-currency]')) return;
+    state.ui.metamaskCurrency = sanitizeCurrency(event.target.value, "USD");
+    saveState();
+    renderKeepingScroll();
+    refreshCryptoQuotes(true);
+  });
+  app.addEventListener("toggle", event => {
+    if (!event.target.matches('.metamask-details')) return;
+    state.ui.metamaskExpanded = event.target.open;
+  }, true);
+  setInterval(() => {
+    if (!document.hidden && state.web3Wallet?.address && state.web3Wallet.status === "connected" && web3ProviderAvailable() && !web3FetchInFlight) {
+      refreshWeb3Wallet(true);
+    }
+  }, 60000);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') refreshCalendarDate();
   });
@@ -1739,6 +1755,10 @@
       networkName: String(raw.networkName || meta.name || (chainId ? `Rede ${chainId}` : "")).trim(),
       symbol: String(raw.symbol || meta.symbol || "ETH").trim().toUpperCase(),
       balance: number(raw.balance),
+      tokens: Array.isArray(raw.tokens) ? raw.tokens : [],
+      tokenError: String(raw.tokenError || ""),
+      blockNumber: raw.blockNumber || "",
+      wallets: Array.isArray(raw.wallets) ? raw.wallets.filter((wallet) => /^0x[0-9a-f]{40}$/i.test(wallet.address || "")) : [],
       updatedAt: raw.updatedAt || null,
       status: raw.status || (address ? "connected" : "idle"),
       error: String(raw.error || "")
@@ -1800,12 +1820,13 @@
     const crypto = mergeCryptoAssetsWithLocal(remote.cryptoAssets, local.cryptoAssets);
     const merged = mergeLocalCollections(remote, local, ["incomeSources", "workIncomes", "workScheduleOverrides", "familyMembers", "familyBusinesses", "shoppingLists", "receipts", "vehicles", "nubankBoxes", "nubankBoxContributions"]);
     const deletedItems = mergeDeletedItems(remote.deletedItems, local.deletedItems);
-    const next = { ...remote, ...merged.collections, cryptoAssets: crypto.items, deletedItems, ui: local.ui };
+    const preferLocalWallet = Date.parse(local.web3Wallet?.updatedAt || 0) > Date.parse(remote.web3Wallet?.updatedAt || 0);
+    const next = { ...remote, ...merged.collections, cryptoAssets: crypto.items, deletedItems, ui: local.ui, web3Wallet: preferLocalWallet ? local.web3Wallet : remote.web3Wallet };
     for (const [collection, deletions] of Object.entries(deletedItems)) {
       if (Array.isArray(next[collection])) next[collection] = next[collection].filter(item => !deletions[item.id] || itemSyncTime(item) > Date.parse(deletions[item.id]));
     }
     next.vehicle = next.vehicles[0] || createInitialState().vehicle;
-    return { state: next, changed: merged.changed || crypto.changed || cryptoAssetsWereNormalized(rawRemote.cryptoAssets, remote.cryptoAssets) };
+    return { state: next, changed: preferLocalWallet || merged.changed || crypto.changed || cryptoAssetsWereNormalized(rawRemote.cryptoAssets, remote.cryptoAssets) };
   }
 
   function mergeCollectionWithLocal(remoteItems = [], localItems = [], collection = "") {
@@ -4688,10 +4709,6 @@
 
   function renderCryptoTab() {
     return `
-      <section class="content-panel web3-panel">
-        ${renderWeb3WalletCard()}
-      </section>
-
       <section class="content-panel crypto-panel crypto-page">
         <div class="panel-head">
           <h2>Criptomoedas</h2>
@@ -5384,6 +5401,69 @@
   }
 
   function renderCryptoPanel(compact = false) {
+    const hasWallet = Boolean(state.web3Wallet?.address || state.web3Wallet?.wallets?.length);
+    return `${renderMetaMaskGroup()}${(state.cryptoAssets || []).length || !hasWallet ? renderManualCryptoPanel(compact) : ""}`;
+  }
+
+  function renderMetaMaskGroup() {
+    const wallet = normalizeWeb3Wallet(state.web3Wallet);
+    const wallets = wallet.wallets.length ? wallet.wallets : wallet.address ? [wallet] : [];
+    const busy = wallet.status === "loading";
+    return `
+      <div class="crypto-origin-group metamask-group">
+        <div class="panel-head">
+          <div><h3><i data-lucide="wallet" aria-hidden="true"></i>MetaMask</h3><span class="row-meta">Somente leitura · Rede selecionada na carteira</span></div>
+          <div class="chips">
+            <span class="metamask-currency-control"><select class="metamask-currency" data-metamask-currency aria-label="Moeda da carteira MetaMask">${["USD", "BRL", "EUR", "JPY"].map(currency => `<option value="${currency}" ${(state.ui.metamaskCurrency || "USD") === currency ? "selected" : ""}>${currency}</option>`).join("")}</select><i data-lucide="chevron-down" aria-hidden="true"></i></span>
+            ${wallets.length ? `<button class="small-action ghost" type="button" data-action="refresh-web3" ${busy ? "disabled" : ""}>Atualizar</button>` : ""}
+            <button class="small-action" type="button" data-action="connect-web3" ${busy ? "disabled" : ""}>${busy ? "Conectando..." : wallets.length ? "Adicionar carteira" : "Conectar MetaMask"}</button>
+          </div>
+        </div>
+        ${wallet.error ? `<p class="web3-error" role="status">${escapeHtml(wallet.error)}</p>` : ""}
+        ${wallets.length ? renderMetaMaskBalances(wallets) : ""}
+        ${wallets.length ? `<details class="metamask-details" ${state.ui.metamaskExpanded ? "open" : ""}><summary>Detalhamento da carteira MetaMask</summary><p class="row-meta">${escapeHtml(cryptoStatusText().label)} · Valores estimados. USDC.e utiliza a cotação de referência do USDC.</p>` : ""}
+        ${wallets.length ? wallets.map((item) => `
+          <div class="metamask-account">
+            <div class="metamask-account-heading"><strong title="${escapeAttr(item.address)}">${escapeHtml(shortAddress(item.address))}</strong><span class="chip green">${escapeHtml(web3NetworkMeta(item.chainId).name)}</span></div>
+            ${state.ui.hideCryptoDetails ? `<p class="row-meta">Saldos ocultos</p>` : `
+              <div class="metamask-balances">
+                <div><span>${escapeHtml(web3NetworkMeta(item.chainId).symbol)}</span><strong>${formatCryptoAmount(item.balance)}</strong></div>
+                ${(item.tokens || []).map((token) => `<div><span>${escapeHtml(token.symbol)}</span><strong>${escapeHtml(token.balance)}</strong><small title="${escapeAttr(token.contract)}">${escapeHtml(shortAddress(token.contract))}</small></div>`).join("")}
+              </div>
+            `}
+            ${item.tokenError ? `<p class="row-meta web3-error">${escapeHtml(item.tokenError)}</p>` : ""}
+            <small class="row-meta">Ultima consulta: ${item.updatedAt ? escapeHtml(new Date(item.updatedAt).toLocaleString("pt-BR")) : "Ainda nao consultada"}</small>
+          </div>
+        `).join("") : `<p class="empty-state">Nenhuma carteira MetaMask conectada.</p>`}
+        ${wallets.length ? `</details>` : ""}
+        ${!web3ProviderAvailable() && location.protocol === "https:" ? `<a class="small-action ghost" href="https://metamask.app.link/dapp/${escapeAttr((location.host + location.pathname).replace(/^\/+/, ""))}">Abrir no navegador da MetaMask</a>` : ""}
+        ${wallets.length ? `<button class="small-action ghost" type="button" data-action="disconnect-web3">Remover conexoes do Nekuma</button>` : ""}
+      </div>
+    `;
+  }
+
+  function renderMetaMaskBalances(wallets) {
+    const currency = sanitizeCurrency(state.ui.metamaskCurrency || "USD", "USD");
+    const rows = wallets.flatMap(wallet => {
+      const symbol = web3NetworkMeta(wallet.chainId).symbol;
+      return [{ symbol, balance: wallet.balance }, ...(wallet.tokens || [])].filter(token => Number(token.balance) > 0).map(token => ({ ...token, chainId: wallet.chainId, address: wallet.address }));
+    });
+    return `<div class="metamask-token-list">${rows.map(token => {
+      const symbol = token.symbol === "USDC.e" ? "USDC" : token.symbol;
+      const meta = cryptoCatalog[symbol] || { color: "#71877e" };
+      const directPrice = cryptoPrice(symbol, currency);
+      const usdPrice = cryptoPrice(symbol, "USD");
+      const fx = currency === "EUR" ? Number(state.fxQuotes?.usdEur || 0) : currency === "BRL" ? Number(state.fxQuotes?.usdBrl || 0) : currency === "JPY" ? Number(state.fxQuotes?.usdJpy || 0) : 1;
+      const price = directPrice || (usdPrice > 0 && fx > 0 ? usdPrice * fx : 0);
+      const label = `${token.symbol} · ${web3NetworkMeta(token.chainId).name} · ${shortAddress(token.address)}${token.stale ? " · Último saldo válido; consulta pendente" : ""}`;
+      const value = state.ui.hideCryptoDetails ? "••••" : price > 0 ? formatMoney(Number(token.balance) * price, currency) : "Cotação indisponível";
+      const change = state.cryptoQuotes?.prices?.[symbol]?.change24h;
+      const variation = Number.isFinite(change) ? `<span class="${change >= 0 ? "income" : "expense"}">${escapeHtml(formatPercent(change))} · 24h</span>` : "";
+      return `<div class="metamask-token-row" title="${escapeAttr(label)}">${renderCryptoTokenIcon({ symbol, color: meta.color })}<div class="metamask-token-market"><strong>${escapeHtml(token.symbol)}</strong><small>${price > 0 ? escapeHtml(formatMoney(price, currency)) : "Preço indisponível"} ${variation}</small><small>${escapeHtml(web3NetworkMeta(token.chainId).name)}</small></div><div class="metamask-token-position"><strong>${escapeHtml(value)}</strong><small>${state.ui.hideCryptoDetails ? "••••" : escapeHtml(formatCryptoAmount(token.balance))} ${escapeHtml(token.symbol)}</small></div></div>`;
+    }).join("")}${!rows.length ? `<p class="row-meta">Nenhum saldo positivo entre os ativos consultados.</p>` : ""}</div>`;
+  }
+
+  function renderManualCryptoPanel(compact = false) {
     const assets = state.cryptoAssets || [];
     const summary = cryptoSummary();
     const status = cryptoStatusText();
@@ -5402,7 +5482,7 @@
       <div class="crypto-wallet">
         <div class="crypto-wallet-hero">
           <div>
-            <p class="mini-label">Valor atual</p>
+            <p class="mini-label">Cadastro manual · Valor atual</p>
             <strong>${formatMoneyWithPrimary(summary.totalValue, summary.currency)}</strong>
             <p class="row-meta">Investido ${formatCryptoInvestedSummary(summary)}</p>
           </div>
@@ -10479,7 +10559,9 @@
     provider.on("accountsChanged", (accounts = []) => {
       const address = Array.isArray(accounts) ? accounts[0] : "";
       if (!address) {
-        disconnectWeb3Wallet();
+        state.web3Wallet = normalizeWeb3Wallet({ ...state.web3Wallet, status: "disconnected", error: "MetaMask desconectada. Os saldos abaixo sao da ultima consulta." });
+        saveState();
+        renderKeepingScroll();
         return;
       }
       state.web3Wallet = normalizeWeb3Wallet({
@@ -10499,6 +10581,7 @@
         chainId,
         networkName: meta.name,
         symbol: meta.symbol,
+        tokens: [],
         status: state.web3Wallet?.address ? "connected" : "idle",
         error: ""
       });
@@ -10508,12 +10591,13 @@
   }
 
   async function connectWeb3Wallet() {
+    const generation = stateGeneration;
     const provider = web3Provider();
     if (!provider?.request) {
       state.web3Wallet = normalizeWeb3Wallet({
         ...(state.web3Wallet || {}),
         status: "error",
-        error: "Carteira Web3 nao encontrada. No celular, abra o app pelo navegador da MetaMask ou outra carteira compativel."
+        error: "MetaMask nao encontrada. No PC, instale a extensao MetaMask. No celular, abra o app no navegador da MetaMask."
       });
       saveState();
       render();
@@ -10535,13 +10619,18 @@
       const accounts = await provider.request({ method: "eth_requestAccounts" });
       const address = Array.isArray(accounts) ? accounts[0] : "";
       if (!address) throw new Error("Nenhuma conta foi autorizada na carteira.");
-      const wallet = await readWeb3WalletSnapshot(provider, address);
-      state.web3Wallet = normalizeWeb3Wallet(wallet);
+      for (const authorizedAddress of accounts) {
+        const wallet = await readWeb3WalletSnapshot(provider, authorizedAddress);
+        if (generation !== stateGeneration) return;
+        storeWeb3Snapshot(wallet);
+      }
       saveState({ remoteNow: true });
       closeModal();
       render();
       showToast("Carteira Web3 conectada.");
+      refreshCryptoQuotes(true);
     } catch (error) {
+      if (generation !== stateGeneration) return;
       state.web3Wallet = normalizeWeb3Wallet({
         ...(state.web3Wallet || {}),
         status: state.web3Wallet?.address ? "connected" : "error",
@@ -10555,7 +10644,8 @@
     }
   }
 
-  async function refreshWeb3Wallet() {
+  async function refreshWeb3Wallet(silent = false) {
+    const generation = stateGeneration;
     const provider = web3Provider();
     if (!state.web3Wallet?.address) {
       await connectWeb3Wallet();
@@ -10568,7 +10658,7 @@
         error: "Carteira Web3 nao encontrada neste navegador."
       });
       saveState();
-      render();
+      renderKeepingScroll();
       return;
     }
     if (web3FetchInFlight) return;
@@ -10578,29 +10668,36 @@
       status: "loading",
       error: ""
     });
-    render();
+    renderKeepingScroll();
     try {
-      const wallet = await readWeb3WalletSnapshot(provider, state.web3Wallet.address);
-      state.web3Wallet = normalizeWeb3Wallet(wallet);
+      const accounts = await provider.request({ method: "eth_accounts" });
+      if (!accounts.length) throw new Error("Autorize a conexao novamente na MetaMask.");
+      for (const address of accounts) {
+        const wallet = await readWeb3WalletSnapshot(provider, address);
+        if (generation !== stateGeneration) return;
+        storeWeb3Snapshot(wallet);
+      }
       saveState({ remoteNow: true });
-      render();
-      showToast("Carteira Web3 atualizada.");
+      renderKeepingScroll();
+      if (!silent) showToast("Carteira Web3 atualizada.");
+      refreshCryptoQuotes(false);
     } catch (error) {
+      if (generation !== stateGeneration) return;
       state.web3Wallet = normalizeWeb3Wallet({
         ...(state.web3Wallet || {}),
         status: "connected",
         error: web3ErrorMessage(error)
       });
       saveState();
-      render();
-      showToast("Nao consegui atualizar a carteira.");
+      renderKeepingScroll();
+      if (!silent) showToast("Nao consegui atualizar a carteira.");
     } finally {
       web3FetchInFlight = false;
     }
   }
 
   function disconnectWeb3Wallet() {
-    state.web3Wallet = normalizeWeb3Wallet({});
+    state.web3Wallet = normalizeWeb3Wallet({ updatedAt: new Date().toISOString() });
     saveState({ remoteNow: true });
     closeModal();
     render();
@@ -10608,27 +10705,26 @@
   }
 
   async function readWeb3WalletSnapshot(provider, address) {
-    const chainId = await provider.request({ method: "eth_chainId" }).catch(() => "");
-    const meta = web3NetworkMeta(chainId);
-    const balanceHex = await provider.request({
-      method: "eth_getBalance",
-      params: [address, "latest"]
-    }).catch(() => "0x0");
+    return window.NekumaMetaMask.snapshot(provider, address);
+  }
 
-    return {
-      address,
-      chainId,
-      networkName: meta.name,
-      symbol: meta.symbol,
-      balance: weiHexToNative(balanceHex),
-      updatedAt: new Date().toISOString(),
-      status: "connected",
-      error: ""
-    };
+  function storeWeb3Snapshot(snapshot) {
+    const wallet = normalizeWeb3Wallet(snapshot);
+    const current = normalizeWeb3Wallet(state.web3Wallet);
+    const previous = current.wallets.length ? current.wallets : current.address ? [{ ...current, wallets: [] }] : [];
+    const key = `${wallet.chainId}:${wallet.address.toLowerCase()}`;
+    const oldWallet = previous.find(item => `${item.chainId}:${item.address.toLowerCase()}` === key);
+    if (wallet.tokenError && oldWallet) {
+      const readContracts = new Set(wallet.tokens.map(token => token.contract.toLowerCase()));
+      wallet.tokens.push(...(oldWallet.tokens || []).filter(token => !readContracts.has(token.contract.toLowerCase())).map(token => ({ ...token, stale: true })));
+    }
+    const wallets = previous.filter((item) => `${item.chainId}:${item.address.toLowerCase()}` !== key);
+    wallets.push({ ...wallet, wallets: [] });
+    state.web3Wallet = { ...wallet, wallets };
   }
 
   function web3Provider() {
-    return window.ethereum || null;
+    return window.NekumaMetaMask?.provider() || null;
   }
 
   function web3ProviderAvailable() {
@@ -10661,7 +10757,7 @@
 
   function scheduleCryptoRefresh(force) {
     clearTimeout(cryptoRefreshTimer);
-    if (!(state.cryptoAssets || []).length) return;
+    if (!(state.cryptoAssets || []).length && !state.web3Wallet?.address && !(state.web3Wallet?.wallets || []).length) return;
     cryptoRefreshTimer = setTimeout(() => scheduleCryptoRefresh(false), 60000);
     const updatedAt = state.cryptoQuotes?.updatedAt ? new Date(state.cryptoQuotes.updatedAt).getTime() : 0;
     const stale = Date.now() - updatedAt > 60000;
@@ -10750,7 +10846,10 @@
 
   async function refreshCryptoQuotes(force) {
     if (cryptoFetchInFlight) return;
-    const assets = state.cryptoAssets || [];
+    const generation = stateGeneration;
+    const wallet = normalizeWeb3Wallet(state.web3Wallet);
+    const wallets = wallet.wallets.length ? wallet.wallets : wallet.address ? [wallet] : [];
+    const assets = [...(state.cryptoAssets || []), ...wallets.flatMap(item => [{ symbol: web3NetworkMeta(item.chainId).symbol }, ...(item.tokens || []).map(token => ({ symbol: token.symbol === "USDC.e" ? "USDC" : token.symbol }))])];
     if (!assets.length) return;
     const ids = Array.from(new Set(assets.map((item) => cryptoCatalog[item.symbol]?.id).filter(Boolean)));
     if (!ids.length) return;
@@ -10764,34 +10863,40 @@
       prices: state.cryptoQuotes?.prices || {},
       status: "loading"
     };
-    render();
+    renderKeepingScroll();
 
     try {
-      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=jpy,brl,usd&include_24hr_change=true`;
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=jpy,brl,usd,eur&include_24hr_change=true`;
       const response = await fetch(url, { cache: "no-store" });
       if (!response.ok) throw new Error("Falha ao buscar cotacoes");
       const data = await response.json();
-      const prices = {};
+      if (generation !== stateGeneration) return;
+      const prices = { ...(state.cryptoQuotes?.prices || {}) };
+      let receivedQuotes = 0;
 
       Object.entries(cryptoCatalog).forEach(([symbol, meta]) => {
         const quote = data[meta.id];
-        if (!quote) return;
+        if (!quote || !Number.isFinite(Number(quote.usd)) || Number(quote.usd) <= 0) return;
+        receivedQuotes += 1;
         prices[symbol] = {
           JPY: Number(quote.jpy || 0),
           BRL: Number(quote.brl || 0),
           USD: Number(quote.usd || 0),
+          EUR: Number(quote.eur || 0),
           change24h: Number(quote.jpy_24h_change || quote.brl_24h_change || quote.usd_24h_change || 0)
         };
       });
 
+      if (!receivedQuotes) throw new Error("Nenhuma cotacao valida recebida");
       state.cryptoQuotes = {
         prices,
         updatedAt: new Date().toISOString(),
         status: "ok"
       };
       saveState();
-      render();
+      renderKeepingScroll();
     } catch (error) {
+      if (generation !== stateGeneration) return;
       state.cryptoQuotes = {
         ...(state.cryptoQuotes || {}),
         prices: state.cryptoQuotes?.prices || {},
@@ -10799,8 +10904,8 @@
         status: "error"
       };
       saveState();
-      render();
-      showToast("Nao consegui atualizar as cotacoes agora.");
+      renderKeepingScroll();
+      if (force) showToast("Nao consegui atualizar as cotacoes agora.");
     } finally {
       cryptoFetchInFlight = false;
     }
