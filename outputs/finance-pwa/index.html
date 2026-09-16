@@ -2,6 +2,11 @@
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
+    <script>
+      if (!new URLSearchParams(window.location.search).has("home") && (window.matchMedia("(display-mode: standalone)").matches || navigator.standalone)) {
+        window.location.replace("./app.html?auth=login" + window.location.hash);
+      }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#12382e" />
     <meta name="description" content="Nekuma Finance: controle financeiro familiar para brasileiros no Japão." />

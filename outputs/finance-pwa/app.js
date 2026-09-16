@@ -369,7 +369,17 @@
   let lastLocalChangeAt = 0;
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const isPasswordRecoveryLink = urlParams.get("type") === "recovery" || hashParams.get("type") === "recovery";
-  let authView = isPasswordRecoveryLink ? "reset" : (["login", "signup", "reset"].includes(urlParams.get("auth")) ? urlParams.get("auth") : "welcome");
+  let authView = isPasswordRecoveryLink ? "reset" : (["login", "signup", "reset"].includes(urlParams.get("auth")) ? urlParams.get("auth") : "login");
+  let installPrompt = null;
+  window.addEventListener("beforeinstallprompt", event => {
+    event.preventDefault();
+    installPrompt = event;
+    if (document.body.classList.contains("auth-mode")) renderKeepingScroll();
+  });
+  window.addEventListener("appinstalled", () => {
+    installPrompt = null;
+    if (document.body.classList.contains("auth-mode")) renderKeepingScroll();
+  });
   const hasExplicitAuthView = authView === "login" || authView === "signup" || authView === "reset";
   cleanupLegacyStorage();
   let state = loadState();
@@ -393,7 +403,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=184")
+      navigator.serviceWorker.register("./service-worker.js?v=185")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -425,6 +435,7 @@
     if (!button) return;
 
     const action = button.dataset.action;
+    if (action === "install-login") { installLoginApp(); return; }
     if (action === "none") return;
     if (action === "set-auth-view") {
       authView = button.dataset.view || "welcome";
@@ -2394,6 +2405,7 @@
     const isReset = view === "reset";
     return `
       <section class="auth-panel auth-panel-${view}">
+        <header class="auth-navigation"><a href="./index.html?home=1" class="auth-home-brand"><img src="./assets/nekuma-logo-192.png" alt="" width="40" height="40" /><span>Nekuma Finance</span></a></header>
         <article class="auth-visual">
           <img class="auth-brand-mark" src="./assets/nekuma-logo-192.png" alt="" />
           <div>
@@ -2457,7 +2469,7 @@
     return `
       <div class="auth-card-head">
         <div>
-          <p class="auth-kicker">Login</p>
+          <img class="login-mark" src="./assets/nekuma-logo-192.png" alt="" width="64" height="64" />
           <h2>Bem-vindo ao Nekuma</h2>
         </div>
       </div>
@@ -2474,7 +2486,26 @@
         <button class="primary-button" type="submit">Entrar</button>
       </form>
       <p class="auth-footer-link">Ainda não tem conta? <a href="./app.html?auth=signup">Cadastre-se</a></p>
+      ${renderLoginInstall()}
     `;
+  }
+
+  function renderLoginInstall() {
+    if (window.matchMedia("(display-mode: standalone)").matches || navigator.standalone) return "";
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    return `<div class="login-install"><button class="small-action ghost" type="button" data-action="install-login"><i data-lucide="${ios ? "share" : "download"}" aria-hidden="true"></i>Instalar Nekuma</button><p class="row-meta">${ios ? "Compartilhar → Adicionar à Tela de Início" : "Acesso direto pelo ícone do app"}</p></div>`;
+  }
+
+  async function installLoginApp() {
+    if (installPrompt) {
+      const prompt = installPrompt;
+      installPrompt = null;
+      await prompt.prompt();
+      await prompt.userChoice;
+    } else {
+      const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+      window.alert(ios ? "No Safari, abra Compartilhar e selecione Adicionar à Tela de Início nesta página de login." : "Abra o menu do navegador e selecione Instalar aplicativo ou Adicionar à tela inicial. A instalação exige HTTPS e um navegador compatível.");
+    }
   }
 
   function renderAuthSignupForm(canSignup) {
