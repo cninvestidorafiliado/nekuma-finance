@@ -403,7 +403,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=185")
+      navigator.serviceWorker.register("./service-worker.js?v=186")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -2117,6 +2117,7 @@
   function render() {
     if (window.NekumaDashboard?.isDragging()) return;
     document.body.classList.toggle("auth-mode", remoteStore.enabled && remoteSession.status !== "ready");
+    document.documentElement.classList.toggle("auth-mode", remoteStore.enabled && remoteSession.status !== "ready");
     document.body.classList.toggle("online-mode", remoteStore.enabled && remoteSession.status === "ready");
     ["dashboard", "accounts", "crypto", "wise", "reports", "settings"].forEach((tab) => app.classList.remove(`tab-${tab}`));
     app.classList.add(`tab-${state.ui.activeTab}`);

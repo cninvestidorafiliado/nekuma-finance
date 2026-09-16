@@ -10091,10 +10091,12 @@ h1 {
   .metamask-group .small-action { white-space: normal; }
 }
 
-body.auth-mode { background: #f3f7f4 url("./assets/login-landscape.png") center bottom / cover fixed no-repeat; color: #173d32; }
-.auth-mode .app-shell { width: 100%; max-width: none; padding: 0; min-height: 100svh; }
+html.auth-mode { background: #f3f7f4; }
+body.auth-mode { background: #f3f7f4; color: #173d32; min-height: 100dvh; isolation: isolate; }
+body.auth-mode::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: #f3f7f4 url("./assets/login-landscape.png") center bottom / cover no-repeat; }
+.auth-mode .app-shell { width: 100%; max-width: none; padding: 0; min-height: 100dvh; }
 .auth-mode .main-view { display: block; padding: 0; margin: 0; }
-.auth-mode .auth-panel { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; width: 100%; min-height: 100svh; margin: 0; padding: 100px 24px 40px; box-sizing: border-box; }
+.auth-mode .auth-panel { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; width: 100%; min-height: 100dvh; margin: 0; padding: 100px 24px max(40px, env(safe-area-inset-bottom)); box-sizing: border-box; }
 .auth-mode .auth-visual { display: none; }
 .auth-navigation { position: absolute; top: max(24px, env(safe-area-inset-top)); left: max(24px, env(safe-area-inset-left)); }
 .auth-home-brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: #173d32; font-size: 16px; font-weight: 750; }
@@ -10117,6 +10119,10 @@ body.auth-mode { background: #f3f7f4 url("./assets/login-landscape.png") center 
 .login-install button svg { width: 16px; height: 16px; }
 .login-install .row-meta { font-size: 11px; color: #486756; margin: 10px 0 0; }
 .auth-mode .auth-error { color: #9a2929; background: #fff0ee; border-radius: 8px; padding: 12px; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .auth-navigation { top: calc(env(safe-area-inset-top, 0px) + 40px); }
+  .auth-mode .auth-panel { padding-top: calc(env(safe-area-inset-top, 0px) + 112px); }
+}
 @media (max-height: 700px) {
   .auth-mode .auth-panel { padding-top: 84px; padding-bottom: 24px; }
   .auth-mode .auth-card-head { margin-bottom: 20px; }
