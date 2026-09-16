@@ -1,3 +1,8 @@
 name = "nekuma-finance"
 pages_build_output_dir = "outputs/finance-pwa-online"
 compatibility_date = "2026-09-09"
+
+[[env.production.d1_databases]]
+binding = "BINANCE_DB"
+database_name = "nekuma-binance"
+database_id = "7c6b5f8b-4956-49a0-8a2c-16efa0cf945c"
