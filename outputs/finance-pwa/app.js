@@ -393,7 +393,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=182")
+      navigator.serviceWorker.register("./service-worker.js?v=183")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -3022,7 +3022,6 @@
               <div class="chips">
                 ${renderVisibilityToggle("crypto", state.ui.hideCryptoDetails, "criptos compradas")}
                 <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
-                <button class="small-action" type="button" data-action="open-modal" data-modal="crypto">Nova cripto</button>
               </div>
             </div>
             ${renderCryptoPanel(true)}
@@ -4773,7 +4772,6 @@
           <div class="chips">
             ${renderVisibilityToggle("crypto", state.ui.hideCryptoDetails, "criptos compradas")}
             <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
-            <button class="small-action" type="button" data-action="open-modal" data-modal="crypto">Nova cripto</button>
           </div>
         </div>
         ${renderCryptoPanel(false)}
@@ -5459,8 +5457,7 @@
   }
 
   function renderCryptoPanel(compact = false) {
-    const hasWallet = Boolean(state.web3Wallet?.address || state.web3Wallet?.wallets?.length);
-    return `${renderMetaMaskGroup()}<div class="crypto-origin-group" data-binance-group></div>${(state.cryptoAssets || []).length || !hasWallet ? renderManualCryptoPanel(compact) : ""}`;
+    return `<div class="crypto-origins">${renderMetaMaskGroup()}<div class="crypto-origin-group binance-group" data-binance-group></div><section class="crypto-origin-group manual-crypto-group" aria-label="Criptos manuais"><div class="panel-head"><h3><i data-lucide="coins" aria-hidden="true"></i>Criptos manuais</h3><button class="small-action" type="button" data-action="open-modal" data-modal="crypto"><i data-lucide="plus" aria-hidden="true"></i>Nova cripto</button></div>${renderManualCryptoPanel(compact)}</section></div>`;
   }
 
   function renderMetaMaskGroup() {
@@ -5474,7 +5471,7 @@
     return `
       <div class="crypto-origin-group metamask-group">
         <div class="panel-head">
-          <div><h3><i data-lucide="wallet" aria-hidden="true"></i>MetaMask</h3><span class="row-meta">Somente leitura · Rede selecionada na carteira</span></div>
+          <div><h3><img class="crypto-provider-logo" src="./assets/crypto/metamask.svg" alt="" width="28" height="28">MetaMask</h3><span class="row-meta">Somente leitura · Rede selecionada</span></div>
           <div class="chips">
             <span class="metamask-currency-control"><select class="metamask-currency" data-metamask-currency aria-label="Moeda da carteira MetaMask">${["USD", "BRL", "EUR", "JPY"].map(currency => `<option value="${currency}" ${(state.ui.metamaskCurrency || "USD") === currency ? "selected" : ""}>${currency}</option>`).join("")}</select><i data-lucide="chevron-down" aria-hidden="true"></i></span>
             ${wallets.length ? `<button class="small-action ghost" type="button" data-action="refresh-web3" ${busy ? "disabled" : ""}>Atualizar</button>` : ""}
@@ -5499,8 +5496,8 @@
             <small class="row-meta">Ultima consulta: ${item.updatedAt ? escapeHtml(new Date(item.updatedAt).toLocaleString("pt-BR")) : "Ainda nao consultada"}</small>
           </div>
         `).join("") : `<p class="empty-state">Nenhuma carteira MetaMask conectada.</p>`}
-        ${wallets.length ? `</details>` : ""}
         ${wallets.length ? `<button class="small-action ghost" type="button" data-action="disconnect-web3">Remover conexoes do Nekuma</button>` : ""}
+        ${wallets.length ? `</details>` : ""}
       </div>
     `;
   }
@@ -5536,7 +5533,6 @@
     if (!assets.length) {
       return `
         <div class="crypto-empty">
-          <div class="crypto-donut-placeholder">0</div>
           <p class="empty-state">Nenhuma cripto cadastrada.</p>
         </div>
       `;

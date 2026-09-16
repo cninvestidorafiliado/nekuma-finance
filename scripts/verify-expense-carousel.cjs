@@ -21,6 +21,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
       s.bankAccounts = [{ id: 'br', country: 'brasil', bankName: 'Nubank', currency: 'BRL' }, { id: 'jp', country: 'japao', bankName: 'Yucho', currency: 'JPY' }];
       s.transactions = ['br', 'jp'].map((id, i) => ({ id, date: `${month}-01`, type: 'expense', title: 'Teste', category: 'Moradia', country: i ? 'japao' : 'brasil', currency: i ? 'JPY' : 'BRL', amount: i ? 5000 : 200, bankAccountId: id }));
       s.ui.dashboardLayouts = { desktopLanes: [['expenses-brasil', 'crypto-panel'], ['expenses-japao', 'housing-panel']] };
+      s.web3Wallet = { address: '0x' + '12'.repeat(20), chainId: '0x89', balance: '0.09', status: 'connected', tokens: [{ symbol: 'USDC.e', balance: '3.4', contract: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', decimals: 6 }] };
       t.setState(t.normalizeState(s)); t.render();
     });
     assert.equal(await page.locator('.country-expenses-panel').count(), 1);
@@ -44,6 +45,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
       await page.waitForTimeout(300);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       await page.locator('.country-expenses-panel').screenshot({ path: path.resolve(`work/expense-carousel-${width}.png`) });
+      await page.locator('.crypto-panel').screenshot({ path: path.resolve(`work/crypto-origins-${width}.png`) });
+      assert.equal(await page.locator('.crypto-origins > .crypto-origin-group').count(), 3);
+      assert.ok(await page.locator('.metamask-group .crypto-provider-logo').evaluate(img => img.complete && img.naturalWidth > 0));
+      assert.ok(await page.locator('.binance-group .crypto-provider-logo').evaluate(img => img.complete && img.naturalWidth > 0));
+      assert.equal(await page.locator('.manual-crypto-group [data-modal="crypto"]').count(), 1);
     }
     const country = await page.locator('[data-expense-country]:visible').getAttribute('data-expense-country');
     await page.locator('.expense-country-viewport').evaluate(el => {
