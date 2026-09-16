@@ -57,6 +57,21 @@ const assert = require('node:assert/strict');
     assert.equal(connected.tokens[0].priceUsdt, 110);
     assert.equal(connected.tokens[1].priceUsdt, null, 'Unknown assets must be included without fabricated value');
     assert.ok(!JSON.stringify(connected).includes(secret));
+    const connectRequest = () => new Request('https://example.com/api/binance', { method: 'POST', headers: { Authorization: 'Bearer test', 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: 'a'.repeat(64), apiSecret: secret }) });
+    for (const [status, upstreamCode, expected] of [[451, 0, 'BINANCE_REGION_IP'], [400, -1022, 'BINANCE_SIGNATURE'], [401, -2015, 'BINANCE_KEY_IP_PERMISSIONS'], [429, 0, 'BINANCE_RATE_LIMIT']]) {
+      global.fetch = async url => String(url).endsWith('/auth/v1/user') ? api.json({ id: 'user-a' }) : api.json({ code: upstreamCode, msg: secret }, status);
+      const failed = await api.onRequest({ request: connectRequest(), env });
+      const text = await failed.text();
+      assert.equal(JSON.parse(text).code, expected);
+      assert.ok(!text.includes(secret), 'Upstream error must never expose credentials');
+    }
+    const noEncryption = await api.onRequest({ request: connectRequest(), env: { ...env, BINANCE_ENCRYPTION_KEY: 'invalid' } });
+    assert.equal((await noEncryption.json()).code, 'SERVER_ENCRYPTION_CONFIG');
+    const badDb = { prepare() { throw new Error(secret); } };
+    const storageError = await api.onRequest({ request: connectRequest(), env: { ...env, BINANCE_DB: badDb } });
+    const safeStorage = await storageError.text();
+    assert.equal(JSON.parse(safeStorage).code, 'SERVER_STORAGE');
+    assert.ok(!safeStorage.includes(secret));
   } finally { global.fetch = originalFetch; }
   assert.ok(!source.includes("method: 'POST', headers"), 'Binance requests must only use GET');
   console.log('Binance: read-only permissions, exact balances, encryption, user isolation, authentication, origin and removal passed.');

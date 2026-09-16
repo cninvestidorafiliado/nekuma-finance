@@ -1,14 +1,18 @@
 (function () {
   'use strict';
-  const cardClasses = ['overview-card', 'paypal-panel', 'dashboard-cards-panel', 'housing-panel', 'vehicle-panel', 'subscriptions-panel', 'financial-calendar-panel', 'work-calendar-panel', 'family-pie-panel', 'dashboard-trend-panel', 'emergency-reserve-panel', 'crypto-panel', 'goals-panel', 'debt-home-panel', 'consortium-home-panel', 'family-tools-panel', 'family-panel', 'expenses-brasil', 'expenses-japao', 'recent-transactions-panel'];
+  const cardClasses = ['overview-card', 'paypal-panel', 'dashboard-cards-panel', 'housing-panel', 'vehicle-panel', 'subscriptions-panel', 'financial-calendar-panel', 'work-calendar-panel', 'family-pie-panel', 'dashboard-trend-panel', 'emergency-reserve-panel', 'crypto-panel', 'goals-panel', 'debt-home-panel', 'consortium-home-panel', 'family-tools-panel', 'family-panel', 'country-expenses-panel', 'recent-transactions-panel'];
   let sortables = [];
   let dragging = false;
   let pinned = {};
+  let selectedCountry = '';
+  const migrateKey = key => ['expenses-brasil', 'expenses-japao'].includes(key) ? 'country-expenses-panel' : key;
   const escape = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const money = (value, currency) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency, maximumFractionDigits: currency === 'JPY' ? 0 : 2 }).format(value);
 
   function expenses(models, monthLabel) {
-    return models.map(model => {
+    if (!models.length) return '';
+    if (!models.some(model => model.country === selectedCountry)) selectedCountry = models[0].country;
+    const slides = models.map(model => {
       let cursor = 0;
       const sectors = model.categories.map(item => {
         const percent = item.amount / model.total * 100;
@@ -24,16 +28,20 @@
         const percent = item.amount / model.total * 100;
         return `<div class="expense-detail-row" style="--category-color:${item.color}"><i></i><div><strong>${escape(item.label)}</strong><span>${percent.toFixed(1).replace('.', ',')}% · ${escape(money(item.amount, model.currency))}</span>${item.banks.map(bank => `<small>${escape(bank.name)} · ${escape(money(bank.amount, model.currency))}</small>`).join('')}</div></div>`;
       }).join('');
-      return `<article class="content-panel country-expenses-panel expenses-${model.country}" data-expense-country="${model.country}">
-        <div class="panel-head"><div><h2>Despesas e aportes</h2><p class="row-meta">${escape(monthLabel)} · Registrados e previstos</p></div><span class="chip blue">${model.country === 'brasil' ? 'BRASIL' : 'JAPÃO'}</span></div>
+      return `<section class="expense-country-slide expenses-${model.country}" data-expense-country="${model.country}" aria-label="${model.country === 'brasil' ? 'Brasil' : 'Japão'}" ${model.country !== selectedCountry ? 'hidden' : ''}>
         <div class="country-expenses-body">
           <div class="expense-donut"><svg viewBox="0 0 200 200" aria-label="Despesas por categoria"><circle cx="100" cy="100" r="72" fill="none" stroke="#e5eae7" stroke-width="24"/>${sectors}</svg><div class="expense-donut-total"><span>Total do mês</span><strong>${escape(money(model.total, model.currency))}</strong></div></div>
           <div class="expense-legend">${compactLegend}</div>
         </div>
         ${details ? `<details class="expense-details"><summary>Descrição das Despesas</summary><div class="expense-detail-list">${details}</div></details>` : ''}
         ${(model.pendingCountry || []).map(item => `<button class="small-action ghost" type="button" data-action="open-modal" data-modal="crypto" data-id="${escape(item.id)}">Definir país: ${escape(item.name)}</button>`).join('')}
-      </article>`;
+      </section>`;
     }).join('');
+    return `<article class="content-panel country-expenses-panel">
+      <div class="panel-head"><div><h2>Despesas e aportes</h2><p class="row-meta">${escape(monthLabel)} · Registrados e previstos</p></div>
+      <div class="expense-country-controls">${models.length > 1 ? '<button type="button" class="small-action ghost" data-expense-step="-1" aria-label="País anterior" title="País anterior"><i data-lucide="chevron-left" aria-hidden="true"></i></button>' : ''}<span class="chip blue" data-expense-country-label aria-live="polite">${selectedCountry === 'brasil' ? 'BRASIL' : 'JAPÃO'}</span>${models.length > 1 ? '<button type="button" class="small-action ghost" data-expense-step="1" aria-label="Próximo país" title="Próximo país"><i data-lucide="chevron-right" aria-hidden="true"></i></button>' : ''}</div></div>
+      <div class="expense-country-viewport">${slides}</div>
+    </article>`;
   }
 
   function highlight(panel, key) {
@@ -46,6 +54,32 @@
   }
 
   function charts(root, month) {
+    root.querySelectorAll('.country-expenses-panel').forEach(card => {
+      const slides = [...card.querySelectorAll('[data-expense-country]')];
+      const change = step => {
+        const index = slides.findIndex(slide => !slide.hidden);
+        const next = slides[(index + step + slides.length) % slides.length];
+        selectedCountry = next.dataset.expenseCountry;
+        slides.forEach(slide => { slide.hidden = slide !== next; });
+        card.querySelector('[data-expense-country-label]').textContent = selectedCountry === 'brasil' ? 'BRASIL' : 'JAPÃO';
+      };
+      card.querySelectorAll('[data-expense-step]').forEach(button => button.addEventListener('click', () => change(Number(button.dataset.expenseStep))));
+      const viewport = card.querySelector('.expense-country-viewport');
+      let start = null;
+      viewport.addEventListener('touchstart', event => {
+        const touch = event.touches.length === 1 ? event.touches[0] : null;
+        start = touch ? { x: touch.clientX, y: touch.clientY } : null;
+      }, { passive: true });
+      viewport.addEventListener('touchend', event => {
+        const touch = event.changedTouches[0];
+        if (start && touch && slides.length > 1) {
+          const dx = touch.clientX - start.x, dy = touch.clientY - start.y;
+          if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5) change(dx < 0 ? 1 : -1);
+        }
+        start = null;
+      }, { passive: true });
+      viewport.addEventListener('touchcancel', () => { start = null; }, { passive: true });
+    });
     root.querySelectorAll('[data-expense-country]').forEach(panel => {
       const id = `${month}:${panel.dataset.expenseCountry}`;
       const select = event => {
@@ -105,7 +139,7 @@
       const zone = document.createElement('div');
       zone.className = 'dashboard-mobile-zone';
       shell.append(zone);
-      const order = [...(Array.isArray(layouts.mobile) ? layouts.mobile : []), ...cardClasses];
+      const order = [...(Array.isArray(layouts.mobile) ? layouts.mobile : []).map(migrateKey), ...cardClasses];
       new Set(order).forEach(key => { if (cards.has(key)) zone.append(cards.get(key)); });
       zones.forEach(column => column.remove());
       targets = [zone];
@@ -116,7 +150,7 @@
       const legacyOrder = Array.isArray(layouts.desktop)
         ? layouts.desktop.flatMap(column => Array.isArray(column) ? column : [])
         : [];
-      const order = [...(Array.isArray(layouts.desktopFlow) ? layouts.desktopFlow : legacyOrder), ...cardClasses];
+      const order = [...(Array.isArray(layouts.desktopFlow) ? layouts.desktopFlow : legacyOrder).map(migrateKey), ...cardClasses];
       const count = window.matchMedia('(min-width: 1600px)').matches ? 3 : window.matchMedia('(min-width: 760px)').matches ? 2 : 1;
       const lanes = Array.from({ length: count }, () => {
         const lane = document.createElement('div');
@@ -126,7 +160,7 @@
       });
       const saved = Array.isArray(layouts.desktopLanes) ? layouts.desktopLanes : [];
       const placed = new Set();
-      saved.forEach((keys, index) => (Array.isArray(keys) ? keys : []).forEach(key => {
+      saved.forEach((keys, index) => (Array.isArray(keys) ? keys : []).map(migrateKey).forEach(key => {
         if (cards.has(key) && !placed.has(key)) { lanes[index % count].append(cards.get(key)); placed.add(key); }
       }));
       new Set(order).forEach(key => {

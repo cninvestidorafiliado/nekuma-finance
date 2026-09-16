@@ -37,7 +37,10 @@
     try {
       const response = await fetch('/api/binance' + (force ? '?refresh=1' : ''), { method, cache: 'no-store', headers: { Authorization: 'Bearer ' + token, ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(60000) });
       const result = await response.json().catch(() => { throw new Error('A conexao Binance precisa ser publicada com Cloudflare Functions.'); });
-      if (!response.ok) throw new Error(result.error || 'Nao foi possivel consultar a Binance.');
+      if (!response.ok) {
+        const code = /^[A-Z_]+$/.test(result.code || '') ? ` [${result.code}]` : '';
+        throw new Error((result.error || 'Nao foi possivel consultar a Binance.') + code);
+      }
       if (generation !== epoch) return;
       data = result;
       return true;

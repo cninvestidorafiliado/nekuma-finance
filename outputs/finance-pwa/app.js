@@ -393,7 +393,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=180")
+      navigator.serviceWorker.register("./service-worker.js?v=182")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -612,7 +612,16 @@
     event.preventDefault();
   });
 
-  window.addEventListener("resize", debounce(drawVisibleCharts, 120));
+  const layoutWidthKey = () => window.innerWidth < 760 ? 'mobile' : window.innerWidth < 1180 ? 'two' : window.innerWidth < 1600 ? 'three-tabs' : 'three-all';
+  let currentLayoutWidthKey = layoutWidthKey();
+  window.addEventListener("resize", debounce(() => {
+    const next = layoutWidthKey();
+    if (next !== currentLayoutWidthKey) {
+      currentLayoutWidthKey = next;
+      renderKeepingScroll();
+    }
+    drawVisibleCharts();
+  }, 120));
   let calendarDate = localDateKey();
   const refreshCalendarDate = () => {
     const next = localDateKey();
@@ -2130,6 +2139,7 @@
       state.ui.dashboardLayouts = layouts;
       saveState();
     }, state.ui.selectedMonth);
+    setupStableTabColumns();
     refreshIcons();
     window.NekumaBinance?.mount({ token: currentSupabaseAccessToken, money: formatMoney, convert, hidden: () => state.ui.hideCryptoDetails, icon: symbol => renderCryptoTokenIcon({ symbol, color: cryptoCatalog[symbol]?.color || '#71877e' }), icons: refreshIcons });
     setupDashboardAccountCarousel();
@@ -2178,12 +2188,48 @@
   }
 
   function renderKeepingScroll() {
+    if (window.NekumaDashboard?.isDragging()) return;
     const scroll = { x: window.scrollX || 0, y: window.scrollY || 0 };
-    render();
-    requestAnimationFrame(() => {
-      window.scrollTo(scroll.x, scroll.y);
-      setTimeout(() => window.scrollTo(scroll.x, scroll.y), 80);
+    const tab = state.ui.activeTab;
+    const panelKey = panel => panel?.dataset.dashboardCard || [...(panel?.classList || [])].filter(name => name !== 'content-panel').join(' ');
+    const detailKey = detail => `${panelKey(detail.closest('[data-dashboard-card], .content-panel'))}:${detail.closest('[data-expense-country]')?.dataset.expenseCountry || ''}:${detail.querySelector('summary')?.textContent.trim()}`;
+    const details = new Map([...app.querySelectorAll('details')].map(detail => [detailKey(detail), detail.open]));
+    const visiblePanels = [...app.querySelectorAll('[data-dashboard-card], .content-panel')].filter(panel => {
+      const rect = panel.getBoundingClientRect();
+      return rect.width && rect.bottom > 0 && rect.top < window.innerHeight;
     });
+    const focusedPanel = document.activeElement?.closest('[data-dashboard-card], .content-panel');
+    const anchor = focusedPanel && visiblePanels.includes(focusedPanel) ? focusedPanel : null;
+    const anchorKey = panelKey(anchor);
+    const anchorTop = anchor?.getBoundingClientRect().top;
+    render();
+    app.querySelectorAll('details').forEach(detail => {
+      if (details.has(detailKey(detail))) detail.open = details.get(detailKey(detail));
+    });
+    requestAnimationFrame(() => {
+      if (state.ui.activeTab !== tab) return;
+      const restored = [...app.querySelectorAll('[data-dashboard-card], .content-panel')].find(panel => panelKey(panel) === anchorKey);
+      const y = restored && anchorTop != null ? window.scrollY + restored.getBoundingClientRect().top - anchorTop : scroll.y;
+      window.scrollTo({ left: scroll.x, top: y, behavior: "instant" });
+    });
+  }
+
+  function setupStableTabColumns() {
+    const wrapper = app.querySelector('.tab-card-columns');
+    if (!wrapper || !window.matchMedia('(min-width: 760px)').matches) return;
+    const count = window.matchMedia('(min-width: 1180px)').matches ? 3 : 2;
+    [...wrapper.children].forEach(group => {
+      if (group.matches('.split-grid, .profile-support-grid')) group.replaceWith(...group.children);
+    });
+    const cards = [...wrapper.children];
+    wrapper.classList.add('tab-stable-columns');
+    const lanes = Array.from({ length: count }, () => {
+      const lane = document.createElement('div');
+      lane.className = 'tab-stable-lane';
+      wrapper.append(lane);
+      return lane;
+    });
+    cards.forEach((card, index) => lanes[index % count].append(card));
   }
 
   function saveScrollPositionForRestore() {
@@ -10615,7 +10661,7 @@
       status: "loading",
       error: ""
     });
-    render();
+    renderKeepingScroll();
 
     try {
       const { accounts, provider } = await Promise.race([
@@ -10634,7 +10680,7 @@
       }
       saveState({ remoteNow: true });
       closeModal();
-      render();
+      renderKeepingScroll();
       showToast("Carteira Web3 conectada.");
       refreshCryptoQuotes(true);
     } catch (error) {
@@ -10645,7 +10691,7 @@
         error: web3ErrorMessage(error)
       });
       saveState();
-      render();
+      renderKeepingScroll();
       showToast("Nao consegui conectar a carteira.");
     } finally {
       clearTimeout(timeout);
@@ -10857,7 +10903,7 @@
     cdiLastAttemptAt = Date.now();
     cdiFetchInFlight = true;
     state.cdiRates = { ...normalizeCdiRates(state.cdiRates), status: "loading" };
-    if (force) render();
+    if (force) renderKeepingScroll();
     try {
       const start = oldestNubankRateDate();
       const end = localDateKey();
@@ -10986,7 +11032,7 @@
       ...(state.fxQuotes || {}),
       status: "loading"
     };
-    render();
+    renderKeepingScroll();
 
     try {
       const quotes = await fetchFxQuotes();
@@ -11010,14 +11056,14 @@
         status: "ok"
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      render();
+      renderKeepingScroll();
     } catch (error) {
       state.fxQuotes = {
         ...(state.fxQuotes || {}),
         status: "error"
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      render();
+      renderKeepingScroll();
       showToast("Nao consegui atualizar as cotacoes agora.");
     } finally {
       fxFetchInFlight = false;
@@ -11036,7 +11082,7 @@
       error: "",
       notice: ""
     });
-    render();
+    renderKeepingScroll();
 
     let errorDiagnostics = null;
     try {
@@ -11063,7 +11109,7 @@
         updatedAt: payload.updatedAt || new Date().toISOString()
       });
       saveState();
-      render();
+      renderKeepingScroll();
       if (force) showToast("Saldo PayPal atualizado.");
     } catch (error) {
       state.paypal = normalizePaypalState({
@@ -11073,7 +11119,7 @@
         error: error.message || "Nao foi possivel consultar o PayPal."
       });
       saveState();
-      render();
+      renderKeepingScroll();
       if (force) showToast("Nao consegui atualizar o PayPal agora.");
     } finally {
       paypalFetchInFlight = false;
