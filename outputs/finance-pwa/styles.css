@@ -10047,6 +10047,15 @@ h1 {
 .metamask-account { padding: 12px 0; border-bottom: 1px solid #dce4df; min-width: 0; }
 .metamask-account-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .metamask-balances { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 10px; }
+.binance-connect-dialog { width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 24px; border: 1px solid #d6dfda; border-radius: 8px; background: #fff; color: #102f26; box-sizing: border-box; }
+.binance-connect-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+.binance-connect-dialog h2 { font-size: 20px; }
+.binance-connect-dialog form, .binance-connect-dialog label { display: grid; gap: 12px; }
+.binance-connect-dialog input:not([type="checkbox"]) { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px; border: 1px solid #c8d5cd; border-radius: 6px; font: inherit; }
+.binance-connect-dialog .binance-consent { grid-template-columns: 18px minmax(0, 1fr); font-size: 13px; line-height: 1.5; }
+[data-binance-group] { min-width: 0; }
+[data-binance-group] .chips { flex-wrap: wrap; }
+[data-binance-group] .metamask-token-position small { overflow-wrap: anywhere; }
 .metamask-balances > div { display: grid; gap: 4px; min-width: 0; }
 .metamask-balances strong { font-size: 20px; overflow-wrap: anywhere; }
 .metamask-group p { overflow-wrap: anywhere; }

@@ -4,6 +4,8 @@ const files = [
   "outputs/finance-pwa/app.js",
   "outputs/finance-pwa/dashboard.js",
   "outputs/finance-pwa/metamask.js",
+  "outputs/finance-pwa/binance.js",
+  "functions/api/binance.js",
   "outputs/finance-pwa/service-worker.js",
   "scripts/build-deploy.cjs",
   "scripts/build-metamask-connect.cjs",

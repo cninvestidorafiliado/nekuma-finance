@@ -349,12 +349,15 @@
   let toastTimer = null;
   let cryptoFetchInFlight = false;
   let cryptoLastAttemptAt = 0;
+  const CRYPTO_QUOTE_INTERVAL = 60 * 60 * 1000;
+  const CRYPTO_RETRY_INTERVAL = 5 * 60 * 1000;
   let fxLastAttemptAt = 0;
   let cryptoRefreshTimer = null;
   let fxFetchInFlight = false;
   let fxRefreshTimer = null;
   let paypalFetchInFlight = false;
   let web3FetchInFlight = false;
+  let web3OperationId = 0;
   let cdiFetchInFlight = false;
   let cdiLastAttemptAt = 0;
   let cdiRefreshTimer = null;
@@ -390,7 +393,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=177")
+      navigator.serviceWorker.register("./service-worker.js?v=180")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -401,12 +404,14 @@
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden" && hasPendingLocalChanges()) flushRemoteState().catch(() => {});
     if (document.visibilityState === "visible") {
+      scheduleCryptoRefresh(false);
       requestRemotePull("visible");
       refreshPaypalBalance(false);
     }
   });
 
   window.addEventListener("focus", () => {
+    scheduleCryptoRefresh(false);
     requestRemotePull("focus");
     refreshPaypalBalance(false);
   });
@@ -503,6 +508,7 @@
     if (action === "refresh-cdi") refreshCdiRates(true);
     if (action === "refresh-paypal") refreshPaypalBalance(true);
     if (action === "connect-web3") connectWeb3Wallet();
+    if (action === "restart-web3") restartWeb3Connection();
     if (action === "refresh-web3") refreshWeb3Wallet();
     if (action === "disconnect-web3") disconnectWeb3Wallet();
     if (action === "remote-signout") signOutRemote();
@@ -2097,6 +2103,7 @@
     updateAppGreeting();
     updateAppNewsButton();
     if (remoteStore.enabled && remoteSession.status !== "ready") {
+      window.NekumaBinance?.clear();
       app.innerHTML = renderAuthGate();
       refreshIcons();
       return;
@@ -2124,6 +2131,7 @@
       saveState();
     }, state.ui.selectedMonth);
     refreshIcons();
+    window.NekumaBinance?.mount({ token: currentSupabaseAccessToken, money: formatMoney, convert, hidden: () => state.ui.hideCryptoDetails, icon: symbol => renderCryptoTokenIcon({ symbol, color: cryptoCatalog[symbol]?.color || '#71877e' }), icons: refreshIcons });
     setupDashboardAccountCarousel();
     setupBankAccountOrdering();
     setupCreditCardHomeCarousel();
@@ -5406,13 +5414,17 @@
 
   function renderCryptoPanel(compact = false) {
     const hasWallet = Boolean(state.web3Wallet?.address || state.web3Wallet?.wallets?.length);
-    return `${renderMetaMaskGroup()}${(state.cryptoAssets || []).length || !hasWallet ? renderManualCryptoPanel(compact) : ""}`;
+    return `${renderMetaMaskGroup()}<div class="crypto-origin-group" data-binance-group></div>${(state.cryptoAssets || []).length || !hasWallet ? renderManualCryptoPanel(compact) : ""}`;
   }
 
   function renderMetaMaskGroup() {
     const wallet = normalizeWeb3Wallet(state.web3Wallet);
     const wallets = wallet.wallets.length ? wallet.wallets : wallet.address ? [wallet] : [];
     const busy = web3FetchInFlight;
+    const mobile = /iPhone|iPad|Android/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const mobileUrl = new URL(window.location.pathname, window.location.origin);
+    mobileUrl.searchParams.set("auth", "login");
+    const metaMaskBrowserUrl = `https://link.metamask.io/dapp/${mobileUrl.host}${mobileUrl.pathname}${mobileUrl.search}`;
     return `
       <div class="crypto-origin-group metamask-group">
         <div class="panel-head">
@@ -5424,6 +5436,8 @@
           </div>
         </div>
         ${wallet.error ? `<p class="web3-error" role="status">${escapeHtml(wallet.error)}</p>` : ""}
+        ${busy || wallet.error ? `<button class="small-action ghost" type="button" data-action="restart-web3">Reiniciar conexao</button>` : ""}
+        ${mobile && window.location.protocol === "https:" ? `<a class="small-action ghost" href="${escapeAttr(metaMaskBrowserUrl)}"><i data-lucide="external-link" aria-hidden="true"></i>Abrir na MetaMask</a>` : ""}
         ${wallets.length ? renderMetaMaskBalances(wallets) : ""}
         ${wallets.length ? `<details class="metamask-details" ${state.ui.metamaskExpanded ? "open" : ""}><summary>Detalhamento da carteira MetaMask</summary><p class="row-meta">${escapeHtml(cryptoStatusText().label)} · Valores estimados. USDC.e utiliza a cotação de referência do USDC.</p>` : ""}
         ${wallets.length ? wallets.map((item) => `
@@ -5460,7 +5474,8 @@
       const price = directPrice || (usdPrice > 0 && fx > 0 ? usdPrice * fx : 0);
       const label = `${token.symbol} · ${web3NetworkMeta(token.chainId).name} · ${shortAddress(token.address)}${token.stale ? " · Último saldo válido; consulta pendente" : ""}`;
       const value = state.ui.hideCryptoDetails ? "••••" : price > 0 ? formatMoney(Number(token.balance) * price, currency) : "Cotação indisponível";
-      const change = state.cryptoQuotes?.prices?.[symbol]?.change24h;
+      const quote = state.cryptoQuotes?.prices?.[symbol];
+      const change = quote?.changes24h ? quote.changes24h[currency] : quote?.change24h;
       const variation = Number.isFinite(change) ? `<span class="${change >= 0 ? "income" : "expense"}">${escapeHtml(formatPercent(change))} · 24h</span>` : "";
       return `<div class="metamask-token-row" title="${escapeAttr(label)}">${renderCryptoTokenIcon({ symbol, color: meta.color })}<div class="metamask-token-market"><strong>${escapeHtml(token.symbol)}</strong><small>${price > 0 ? escapeHtml(formatMoney(price, currency)) : "Preço indisponível"} ${variation}</small><small>${escapeHtml(web3NetworkMeta(token.chainId).name)}</small></div><div class="metamask-token-position"><strong>${escapeHtml(value)}</strong><small>${state.ui.hideCryptoDetails ? "••••" : escapeHtml(formatCryptoAmount(token.balance))} ${escapeHtml(token.symbol)}</small></div></div>`;
     }).join("")}${!rows.length ? `<p class="row-meta">Nenhum saldo positivo entre os ativos consultados.</p>` : ""}</div>`;
@@ -10103,6 +10118,11 @@
       return;
     }
     resetInProgress = true;
+    if (window.NekumaBinance && !await window.NekumaBinance.reset()) {
+      resetInProgress = false;
+      showToast("Nao foi possivel remover a conexao Binance. Tente resetar novamente.");
+      return;
+    }
     stateGeneration += 1;
     clearTimeout(remoteSaveTimer);
     remoteSaveTimer = null;
@@ -10587,6 +10607,8 @@
     const generation = stateGeneration;
 
     if (web3FetchInFlight) return;
+    const operation = ++web3OperationId;
+    let timeout;
     web3FetchInFlight = true;
     state.web3Wallet = normalizeWeb3Wallet({
       ...(state.web3Wallet || {}),
@@ -10596,14 +10618,18 @@
     render();
 
     try {
-      const { accounts, provider } = await window.NekumaMetaMask.connectAccounts(state.web3Wallet?.chainId);
-      if (generation !== stateGeneration) return;
+      const { accounts, provider } = await Promise.race([
+        window.NekumaMetaMask.connectAccounts(state.web3Wallet?.chainId),
+        new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error("A conexao nao foi concluida. Volte ao Nekuma e reinicie a conexao.")), 120000); })
+      ]);
+      clearTimeout(timeout);
+      if (generation !== stateGeneration || operation !== web3OperationId) return;
       setupWeb3Listeners();
       const address = Array.isArray(accounts) ? accounts[0] : "";
       if (!address) throw new Error("Nenhuma conta foi autorizada na carteira.");
       for (const authorizedAddress of accounts) {
         const wallet = await readWeb3WalletSnapshot(provider, authorizedAddress);
-        if (generation !== stateGeneration) return;
+        if (generation !== stateGeneration || operation !== web3OperationId) return;
         storeWeb3Snapshot(wallet);
       }
       saveState({ remoteNow: true });
@@ -10612,7 +10638,7 @@
       showToast("Carteira Web3 conectada.");
       refreshCryptoQuotes(true);
     } catch (error) {
-      if (generation !== stateGeneration) return;
+      if (generation !== stateGeneration || operation !== web3OperationId) return;
       state.web3Wallet = normalizeWeb3Wallet({
         ...(state.web3Wallet || {}),
         status: state.web3Wallet?.address ? "connected" : "error",
@@ -10622,8 +10648,37 @@
       render();
       showToast("Nao consegui conectar a carteira.");
     } finally {
-      web3FetchInFlight = false;
-      if (generation === stateGeneration) renderKeepingScroll();
+      clearTimeout(timeout);
+      if (operation === web3OperationId) {
+        web3FetchInFlight = false;
+        if (generation === stateGeneration) renderKeepingScroll();
+      }
+    }
+  }
+
+  async function restartWeb3Connection() {
+    const operation = ++web3OperationId;
+    const generation = stateGeneration;
+    let timeout;
+    web3FetchInFlight = true;
+    renderKeepingScroll();
+    try {
+      await Promise.race([
+        window.NekumaMetaMask.disconnect(),
+        new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error("Tempo de reinicio excedido")), 15000); })
+      ]);
+      if (operation !== web3OperationId || generation !== stateGeneration) return;
+      state.web3Wallet = normalizeWeb3Wallet({ ...state.web3Wallet, status: "disconnected", error: "" });
+      saveState();
+      showToast("Conexao reiniciada. Clique em Conectar MetaMask novamente.");
+    } catch (error) {
+      if (operation === web3OperationId) showToast("Nao foi possivel reiniciar a conexao. Tente abrir na MetaMask.");
+    } finally {
+      clearTimeout(timeout);
+      if (operation === web3OperationId) {
+        web3FetchInFlight = false;
+        renderKeepingScroll();
+      }
     }
   }
 
@@ -10653,6 +10708,7 @@
     }
     if (web3FetchInFlight) return;
     web3FetchInFlight = true;
+    const operation = ++web3OperationId;
     state.web3Wallet = normalizeWeb3Wallet({
       ...(state.web3Wallet || {}),
       status: "loading",
@@ -10661,10 +10717,11 @@
     renderKeepingScroll();
     try {
       const accounts = await provider.request({ method: "eth_accounts" });
+      if (generation !== stateGeneration || operation !== web3OperationId) return;
       if (!accounts.length) throw new Error("Autorize a conexao novamente na MetaMask.");
       for (const address of accounts) {
         const wallet = await readWeb3WalletSnapshot(provider, address);
-        if (generation !== stateGeneration) return;
+        if (generation !== stateGeneration || operation !== web3OperationId) return;
         storeWeb3Snapshot(wallet);
       }
       saveState({ remoteNow: true });
@@ -10672,7 +10729,7 @@
       if (!silent) showToast("Carteira Web3 atualizada.");
       refreshCryptoQuotes(false);
     } catch (error) {
-      if (generation !== stateGeneration) return;
+      if (generation !== stateGeneration || operation !== web3OperationId) return;
       state.web3Wallet = normalizeWeb3Wallet({
         ...(state.web3Wallet || {}),
         status: "connected",
@@ -10682,12 +10739,16 @@
       renderKeepingScroll();
       if (!silent) showToast("Nao consegui atualizar a carteira.");
     } finally {
-      web3FetchInFlight = false;
-      if (generation === stateGeneration) renderKeepingScroll();
+      if (operation === web3OperationId) {
+        web3FetchInFlight = false;
+        if (generation === stateGeneration) renderKeepingScroll();
+      }
     }
   }
 
   function disconnectWeb3Wallet() {
+    ++web3OperationId;
+    web3FetchInFlight = false;
     state.web3Wallet = normalizeWeb3Wallet({ updatedAt: new Date().toISOString() });
     saveState({ remoteNow: true });
     closeModal();
@@ -10752,8 +10813,8 @@
     if (!(state.cryptoAssets || []).length && !state.web3Wallet?.address && !(state.web3Wallet?.wallets || []).length) return;
     cryptoRefreshTimer = setTimeout(() => scheduleCryptoRefresh(false), 60000);
     const updatedAt = state.cryptoQuotes?.updatedAt ? new Date(state.cryptoQuotes.updatedAt).getTime() : 0;
-    const stale = Date.now() - updatedAt > 60000;
-    if (force || stale) refreshCryptoQuotes(force);
+    const stale = !updatedAt || Date.now() - updatedAt >= CRYPTO_QUOTE_INTERVAL;
+    if (!document.hidden && (force || stale)) refreshCryptoQuotes(force);
   }
 
   function scheduleCdiRefresh(force) {
@@ -10846,7 +10907,8 @@
     const ids = Array.from(new Set(assets.map((item) => cryptoCatalog[item.symbol]?.id).filter(Boolean)));
     if (!ids.length) return;
     const updatedAt = state.cryptoQuotes?.updatedAt ? new Date(state.cryptoQuotes.updatedAt).getTime() : 0;
-    if (!force && Date.now() - Math.max(updatedAt, cryptoLastAttemptAt) < 60000) return;
+    if (!force && updatedAt && Date.now() - updatedAt < CRYPTO_QUOTE_INTERVAL) return;
+    if (!force && cryptoLastAttemptAt && Date.now() - cryptoLastAttemptAt < CRYPTO_RETRY_INTERVAL) return;
 
     cryptoLastAttemptAt = Date.now();
     cryptoFetchInFlight = true;
@@ -10875,7 +10937,8 @@
           BRL: Number(quote.brl || 0),
           USD: Number(quote.usd || 0),
           EUR: Number(quote.eur || 0),
-          change24h: Number(quote.jpy_24h_change || quote.brl_24h_change || quote.usd_24h_change || 0)
+          change24h: Number.isFinite(quote.usd_24h_change) ? quote.usd_24h_change : null,
+          changes24h: Object.fromEntries(["JPY", "BRL", "USD", "EUR"].map(currency => [currency, Number.isFinite(quote[currency.toLowerCase() + "_24h_change"]) ? quote[currency.toLowerCase() + "_24h_change"] : null]))
         };
       });
 

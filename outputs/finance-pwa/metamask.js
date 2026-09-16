@@ -24,7 +24,7 @@
   };
 
   window.addEventListener('eip6963:announceProvider', event => {
-    if (event.detail?.info?.rdns === 'io.metamask' && event.detail.provider?.request) {
+    if (['io.metamask', 'io.metamask.mobile', 'io.metamask.flask'].includes(event.detail?.info?.rdns) && event.detail.provider?.request) {
       discoveredProvider = event.detail.provider;
     }
   });
@@ -63,11 +63,12 @@
     }
     const client = await prepareConnect();
     const selected = supportedNetworks[chainId] ? chainId : '0x89';
-    const result = await client.connect({ chainIds: [...new Set([selected, '0x1'])] });
+    const result = await client.connect({ forceRequest: true, chainIds: [...new Set([selected, '0x1'])] });
     return { provider: client.getProvider(), accounts: result.accounts };
   }
 
   async function disconnect() {
+    if (connectInitialization && !connectClient) await connectInitialization.catch(() => {});
     if (connectClient) await connectClient.disconnect();
   }
 

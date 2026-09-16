@@ -1,13 +1,14 @@
-const CACHE_NAME = "nekuma-finance-v177";
+const CACHE_NAME = "nekuma-finance-v180";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./app.html",
   "./clean.html",
-  "./styles.css?v=177",
-  "./app.js?v=177",
-  "./metamask.js?v=177",
-  "./dashboard.js?v=177",
+  "./styles.css?v=180",
+  "./app.js?v=180",
+  "./metamask.js?v=180",
+  "./binance.js?v=180",
+  "./dashboard.js?v=180",
   "./assets/vendor/Sortable.min.js",
   "./assets/vendor/lucide.min.js",
   "./supabase-config.js?v=26",
@@ -68,6 +69,10 @@ self.addEventListener("message", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
   if (url.origin !== self.location.origin) {
     event.respondWith(fetch(event.request));
     return;

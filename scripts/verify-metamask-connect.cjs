@@ -39,6 +39,8 @@ function harness(injected, failOnce = false) {
   assert.equal(result.provider, mobile.sdkProvider);
   assert.equal(result.accounts[0], address);
   assert.equal(JSON.stringify(mobile.calls[1].chainIds), '["0x89","0x1"]');
+  assert.equal(mobile.calls[1].forceRequest, true, 'Explicit connect must request authorization for the phone wallet');
+  assert.equal(mobile.calls[1].account, undefined, 'Do not force the desktop account');
   await mobile.api.disconnect();
   assert.equal(mobile.calls.at(-1), 'disconnect');
   const retry = harness(null, true);
