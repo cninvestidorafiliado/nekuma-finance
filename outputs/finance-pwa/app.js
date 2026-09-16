@@ -113,6 +113,8 @@
     commitments: "co",
     debts: "de",
     investments: "iv",
+    nubankBoxes: "nb",
+    nubankBoxContributions: "nc",
     creditCards: "cc",
     cardPurchases: "cp",
     bankAccounts: "ba",
@@ -353,6 +355,9 @@
   let fxRefreshTimer = null;
   let paypalFetchInFlight = false;
   let web3FetchInFlight = false;
+  let cdiFetchInFlight = false;
+  let cdiLastAttemptAt = 0;
+  let cdiRefreshTimer = null;
   let web3ListenersAttached = false;
   let remotePullTimer = null;
   let remotePullInFlight = false;
@@ -384,7 +389,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=163")
+      navigator.serviceWorker.register("./service-worker.js?v=168")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -474,6 +479,8 @@
     if (action === "delete-debt") deleteItem("debts", button.dataset.id, "Contrato removido.");
     if (action === "delete-vehicle") deleteVehicle(button.dataset.id);
     if (action === "delete-investment") deleteItem("investments", button.dataset.id, "Investimento removido.");
+    if (action === "delete-nubank-box") deleteNubankBox(button.dataset.id);
+    if (action === "delete-nubank-box-contribution") deleteNubankBoxContribution(button.dataset.id);
     if (action === "delete-credit-card") deleteItem("creditCards", button.dataset.id, "Cartao removido.");
     if (action === "delete-card-purchase") deleteItem("cardPurchases", button.dataset.id, "Compra removida.");
     if (action === "delete-bank-account") deleteItem("bankAccounts", button.dataset.id, "Conta bancaria removida.");
@@ -492,6 +499,7 @@
     if (action === "delete-work-override") deleteItem("workScheduleOverrides", button.dataset.id, "Folga extra removida.");
     if (action === "refresh-crypto") refreshCryptoQuotes(true);
     if (action === "refresh-fx") refreshFxQuotes(true);
+    if (action === "refresh-cdi") refreshCdiRates(true);
     if (action === "refresh-paypal") refreshPaypalBalance(true);
     if (action === "connect-web3") connectWeb3Wallet();
     if (action === "refresh-web3") refreshWeb3Wallet();
@@ -528,6 +536,8 @@
     if (formType === "commitment") saveCommitment(form);
     if (formType === "debt") saveDebt(form);
     if (formType === "investment") saveInvestment(form);
+    if (formType === "nubank-box") saveNubankBox(form);
+    if (formType === "nubank-box-contribution") saveNubankBoxContribution(form);
     if (formType === "credit-card") saveCreditCard(form);
     if (formType === "card-purchase") saveCardPurchase(form);
     if (formType === "bank-account") saveBankAccount(form);
@@ -1250,6 +1260,8 @@
       commitments: Array.isArray(raw.commitments) ? raw.commitments : base.commitments,
       debts: Array.isArray(raw.debts) ? raw.debts : base.debts,
       investments: Array.isArray(raw.investments) ? raw.investments : base.investments,
+      nubankBoxes: Array.isArray(raw.nubankBoxes) ? raw.nubankBoxes : base.nubankBoxes,
+      nubankBoxContributions: Array.isArray(raw.nubankBoxContributions) ? raw.nubankBoxContributions : base.nubankBoxContributions,
       creditCards: Array.isArray(raw.creditCards) ? raw.creditCards : base.creditCards,
       cardPurchases: Array.isArray(raw.cardPurchases) ? raw.cardPurchases : base.cardPurchases,
       bankAccounts: normalizeBankAccounts(raw.bankAccounts, base.bankAccounts),
@@ -1260,6 +1272,7 @@
       housingCards: normalizeHousingCards(raw.housingCards, settings.baseCurrency),
       cryptoQuotes,
       fxQuotes: raw.fxQuotes || base.fxQuotes,
+      cdiRates: normalizeCdiRates(raw.cdiRates || base.cdiRates),
       paypal: normalizePaypalState(raw.paypal || base.paypal),
       web3Wallet: normalizeWeb3Wallet(raw.web3Wallet || base.web3Wallet),
       vehicles,
@@ -1625,6 +1638,23 @@
     return [...standard, ...custom];
   }
 
+  function normalizeCdiRates(value = {}) {
+    const daily = {};
+    Object.entries(value.daily || {}).forEach(([date, rate]) => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Number(rate)) && Number(rate) >= 0) {
+        daily[date] = Number(rate);
+      }
+    });
+    return {
+      daily,
+      annualRate: number(value.annualRate) || 13.9,
+      updatedAt: value.updatedAt || null,
+      ratesDate: String(value.ratesDate || ""),
+      source: String(value.source || "Banco Central do Brasil - SGS 12"),
+      status: ["idle", "loading", "ok", "error"].includes(value.status) ? value.status : "idle"
+    };
+  }
+
   function normalizePaypalState(raw = {}) {
     const balances = Array.isArray(raw.balances) ? raw.balances.map(normalizePaypalBalance).filter(Boolean) : [];
     return {
@@ -1757,7 +1787,7 @@
       return { state: { ...(remoteReset > localReset ? remote : local), ui: local.ui }, changed: localReset > remoteReset };
     }
     const crypto = mergeCryptoAssetsWithLocal(remote.cryptoAssets, local.cryptoAssets);
-    const merged = mergeLocalCollections(remote, local, ["incomeSources", "workIncomes", "workScheduleOverrides", "familyMembers", "familyBusinesses", "shoppingLists", "receipts", "vehicles"]);
+    const merged = mergeLocalCollections(remote, local, ["incomeSources", "workIncomes", "workScheduleOverrides", "familyMembers", "familyBusinesses", "shoppingLists", "receipts", "vehicles", "nubankBoxes", "nubankBoxContributions"]);
     const deletedItems = mergeDeletedItems(remote.deletedItems, local.deletedItems);
     const next = { ...remote, ...merged.collections, cryptoAssets: crypto.items, deletedItems, ui: local.ui };
     for (const [collection, deletions] of Object.entries(deletedItems)) {
@@ -1883,6 +1913,8 @@
       commitments: [],
       debts: [],
       investments: [],
+      nubankBoxes: [],
+      nubankBoxContributions: [],
       creditCards: [],
       cardPurchases: [],
       bankAccounts: [],
@@ -1907,6 +1939,14 @@
         source: "",
         ratesDate: "",
         updatedAt: null,
+        status: "idle"
+      },
+      cdiRates: {
+        daily: {},
+        annualRate: 13.9,
+        updatedAt: null,
+        ratesDate: "",
+        source: "Banco Central do Brasil - SGS 12",
         status: "idle"
       },
       paypal: {
@@ -2015,6 +2055,8 @@
     if (window.NekumaDashboard?.isDragging()) return;
     document.body.classList.toggle("auth-mode", remoteStore.enabled && remoteSession.status !== "ready");
     document.body.classList.toggle("online-mode", remoteStore.enabled && remoteSession.status === "ready");
+    ["dashboard", "accounts", "crypto", "wise", "reports", "settings"].forEach((tab) => app.classList.remove(`tab-${tab}`));
+    app.classList.add(`tab-${state.ui.activeTab}`);
     updateAppGreeting();
     updateAppNewsButton();
     if (remoteStore.enabled && remoteSession.status !== "ready") {
@@ -2025,11 +2067,15 @@
 
     if (reconcileRecordedPayments()) saveState();
 
+    const currentTabContent = renderCurrentTab();
+    const usesCardColumns = ["accounts", "crypto", "settings"].includes(state.ui.activeTab);
     app.innerHTML = state.ui.activeTab === "dashboard"
-      ? renderCurrentTab()
+      ? currentTabContent
       : [
         renderToolbar(),
-        renderCurrentTab()
+        usesCardColumns
+          ? `<div class="tab-card-columns">${currentTabContent}</div>`
+          : currentTabContent
       ].join("");
 
     document.querySelectorAll(".nav-item").forEach((item) => {
@@ -2046,6 +2092,7 @@
     requestAnimationFrame(drawVisibleCharts);
     scheduleFxRefresh(false);
     scheduleCryptoRefresh(false);
+    scheduleCdiRefresh(false);
     setTimeout(showDueAlertIfNeeded, 250);
   }
 
@@ -3313,6 +3360,7 @@
             <button class="small-action" type="button" data-action="open-modal" data-modal="investment">Novo</button>
           </div>
           ${renderInvestmentList()}
+          ${hasNubankAccount() ? `<div class="nubank-boxes-inline">${renderNubankBoxesPanel()}</div>` : ""}
         </article>
       </section>
     `;
@@ -3723,6 +3771,7 @@
           <button class="danger-button" type="button" data-action="request-account-delete">Excluir cadastro</button>
         </article>
       </section>
+
     `;
   }
 
@@ -4096,6 +4145,191 @@
           `;
         }).join("")}
       </div>
+    `;
+  }
+
+  function nubankBankAccounts() {
+    return activeBankAccounts().filter((account) => {
+      const name = normalizeLookupText(`${account.bankName || ""} ${account.nickname || ""}`);
+      return account.country === "brasil" && /\b(nubank|nu bank|nu pagamentos|nu financeira)\b/.test(name);
+    });
+  }
+
+  function hasNubankAccount() {
+    return nubankBankAccounts().length > 0;
+  }
+
+  function nubankProductLabel(type) {
+    const labels = {
+      rdbImmediate: "RDB Imediato",
+      rdbDaily: "RDB Diário",
+      rdbPlanned: "RDB Planejado",
+      fund: "Fundo de renda fixa"
+    };
+    return labels[type] || labels.rdbImmediate;
+  }
+
+  function nubankBoxContributionsFor(boxId) {
+    return (state.nubankBoxContributions || [])
+      .filter((item) => item.boxId === boxId)
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  }
+
+  function nubankBoxProjection(box, endDate = localDateKey()) {
+    const balanceDate = box.balanceDate || String(box.createdAt || endDate).slice(0, 10);
+    const lots = [
+      { amount: number(box.currentAmount), date: balanceDate, label: "Saldo informado" },
+      ...nubankBoxContributionsFor(box.id)
+        .filter((item) => item.date > balanceDate && item.date <= endDate)
+        .map((item) => ({ amount: number(item.amount), date: item.date, label: "Aporte" }))
+    ].filter((item) => item.amount > 0 && item.date);
+    const projected = lots.map((lot) => nubankLotProjection(lot.amount, lot.date, endDate, number(box.cdiPercent) || 100));
+    return projected.reduce((total, lot) => ({
+      principal: total.principal + lot.principal,
+      gross: total.gross + lot.gross,
+      yield: total.yield + lot.yield,
+      ir: total.ir + lot.ir,
+      iof: total.iof + lot.iof,
+      net: total.net + lot.net
+    }), { principal: 0, gross: 0, yield: 0, ir: 0, iof: 0, net: 0 });
+  }
+
+  function nubankLotProjection(principal, startDate, endDate, cdiPercent) {
+    const start = parseLocalDate(startDate);
+    const end = parseLocalDate(endDate);
+    const startKey = String(startDate).slice(0, 10);
+    const endKey = String(endDate).slice(0, 10);
+    const dailyRates = Object.entries(state.cdiRates?.daily || {})
+      .filter(([date]) => date > startKey && date <= endKey)
+      .sort(([a], [b]) => a.localeCompare(b));
+    let factor = 1;
+    if (dailyRates.length) {
+      dailyRates.forEach(([, rate]) => {
+        factor *= 1 + (number(rate) / 100) * (number(cdiPercent) / 100);
+      });
+    } else {
+      const annualRate = number(state.cdiRates?.annualRate) || 13.9;
+      const dailyRate = Math.pow(1 + annualRate / 100, 1 / 252) - 1;
+      factor = Math.pow(1 + dailyRate * (number(cdiPercent) / 100), businessDaysBetween(start, end));
+    }
+    const gross = number(principal) * factor;
+    const grossYield = Math.max(0, gross - number(principal));
+    const ageDays = Math.max(0, Math.floor((startOfDay(end) - startOfDay(start)) / 86400000));
+    const iof = grossYield * nubankIofRate(ageDays);
+    const ir = Math.max(0, grossYield - iof) * nubankIrRate(ageDays);
+    return {
+      principal: number(principal),
+      gross,
+      yield: grossYield,
+      iof,
+      ir,
+      net: gross - iof - ir
+    };
+  }
+
+  function businessDaysBetween(start, end) {
+    let count = 0;
+    const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
+    while (cursor <= end) {
+      const day = cursor.getDay();
+      if (day !== 0 && day !== 6) count += 1;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return count;
+  }
+
+  function nubankIrRate(days) {
+    if (days <= 180) return 0.225;
+    if (days <= 360) return 0.2;
+    if (days <= 720) return 0.175;
+    return 0.15;
+  }
+
+  function nubankIofRate(days) {
+    const rates = [0, 96, 93, 90, 86, 83, 80, 76, 73, 70, 66, 63, 60, 56, 53, 50, 46, 43, 40, 36, 33, 30, 26, 23, 20, 16, 13, 10, 6, 3];
+    if (days <= 0 || days >= 30) return 0;
+    return (rates[days] || 0) / 100;
+  }
+
+  function renderNubankBoxesPanel() {
+    const boxes = state.nubankBoxes || [];
+    const annualRate = number(state.cdiRates?.annualRate) || 13.9;
+    const loading = state.cdiRates?.status === "loading";
+    const updated = state.cdiRates?.ratesDate || (state.cdiRates?.updatedAt ? formatShortDate(state.cdiRates.updatedAt) : "estimativa local");
+    return `
+      <div class="panel-head nubank-boxes-head">
+        <div>
+          <span class="nubank-kicker">NUBANK · CAIXINHAS</span>
+          <h2>Caixinhas</h2>
+          <p class="row-meta">CDI estimado ${formatPercent(annualRate)} a.a. · ${escapeHtml(updated)}</p>
+        </div>
+        <div class="panel-actions">
+          <button class="small-action ghost icon-action" type="button" data-action="refresh-cdi" aria-label="Atualizar CDI" title="Atualizar CDI"><span data-lucide="refresh-cw" aria-hidden="true"></span></button>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="nubankBox">Nova caixinha</button>
+        </div>
+      </div>
+      ${loading ? `<p class="nubank-rate-status">Atualizando a taxa DI oficial...</p>` : ""}
+      ${boxes.length ? `<div class="nubank-box-list">${boxes.map(renderNubankBoxCard).join("")}</div>` : `
+        <div class="nubank-box-empty">
+          <span data-lucide="package-open" aria-hidden="true"></span>
+          <strong>Cadastre sua primeira Caixinha</strong>
+          <p>Acompanhe rendimento, impostos estimados e progresso da meta sem misturar os objetivos.</p>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="nubankBox">Cadastrar caixinha</button>
+        </div>
+      `}
+      <p class="nubank-estimate-note">Estimativa baseada na Taxa DI. O saldo oficial e os impostos efetivos continuam sendo os informados pelo Nubank.</p>
+    `;
+  }
+
+  function renderNubankBoxCard(box) {
+    const projection = nubankBoxProjection(box);
+    const contributions = nubankBoxContributionsFor(box.id);
+    const goal = number(box.goalAmount);
+    const progress = goal ? clamp((projection.net / goal) * 100, 0, 100) : 0;
+    return `
+      <article class="nubank-box-card">
+        <div class="nubank-box-title">
+          <div>
+            <span>${escapeHtml(nubankProductLabel(box.productType))} · ${formatPercent(number(box.cdiPercent) || 100)} do CDI</span>
+            <h3>${escapeHtml(box.name || "Caixinha")}</h3>
+          </div>
+          <span class="nubank-box-mark">nu</span>
+        </div>
+        <div class="nubank-box-balance">
+          <span>Saldo líquido estimado</span>
+          <strong>${formatMoney(projection.net, "BRL")}</strong>
+          <small>Bruto ${formatMoney(projection.gross, "BRL")} · investido ${formatMoney(projection.principal, "BRL")}</small>
+        </div>
+        <div class="nubank-box-metrics">
+          <div><span>Rendimento bruto</span><strong>+ ${formatMoney(projection.yield, "BRL")}</strong></div>
+          <div><span>IR provisionado</span><strong>- ${formatMoney(projection.ir, "BRL")}</strong></div>
+          <div><span>IOF provisionado</span><strong>- ${formatMoney(projection.iof, "BRL")}</strong></div>
+        </div>
+        ${goal ? `
+          <div class="nubank-goal-progress">
+            <div><span>Meta ${formatMoney(goal, "BRL")}</span><strong>${formatPercent(progress)}</strong></div>
+            <div class="debt-progress-track"><div class="debt-progress-fill" style="width:${progress}%"></div></div>
+          </div>
+        ` : ""}
+        <details class="nubank-box-details">
+          <summary>Detalhamento da Caixinha</summary>
+          <div class="nubank-box-history">
+            <div><span>Saldo informado em ${formatShortDate(box.balanceDate)}</span><strong>${formatMoney(number(box.currentAmount), "BRL")}</strong></div>
+            ${contributions.length ? contributions.map((item) => `
+              <div>
+                <span>Aporte em ${formatShortDate(item.date)}</span>
+                <strong>${formatMoney(number(item.amount), "BRL")}</strong>
+                <button class="icon-inline-action" type="button" data-action="delete-nubank-box-contribution" data-id="${item.id}" aria-label="Excluir aporte" title="Excluir aporte"><span data-lucide="trash-2" aria-hidden="true"></span></button>
+              </div>
+            `).join("") : `<p class="empty-state">Nenhum aporte adicional cadastrado.</p>`}
+          </div>
+        </details>
+        <div class="row-actions nubank-box-actions">
+          <button class="small-action" type="button" data-action="open-modal" data-modal="nubankBoxContribution" data-id="${box.id}">Aporte</button>
+          <button class="small-action ghost" type="button" data-action="open-modal" data-modal="nubankBox" data-id="${box.id}">Editar</button>
+          <button class="small-action ghost" type="button" data-action="delete-nubank-box" data-id="${box.id}">Excluir</button>
+        </div>
+      </article>
     `;
   }
 
@@ -5760,6 +5994,8 @@
       debt: renderDebtModal,
       consortium: renderConsortiumModal,
       investment: renderInvestmentModal,
+      nubankBox: renderNubankBoxModal,
+      nubankBoxContribution: renderNubankBoxContributionModal,
       creditCard: renderCreditCardModal,
       cardPurchase: renderCardPurchaseModal,
       bankAccount: renderBankAccountModal,
@@ -5783,7 +6019,7 @@
       monthlyPayment: renderMonthlyPaymentModal,
       subscription: renderSubscriptionModal
     };
-    const modalData = type === "monthlyPayment" || type === "goalContribution" || type === "salaryReceipt" ? id : editableItem(type, id);
+    const modalData = type === "monthlyPayment" || type === "goalContribution" || type === "salaryReceipt" || type === "nubankBoxContribution" ? id : editableItem(type, id);
     const content = map[type] ? map[type](modalData) : "";
     modalRoot.innerHTML = `
       <div class="modal-backdrop">
@@ -6632,6 +6868,90 @@
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
           <button class="primary-button" type="submit">Salvar investimento</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderNubankBoxModal(item = null) {
+    const accounts = nubankBankAccounts();
+    if (!accounts.length) {
+      return `
+        <div class="modal-head"><h2>Caixinha Nubank</h2><button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button></div>
+        <div class="form-grid"><p class="empty-state">Cadastre primeiro uma conta Nubank do Brasil para liberar as Caixinhas.</p></div>
+      `;
+    }
+    return `
+      <div class="modal-head">
+        <h2>${item ? "Editar Caixinha" : "Nova Caixinha"}</h2>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="nubank-box">
+        ${editHidden(item)}
+        <div class="two-cols">
+          <div class="field">
+            <label for="nubankBoxAccount">Conta Nubank</label>
+            <select id="nubankBoxAccount" name="bankAccountId" required>
+              ${accounts.map((account) => `<option value="${account.id}" ${selectedAttr(account.id, item?.bankAccountId || accounts[0]?.id)}>${escapeHtml(account.nickname || account.bankName)}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="nubankBoxName">Nome da Caixinha</label>
+            <input id="nubankBoxName" name="name" required placeholder="Ex: Reserva de viagem" value="${escapeAttr(item?.name || "")}" />
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="nubankBoxProduct">Produto</label>
+            <select id="nubankBoxProduct" name="productType">
+              ${[["rdbImmediate", "RDB Imediato"], ["rdbDaily", "RDB Diário"], ["rdbPlanned", "RDB Planejado"], ["fund", "Fundo de renda fixa"]].map(([value, label]) => `<option value="${value}" ${selectedAttr(value, item?.productType || "rdbImmediate")}>${label}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="nubankBoxCdi">Percentual do CDI</label>
+            <input id="nubankBoxCdi" name="cdiPercent" type="number" min="1" max="300" step="0.01" required value="${number(item?.cdiPercent) || 100}" />
+          </div>
+        </div>
+        <div class="three-cols">
+          <div class="field">
+            <label for="nubankBoxAmount">Valor atual informado</label>
+            <input id="nubankBoxAmount" name="currentAmount" type="number" min="0" step="0.01" required value="${item ? number(item.currentAmount) : ""}" />
+          </div>
+          <div class="field">
+            <label for="nubankBoxBalanceDate">Data desse saldo</label>
+            <input id="nubankBoxBalanceDate" name="balanceDate" type="date" required value="${escapeAttr(item?.balanceDate || localDateKey())}" />
+          </div>
+          <div class="field">
+            <label for="nubankBoxGoal">Meta da Caixinha</label>
+            <input id="nubankBoxGoal" name="goalAmount" type="number" min="0" step="0.01" value="${item ? number(item.goalAmount) : ""}" />
+          </div>
+        </div>
+        <p class="form-hint">Cada aporte novo será calculado separadamente para estimar corretamente IR e IOF.</p>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Salvar Caixinha</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function renderNubankBoxContributionModal(boxId = "") {
+    const box = findItem("nubankBoxes", boxId);
+    if (!box) return `<div class="modal-head"><h2>Aporte</h2><button class="close-button" type="button" data-action="close-modal">x</button></div><p class="empty-state">Caixinha não encontrada.</p>`;
+    return `
+      <div class="modal-head">
+        <div><h2>Novo aporte</h2><p class="row-meta">${escapeHtml(box.name)}</p></div>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <form class="form-grid" data-form="nubank-box-contribution">
+        <input type="hidden" name="boxId" value="${escapeAttr(box.id)}" />
+        <div class="two-cols">
+          <div class="field"><label for="nubankContributionAmount">Valor do aporte</label><input id="nubankContributionAmount" name="amount" type="number" min="0.01" step="0.01" required /></div>
+          <div class="field"><label for="nubankContributionDate">Data do aporte</label><input id="nubankContributionDate" name="date" type="date" required value="${localDateKey()}" /></div>
+        </div>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
+          <button class="primary-button" type="submit">Registrar aporte</button>
         </div>
       </form>
     `;
@@ -8372,6 +8692,64 @@
     showToast(updated ? "Investimento atualizado." : "Investimento salvo.");
   }
 
+  function saveNubankBox(form) {
+    const data = formData(form);
+    const account = nubankBankAccounts().find((item) => item.id === data.bankAccountId);
+    if (!account) {
+      showToast("Selecione uma conta Nubank cadastrada.");
+      return;
+    }
+    const updated = upsertItem("nubankBoxes", data.id, {
+      bankAccountId: account.id,
+      name: String(data.name || "").trim(),
+      productType: data.productType || "rdbImmediate",
+      cdiPercent: clamp(number(data.cdiPercent) || 100, 1, 300),
+      currentAmount: Math.max(0, number(data.currentAmount)),
+      balanceDate: data.balanceDate || localDateKey(),
+      goalAmount: Math.max(0, number(data.goalAmount)),
+      currency: "BRL"
+    });
+    saveState({ remoteNow: true });
+    closeModal();
+    render();
+    scheduleCdiRefresh(true);
+    showToast(updated ? "Caixinha atualizada." : "Caixinha cadastrada.");
+  }
+
+  function saveNubankBoxContribution(form) {
+    const data = formData(form);
+    const box = findItem("nubankBoxes", data.boxId);
+    const amount = number(data.amount);
+    if (!box || amount <= 0) {
+      showToast("Informe um aporte válido.");
+      return;
+    }
+    const contributionId = uid("nc");
+    upsertItem("nubankBoxContributions", contributionId, {
+      boxId: box.id,
+      amount,
+      date: data.date || localDateKey()
+    });
+    upsertItem("transactions", "", {
+      date: data.date || localDateKey(),
+      country: "brasil",
+      type: "investment",
+      title: `Aporte Caixinha ${box.name}`,
+      category: "Investimento",
+      amount,
+      currency: "BRL",
+      bankAccountId: box.bankAccountId || "",
+      nubankBoxId: box.id,
+      nubankBoxContributionId: contributionId,
+      note: "Aporte registrado na Caixinha Nubank"
+    }, true);
+    saveState({ remoteNow: true });
+    closeModal();
+    render();
+    scheduleCdiRefresh(true);
+    showToast("Aporte registrado.");
+  }
+
   function saveCreditCard(form) {
     const data = formData(form);
     const paymentMethod = normalizeCardPaymentMethod(data.paymentMethod);
@@ -9445,6 +9823,45 @@
     if (cardSelect) cardSelect.required = method === "card";
   }
 
+  function rememberDeletedItems(collection, items, deletedAt = new Date().toISOString()) {
+    state.deletedItems = normalizeDeletedItems(state.deletedItems);
+    state.deletedItems[collection] = { ...(state.deletedItems[collection] || {}) };
+    items.forEach((item) => {
+      if (item?.id) state.deletedItems[collection][item.id] = deletedAt;
+    });
+  }
+
+  function deleteNubankBox(id) {
+    const box = findItem("nubankBoxes", id);
+    if (!box || !window.confirm("Excluir esta Caixinha e o histórico de aportes dela?")) return;
+    const deletedAt = new Date().toISOString();
+    const contributions = (state.nubankBoxContributions || []).filter((item) => item.boxId === id);
+    const transactions = (state.transactions || []).filter((item) => item.nubankBoxId === id);
+    state.nubankBoxes = state.nubankBoxes.filter((item) => item.id !== id);
+    state.nubankBoxContributions = (state.nubankBoxContributions || []).filter((item) => item.boxId !== id);
+    state.transactions = (state.transactions || []).filter((item) => item.nubankBoxId !== id);
+    rememberDeletedItems("nubankBoxes", [box], deletedAt);
+    rememberDeletedItems("nubankBoxContributions", contributions, deletedAt);
+    rememberDeletedItems("transactions", transactions, deletedAt);
+    saveState({ remoteNow: true });
+    render();
+    showToast("Caixinha excluída.");
+  }
+
+  function deleteNubankBoxContribution(id) {
+    const contribution = findItem("nubankBoxContributions", id);
+    if (!contribution || !window.confirm("Excluir este aporte?")) return;
+    const deletedAt = new Date().toISOString();
+    const transactions = (state.transactions || []).filter((item) => item.nubankBoxContributionId === id);
+    state.nubankBoxContributions = state.nubankBoxContributions.filter((item) => item.id !== id);
+    state.transactions = (state.transactions || []).filter((item) => item.nubankBoxContributionId !== id);
+    rememberDeletedItems("nubankBoxContributions", [contribution], deletedAt);
+    rememberDeletedItems("transactions", transactions, deletedAt);
+    saveState({ remoteNow: true });
+    render();
+    showToast("Aporte excluído.");
+  }
+
   function deleteItem(collection, id, message) {
     const current = state[collection];
     if (!Array.isArray(current)) return;
@@ -10132,6 +10549,86 @@
     const updatedAt = state.cryptoQuotes?.updatedAt ? new Date(state.cryptoQuotes.updatedAt).getTime() : 0;
     const stale = Date.now() - updatedAt > 60000;
     if (force || stale) refreshCryptoQuotes(force);
+  }
+
+  function scheduleCdiRefresh(force) {
+    clearTimeout(cdiRefreshTimer);
+    if (!hasNubankAccount()) return;
+    cdiRefreshTimer = setTimeout(() => scheduleCdiRefresh(false), 6 * 60 * 60 * 1000);
+    const updatedAt = state.cdiRates?.updatedAt ? new Date(state.cdiRates.updatedAt).getTime() : 0;
+    const stale = Date.now() - updatedAt > 12 * 60 * 60 * 1000;
+    if (force || stale) refreshCdiRates(force);
+  }
+
+  function oldestNubankRateDate() {
+    const dates = [
+      ...(state.nubankBoxes || []).map((item) => item.balanceDate),
+      ...(state.nubankBoxContributions || []).map((item) => item.date)
+    ].filter(Boolean).sort();
+    const fallback = new Date();
+    fallback.setDate(fallback.getDate() - 40);
+    const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const candidate = dates[0] || dateKey(fallback);
+    const tenYearsAgo = new Date();
+    tenYearsAgo.setFullYear(tenYearsAgo.getFullYear() - 10);
+    return candidate < dateKey(tenYearsAgo) ? dateKey(tenYearsAgo) : candidate;
+  }
+
+  function formatBcbDate(isoDate) {
+    const [year, month, day] = String(isoDate || "").split("-");
+    return `${day}/${month}/${year}`;
+  }
+
+  function bcbDateToIso(value) {
+    const [day, month, year] = String(value || "").split("/");
+    return year && month && day ? `${year}-${month}-${day}` : "";
+  }
+
+  async function refreshCdiRates(force = false) {
+    if (cdiFetchInFlight || !hasNubankAccount()) return;
+    const updatedAt = state.cdiRates?.updatedAt ? new Date(state.cdiRates.updatedAt).getTime() : 0;
+    if (!force && Date.now() - Math.max(updatedAt, cdiLastAttemptAt) < 12 * 60 * 60 * 1000) return;
+    cdiLastAttemptAt = Date.now();
+    cdiFetchInFlight = true;
+    state.cdiRates = { ...normalizeCdiRates(state.cdiRates), status: "loading" };
+    if (force) render();
+    try {
+      const start = oldestNubankRateDate();
+      const end = localDateKey();
+      const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados?formato=json&dataInicial=${formatBcbDate(start)}&dataFinal=${formatBcbDate(end)}`;
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error("Falha ao consultar a Taxa DI");
+      const rows = await response.json();
+      const daily = { ...(state.cdiRates?.daily || {}) };
+      (Array.isArray(rows) ? rows : []).forEach((row) => {
+        const date = bcbDateToIso(row.data);
+        const rate = Number(String(row.valor || "").replace(",", "."));
+        if (date && Number.isFinite(rate) && rate >= 0) daily[date] = rate;
+      });
+      const latestDate = Object.keys(daily).sort().at(-1) || "";
+      const latestDaily = number(daily[latestDate]);
+      const annualRate = latestDaily > 0 ? (Math.pow(1 + latestDaily / 100, 252) - 1) * 100 : number(state.cdiRates?.annualRate) || 13.9;
+      state.cdiRates = normalizeCdiRates({
+        daily,
+        annualRate,
+        updatedAt: new Date().toISOString(),
+        ratesDate: latestDate,
+        source: "Banco Central do Brasil - SGS 12",
+        status: "ok"
+      });
+      saveState({ remoteNow: true });
+      renderKeepingScroll();
+      if (force) showToast("CDI atualizado.");
+    } catch (error) {
+      state.cdiRates = { ...normalizeCdiRates(state.cdiRates), status: "error" };
+      saveState();
+      if (force) {
+        renderKeepingScroll();
+        showToast("Não consegui atualizar o CDI. Mantive a última taxa disponível.");
+      }
+    } finally {
+      cdiFetchInFlight = false;
+    }
   }
 
   async function refreshCryptoQuotes(force) {
@@ -13668,6 +14165,7 @@
       debt: "debts",
       consortium: "debts",
       investment: "investments",
+      nubankBox: "nubankBoxes",
       creditCard: "creditCards",
       cardPurchase: "cardPurchases",
       bankAccount: "bankAccounts",
