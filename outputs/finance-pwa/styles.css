@@ -3733,6 +3733,10 @@ canvas {
   font-weight: 950;
 }
 
+.debt-progress.needs-review .debt-progress-copy strong {
+  color: #8a5a00;
+}
+
 .debt-progress-track {
   height: 13px;
   overflow: hidden;
@@ -3747,6 +3751,155 @@ canvas {
   background: linear-gradient(90deg, var(--green), var(--lime));
   box-shadow: 0 8px 18px rgba(15, 125, 80, 0.28);
   transition: width 220ms ease;
+}
+
+.consortium-list,
+.consortium-card,
+.consortium-details,
+.consortium-form-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.consortium-card {
+  padding: 14px;
+  border: 1px solid rgba(22, 84, 61, 0.16);
+  border-radius: var(--radius);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(239, 247, 229, 0.7));
+}
+
+.consortium-card.is-paid {
+  border-color: rgba(46, 155, 105, 0.34);
+}
+
+.consortium-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.consortium-card-head > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.consortium-summary {
+  display: grid;
+  grid-template-columns: minmax(82px, 0.7fr) minmax(0, 1.6fr) minmax(100px, 0.9fr);
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0;
+  border-top: 1px solid rgba(19, 67, 49, 0.1);
+  border-bottom: 1px solid rgba(19, 67, 49, 0.1);
+}
+
+.consortium-side-stat,
+.consortium-asset-value {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.consortium-side-stat.is-right {
+  text-align: right;
+}
+
+.consortium-side-stat span,
+.consortium-asset-value span,
+.consortium-detail-grid span,
+.consortium-payment-breakdown span,
+.consortium-composition > span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.consortium-side-stat strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+
+.consortium-asset-value {
+  text-align: center;
+}
+
+.consortium-asset-value strong {
+  color: var(--green);
+  font-size: clamp(1.35rem, 2.4vw, 2rem);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.consortium-details > summary {
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.consortium-detail-grid,
+.consortium-payment-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.consortium-detail-grid > div,
+.consortium-payment-breakdown > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(19, 67, 49, 0.1);
+}
+
+.consortium-detail-grid strong,
+.consortium-payment-breakdown strong {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.consortium-payment-breakdown {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.consortium-payment-breakdown small,
+.consortium-composition p,
+.form-section-heading p,
+.field-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.consortium-composition {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border-left: 3px solid var(--lime);
+  background: rgba(216, 255, 114, 0.1);
+}
+
+.consortium-form-fields {
+  grid-column: 1 / -1;
+  padding: 14px 0;
+  border-top: 1px solid rgba(19, 67, 49, 0.12);
+  border-bottom: 1px solid rgba(19, 67, 49, 0.12);
+}
+
+.form-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.form-section-heading h3 {
+  margin: 2px 0 0;
 }
 
 .settings-rate-card,
@@ -8644,6 +8797,10 @@ h1 {
     order: 120;
   }
 
+  .consortium-home-panel {
+    order: 125;
+  }
+
   .family-tools-panel {
     order: 130;
   }
@@ -8720,6 +8877,42 @@ h1 {
 
   .card-mini-total {
     font-size: clamp(1.75rem, 10vw, 2.4rem);
+  }
+}
+
+@media (max-width: 759px) {
+  .consortium-card {
+    padding: 11px;
+  }
+
+  .consortium-card-head,
+  .form-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .consortium-summary {
+    grid-template-columns: minmax(62px, 0.72fr) minmax(0, 1.35fr) minmax(78px, 0.9fr);
+    gap: 6px;
+    padding: 10px 0;
+  }
+
+  .consortium-side-stat span,
+  .consortium-asset-value span {
+    font-size: 0.58rem;
+  }
+
+  .consortium-side-stat strong {
+    font-size: 0.78rem;
+  }
+
+  .consortium-asset-value strong {
+    font-size: 1.16rem;
+  }
+
+  .consortium-detail-grid,
+  .consortium-payment-breakdown {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -9247,8 +9440,8 @@ h1 {
 .dashboard-drop-placeholder { opacity: 0.3; }
 .dashboard-dragging { cursor: grabbing; }
 .dashboard-mobile-zone { display: grid; gap: 14px; min-width: 0; }
-.country-expenses-body { display: grid; gap: 14px; }
-.expense-donut { position: relative; width: min(100%, 260px); aspect-ratio: 1; margin: 0 auto; }
+.country-expenses-body { display: grid; gap: 10px; }
+.expense-donut { position: relative; width: min(100%, 220px); aspect-ratio: 1; margin: 0 auto; }
 .expense-donut svg { width: 100%; height: 100%; overflow: visible; }
 .expense-donut-total { position: absolute; inset: 31%; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: none; text-align: center; gap: 5px; }
 .expense-donut-total span { color: #62766c; font-size: 0.7rem; }
@@ -9257,13 +9450,24 @@ h1 {
 .expense-sector.is-selected { transform: rotate(-90deg) scale(1.06); stroke-width: 29px; }
 .has-expense-selection .expense-sector:not(.is-selected) { opacity: 0.38; }
 .expense-sector:focus-visible { outline: none; stroke-width: 29px; }
-.expense-legend { display: grid; gap: 6px; }
-.expense-legend-row { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 10px; align-items: start; width: 100%; min-width: 0; padding: 9px; text-align: left; border: 1px solid transparent; border-radius: 8px; color: var(--ink); background: transparent; cursor: pointer; transition: background 180ms, border-color 180ms; }
-.expense-legend-row i { width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: var(--category-color); }
+.expense-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; align-content: center; }
+.expense-legend-row { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 8px; align-items: center; width: 100%; min-width: 0; padding: 7px 8px; text-align: left; border: 1px solid transparent; border-radius: 8px; color: var(--ink); background: transparent; cursor: pointer; transition: background 180ms, border-color 180ms; }
+.expense-legend-row i { width: 9px; height: 9px; border-radius: 50%; background: var(--category-color); }
 .expense-legend-row strong, .expense-legend-row small { display: block; overflow-wrap: anywhere; }
-.expense-legend-row small { color: #52685f; font-size: 0.76rem; margin-top: 3px; }
-.expense-legend-row .expense-bank { font-size: 0.7rem; color: #63736c; }
+.expense-legend-row strong { font-size: 0.8rem; line-height: 1.15; }
+.expense-legend-row small { color: #52685f; font-size: 0.72rem; margin-top: 2px; }
 .expense-legend-row.is-selected, .expense-legend-row:focus-visible { background: #edf5ef; border-color: var(--category-color); outline: none; }
+.expense-details { margin-top: 2px; border-top: 1px solid rgba(16, 35, 31, 0.1); padding-top: 9px; }
+.expense-details > summary { color: var(--ink); font-size: 0.84rem; font-weight: 950; cursor: pointer; }
+.expense-detail-list { display: grid; gap: 8px; margin-top: 10px; }
+.expense-detail-row { display: grid; grid-template-columns: 9px minmax(0, 1fr); gap: 9px; align-items: start; padding: 8px 0; border-bottom: 1px solid rgba(16, 35, 31, 0.07); }
+.expense-detail-row:last-child { border-bottom: 0; }
+.expense-detail-row > i { width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: var(--category-color); }
+.expense-detail-row strong, .expense-detail-row span, .expense-detail-row small { display: block; overflow-wrap: anywhere; }
+.expense-detail-row strong { color: var(--ink); font-size: 0.82rem; }
+.expense-detail-row span { margin-top: 2px; color: #3d564c; font-size: 0.76rem; font-weight: 850; }
+.expense-detail-row small { margin-top: 3px; color: #63736c; font-size: 0.7rem; }
+.recent-transactions-panel .panel-actions { display: flex; align-items: center; gap: 7px; }
 .vehicle-card-actions svg { width: 16px; height: 16px; flex-shrink: 0; }
 .vehicle-card-actions button { display: inline-flex; align-items: center; gap: 5px; }
 @container panel (min-width: 600px) {

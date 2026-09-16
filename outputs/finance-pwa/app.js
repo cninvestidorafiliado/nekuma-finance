@@ -384,7 +384,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=159")
+      navigator.serviceWorker.register("./service-worker.js?v=163")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -571,6 +571,8 @@
     if (event.target.id === "incomeSourceId") updateWorkIncomeCurrencyField();
     if (event.target.id === "commitmentCategory") updateCommitmentCategoryField();
     if (event.target.id === "commitmentType") updateCommitmentProviderField();
+    if (event.target.id === "debtType") updateDebtTypeFields();
+    if (event.target.id === "monthlyPaymentMethod") updateMonthlyPaymentFields();
     if (event.target.closest(".housing-form-row") && event.target.id.endsWith("PaymentMethod")) updateHousingPaymentFields();
     if (event.target.id === "cardPaymentMethod") updateCreditCardPaymentFields();
     if (event.target.id === "bankAccountCountry") updateBankAccountCountryFields();
@@ -1240,7 +1242,8 @@
         selectedDashboardAccountId: String(raw.ui?.selectedDashboardAccountId || ""),
         hideBalance: Boolean(raw.ui?.hideBalance),
         hideCalendarDetails: Boolean(raw.ui?.hideCalendarDetails),
-        hideCryptoDetails: Boolean(raw.ui?.hideCryptoDetails)
+        hideCryptoDetails: Boolean(raw.ui?.hideCryptoDetails),
+        hideRecentTransactions: raw.ui?.hideRecentTransactions === undefined ? true : Boolean(raw.ui.hideRecentTransactions)
       },
       transactions: Array.isArray(raw.transactions) ? raw.transactions : base.transactions,
       transfers: Array.isArray(raw.transfers) ? raw.transfers : base.transfers,
@@ -1872,7 +1875,8 @@
         selectedDashboardAccountId: "",
         hideBalance: false,
         hideCalendarDetails: false,
-        hideCryptoDetails: false
+        hideCryptoDetails: false,
+        hideRecentTransactions: true
       },
       transactions: [],
       transfers: [],
@@ -2496,7 +2500,8 @@
     const map = {
       balance: "hideBalance",
       calendar: "hideCalendarDetails",
-      crypto: "hideCryptoDetails"
+      crypto: "hideCryptoDetails",
+      recentTransactions: "hideRecentTransactions"
     };
     return map[panel] || "";
   }
@@ -2790,9 +2795,14 @@
           <article class="content-panel recent-transactions-panel">
             <div class="panel-head">
               <h2>Ultimos lancamentos</h2>
-              <button class="small-action ghost" type="button" data-action="set-tab" data-tab="accounts">Ver contas</button>
+              <div class="panel-actions">
+                ${renderVisibilityToggle("recentTransactions", state.ui.hideRecentTransactions, "últimos lançamentos")}
+                <button class="small-action ghost" type="button" data-action="set-tab" data-tab="accounts">Ver contas</button>
+              </div>
             </div>
-              ${renderTransactionList(monthLedgerEntries(state.ui.selectedMonth, "global").slice(0, 7))}
+            ${state.ui.hideRecentTransactions
+              ? renderHiddenDetails("Lançamentos ocultos", "Clique no olho para mostrar os últimos lançamentos do mês.")
+              : renderTransactionList(monthLedgerEntries(state.ui.selectedMonth, "global").slice(0, 7))}
           </article>
 
           <article class="content-panel work-calendar-panel">
@@ -2841,7 +2851,18 @@
               <h2>Financiamentos</h2>
               <button class="small-action" type="button" data-action="open-modal" data-modal="debt">Novo contrato</button>
             </div>
-            ${renderDebtList()}
+            ${renderDebtList("financing")}
+          </section>
+
+          <section class="content-panel consortium-home-panel">
+            <div class="panel-head">
+              <div>
+                <h2>Consórcios</h2>
+                <p class="row-meta">Acompanhe a carta e a evolução das parcelas.</p>
+              </div>
+              <button class="small-action" type="button" data-action="open-modal" data-modal="consortium">Novo consórcio</button>
+            </div>
+            ${renderConsortiumList()}
           </section>
         </aside>
       </div>
@@ -3841,9 +3862,11 @@
     `;
   }
 
-  function renderDebtList() {
-    const debts = state.debts.filter((item) => inCountryScope(item.country));
-    if (!debts.length) return `<p class="empty-state">Nenhum financiamento cadastrado.</p>`;
+  function renderDebtList(typeFilter = "") {
+    const debts = state.debts
+      .filter((item) => inCountryScope(item.country))
+      .filter((item) => !typeFilter || item.type === typeFilter);
+    if (!debts.length) return `<p class="empty-state">Nenhum ${typeFilter === "consortium" ? "consórcio" : "financiamento"} cadastrado.</p>`;
     return `
       <div class="debt-list">
         ${debts.map((item) => {
@@ -3905,6 +3928,96 @@
                 <button class="small-action ghost" type="button" data-action="delete-debt" data-id="${item.id}">Excluir</button>
               </div>
             </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function renderConsortiumList() {
+    const consortiums = state.debts
+      .filter((item) => item.type === "consortium")
+      .filter((item) => inCountryScope(item.country));
+    if (!consortiums.length) return `<p class="empty-state">Nenhum consórcio cadastrado.</p>`;
+    return `
+      <div class="consortium-list">
+        ${consortiums.map((item) => {
+          const month = state.ui.selectedMonth;
+          const progress = debtInstallmentProgress(item, month);
+          const paidThisMonth = isDebtPaid(item.id, month);
+          const dueDate = debtDateForMonth(item, month);
+          const dueState = dueStateForDate(dueDate, paidThisMonth);
+          const assetValue = consortiumCurrentAssetValue(item);
+          const paidAmount = consortiumPaidAmount(item, month);
+          const remainingAmount = consortiumRemainingAmount(item, month);
+          const paidPercent = consortiumPaidObjectPercent(item, month);
+          const remainingPercent = Math.max(0, 100 - paidPercent);
+          const percentNeedsReview = number(item.initialPaidInstallments) > 0 && number(item.initialPaidObjectPercent) <= 0;
+          const currentInstallment = consortiumCurrentInstallmentNumber(item, month);
+          const installment = debtNextPaymentAmount(item);
+          const commonFund = number(item.commonFundAmount);
+          const reserveFund = number(item.reserveFundAmount);
+          return `
+            <article class="consortium-card ${paidThisMonth ? "is-paid" : dueState.tone}">
+              <div class="consortium-card-head">
+                <div>
+                  <div class="debt-title-line">
+                    <p class="row-title">${escapeHtml(item.title || "Consórcio")}</p>
+                    <span class="debt-provider-tag">${escapeHtml(debtProviderLabel(item))}</span>
+                  </div>
+                  <p class="row-meta">Grupo ${escapeHtml(item.groupNumber || "--")} · Cota ${escapeHtml(item.quotaNumber || "--")} · adesão ${item.startDate ? formatShortDate(item.startDate) : "não informada"}</p>
+                </div>
+                <span class="chip ${paidThisMonth ? "green" : dueState.tone}">${escapeHtml(dueState.label)}</span>
+              </div>
+
+              <div class="consortium-summary">
+                <div class="consortium-side-stat">
+                  <span>Parcela atual</span>
+                  <strong>${currentInstallment || "--"}${progress.total ? `/${progress.total}` : ""}</strong>
+                </div>
+                <div class="consortium-asset-value">
+                  <span>Valor do bem atualizado</span>
+                  <strong>${formatMoneyWithPrimary(assetValue, item.currency)}</strong>
+                </div>
+                <div class="consortium-side-stat is-right">
+                  <span>Valor da parcela</span>
+                  <strong>${formatMoneyWithPrimary(installment, item.currency)}</strong>
+                </div>
+              </div>
+
+              <div class="debt-progress ${percentNeedsReview ? "needs-review" : ""}" aria-label="${percentNeedsReview ? "Percentual do bem pendente de atualização" : `${Math.round(paidPercent)}% do bem pago`}">
+                <div class="debt-progress-copy"><span>Progresso da carta</span><strong>${percentNeedsReview ? "Atualize pela % do extrato" : `${formatPercent(paidPercent)} pago`}</strong></div>
+                <div class="debt-progress-track" aria-hidden="true"><div class="debt-progress-fill" style="width:${paidPercent}%"></div></div>
+                <p>${progress.paid} parcelas pagas · ${progress.remaining} restantes${percentNeedsReview ? " · edite o contrato" : ""}</p>
+              </div>
+
+              <details class="consortium-details">
+                <summary>Detalhamento do Consórcio</summary>
+                <div class="consortium-detail-grid">
+                  <div><span>Grupo / Cota</span><strong>${escapeHtml(item.groupNumber || "--")} / ${escapeHtml(item.quotaNumber || "--")}</strong></div>
+                  <div><span>Prazo da cota</span><strong>${progress.total || 0} meses</strong></div>
+                  <div><span>Prazo do grupo</span><strong>${Math.max(0, Math.round(number(item.groupTermMonths)))} meses</strong></div>
+                  <div><span>Bem na adesão</span><strong>${formatMoneyWithPrimary(number(item.originalAmount), item.currency)}</strong></div>
+                  <div><span>Taxa administrativa</span><strong>${formatPercent(number(item.adminFeeRate))}</strong></div>
+                  <div><span>Amortização mensal</span><strong>${formatPercent(number(item.monthlyAmortizationRate))}</strong></div>
+                  <div><span>Vencimento atual</span><strong>${formatShortDate(dueDate)}</strong></div>
+                </div>
+                <div class="consortium-payment-breakdown">
+                  <div><span>Total desembolsado</span><strong>${formatMoneyWithPrimary(paidAmount, item.currency)}</strong><small>${progress.paid} parcelas · ${percentNeedsReview ? "% do extrato pendente" : `${formatPercent(paidPercent)} do bem`}</small></div>
+                  <div><span>Total a pagar</span><strong>${formatMoneyWithPrimary(remainingAmount, item.currency)}</strong><small>${progress.remaining} parcelas${percentNeedsReview ? "" : ` · ${formatPercent(remainingPercent)} do bem`}</small></div>
+                </div>
+                <div class="consortium-composition">
+                  <span>Composição da parcela</span>
+                  <p>Fundo comum <strong>${formatMoney(commonFund, item.currency)}</strong> + Fundo de reserva <strong>${formatMoney(reserveFund, item.currency)}</strong> = <strong>${formatMoney(installment, item.currency)}</strong></p>
+                </div>
+              </details>
+
+              <div class="row-actions">
+                <button class="small-action ${paidThisMonth ? "ghost" : ""}" type="button" data-action="${paidThisMonth ? "none" : "open-modal"}" data-modal="monthlyPayment" data-payment-id="debt:${item.id}">${paidThisMonth ? "✓ Pago" : "Pagar"}</button>
+                <button class="small-action ghost" type="button" data-action="open-modal" data-modal="debt" data-id="${item.id}">Editar</button>
+                <button class="small-action ghost" type="button" data-action="delete-debt" data-id="${item.id}">Excluir</button>
+              </div>
+            </article>
           `;
         }).join("")}
       </div>
@@ -5645,6 +5758,7 @@
       transfer: renderTransferModal,
       commitment: renderCommitmentModal,
       debt: renderDebtModal,
+      consortium: renderConsortiumModal,
       investment: renderInvestmentModal,
       creditCard: renderCreditCardModal,
       cardPurchase: renderCardPurchaseModal,
@@ -5692,6 +5806,8 @@
     updateVehicleInsuranceCardField();
     updateHousingPaymentFields();
     updateCreditCardPaymentFields();
+    updateDebtTypeFields();
+    updateMonthlyPaymentFields();
   }
 
   function closeModal() {
@@ -5723,6 +5839,7 @@
         actions: [
           { modal: "goal", icon: "R", title: "Reserva ou meta", meta: "Reserva de emergencia, viagem, imovel, carro ou objetivo" },
           { modal: "investment", icon: "I", title: "Investimento", meta: "Instituicao, saldo atual e aporte mensal" },
+          { modal: "consortium", icon: "C", title: "Consórcio", meta: "Carta, grupo, cota, parcelas e evolução mensal" },
           { modal: "crypto", icon: "B", title: "Cripto", meta: "Quantidade comprada, custo e acompanhamento de cotacao" },
           { modal: "web3Wallet", icon: "W", title: "Carteira web3", meta: "MetaMask e carteiras EVM para ver endereco, rede e saldo" }
         ]
@@ -6054,7 +6171,7 @@
     const startDate = item?.startDate || dateInMonth(state.ui.selectedMonth, 1);
     return `
       <div class="modal-head">
-        <h2>${item ? "Editar contrato" : "Novo contrato"}</h2>
+        <h2>${item?.id ? "Editar contrato" : item?.type === "consortium" ? "Novo consórcio" : "Novo contrato"}</h2>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="debt">
@@ -6089,15 +6206,15 @@
         </div>
         <div class="three-cols">
           <div class="field">
-            <label for="originalAmount">Valor contratado</label>
+            <label id="debtOriginalAmountLabel" for="originalAmount">Valor contratado</label>
             <input id="originalAmount" name="originalAmount" required type="number" min="0" step="0.01" value="${item ? number(item.originalAmount) : ""}" />
           </div>
-          <div class="field">
+          <div class="field debt-financing-only">
             <label for="outstandingAmount">Saldo devedor atual</label>
             <input id="outstandingAmount" name="outstandingAmount" type="number" min="0" step="0.01" value="${item ? number(item.outstandingAmount) || "" : ""}" />
           </div>
           <div class="field">
-            <label for="installmentAmount">Valor da parcela</label>
+            <label for="installmentAmount">Valor atual da parcela</label>
             <input id="installmentAmount" name="installmentAmount" required type="number" min="0" step="0.01" value="${item ? number(item.installmentAmount) : ""}" />
           </div>
         </div>
@@ -6109,7 +6226,7 @@
             </select>
           </div>
           <div class="field">
-            <label for="debtStartDate">Data de inicio do contrato</label>
+            <label id="debtStartDateLabel" for="debtStartDate">Data de inicio do contrato</label>
             <input id="debtStartDate" name="startDate" type="date" value="${escapeAttr(startDate)}" />
           </div>
           <div class="field">
@@ -6119,7 +6236,7 @@
         </div>
         <div class="three-cols">
           <div class="field">
-            <label for="contractedInstallments">Parcelas contratadas</label>
+            <label id="debtInstallmentsLabel" for="contractedInstallments">Parcelas contratadas</label>
             <input id="contractedInstallments" name="contractedInstallments" type="number" min="1" max="600" step="1" value="${item ? number(item.contractedInstallments) || "" : ""}" />
           </div>
           <div class="field">
@@ -6127,7 +6244,72 @@
             <input id="debtDueDay" name="dueDay" required type="number" min="1" max="31" value="${item?.dueDay || ""}" />
           </div>
         </div>
-        <div class="three-cols">
+        <section class="consortium-form-fields is-hidden" aria-label="Dados do consórcio">
+          <div class="form-section-heading">
+            <div><span class="mini-label">Consórcio</span><h3>Dados da carta</h3></div>
+            <p>Preencha zero nos campos pagos se o contrato for novo.</p>
+          </div>
+          <div class="three-cols">
+            <div class="field">
+              <label for="consortiumGroupNumber">Grupo</label>
+              <input id="consortiumGroupNumber" name="groupNumber" value="${escapeAttr(item?.groupNumber || "")}" />
+            </div>
+            <div class="field">
+              <label for="consortiumQuotaNumber">Cota</label>
+              <input id="consortiumQuotaNumber" name="quotaNumber" value="${escapeAttr(item?.quotaNumber || "")}" />
+            </div>
+            <div class="field">
+              <label for="consortiumGroupTerm">Prazo do grupo (meses)</label>
+              <input id="consortiumGroupTerm" name="groupTermMonths" type="number" min="0" max="1200" value="${item ? Math.round(number(item.groupTermMonths)) || "" : ""}" />
+            </div>
+          </div>
+          <div class="three-cols">
+            <div class="field">
+              <label for="consortiumCurrentAssetValue">Valor do bem atualizado</label>
+              <input id="consortiumCurrentAssetValue" name="currentAssetValue" type="number" min="0" step="0.01" value="${item ? number(item.currentAssetValue) || "" : ""}" />
+            </div>
+            <div class="field">
+              <label for="consortiumAdminFeeRate">Taxa de administração (%)</label>
+              <input id="consortiumAdminFeeRate" name="adminFeeRate" type="number" min="0" step="0.01" value="${item ? number(item.adminFeeRate) || "" : ""}" />
+            </div>
+            <div class="field">
+              <label for="consortiumInitialPaidInstallments">Parcelas pagas antes do cadastro</label>
+              <input id="consortiumInitialPaidInstallments" name="initialPaidInstallments" type="number" min="0" max="1200" value="${item ? Math.round(number(item.initialPaidInstallments)) : 0}" />
+            </div>
+          </div>
+          <div class="three-cols">
+            <div class="field">
+              <label for="consortiumInitialPaidAmount">Valor pago antes do cadastro</label>
+              <input id="consortiumInitialPaidAmount" name="initialPaidAmount" type="number" min="0" step="0.01" value="${item ? number(item.initialPaidAmount) : 0}" />
+            </div>
+            <div class="field">
+              <label for="consortiumInitialPaidObjectPercent">% do bem já pago</label>
+              <input id="consortiumInitialPaidObjectPercent" name="initialPaidObjectPercent" type="number" min="0" max="100" step="0.0001" value="${item ? number(item.initialPaidObjectPercent) : 0}" />
+              <small class="field-hint">Copie o percentual do bem objeto informado no extrato.</small>
+            </div>
+            <div class="field">
+              <label for="consortiumInitialAmountToPay">Valor total a pagar</label>
+              <input id="consortiumInitialAmountToPay" name="initialAmountToPay" type="number" min="0" step="0.01" value="${item ? number(item.initialAmountToPay) || "" : ""}" />
+              <small class="field-hint">Use o total a pagar do extrato atual.</small>
+            </div>
+          </div>
+          <div class="three-cols">
+            <div class="field">
+              <label for="consortiumMonthlyAmortizationRate">Amortização mensal (%)</label>
+              <input id="consortiumMonthlyAmortizationRate" name="monthlyAmortizationRate" type="number" min="0" max="100" step="0.0001" value="${item ? number(item.monthlyAmortizationRate) || "" : ""}" />
+              <small class="field-hint">Percentual do fundo comum amortizado por parcela.</small>
+            </div>
+            <div class="field">
+              <label for="consortiumCommonFund">Fundo comum</label>
+              <input id="consortiumCommonFund" name="commonFundAmount" type="number" min="0" step="0.01" value="${item ? number(item.commonFundAmount) || "" : ""}" />
+            </div>
+            <div class="field">
+              <label for="consortiumReserveFund">Fundo de reserva</label>
+              <input id="consortiumReserveFund" name="reserveFundAmount" type="number" min="0" step="0.01" value="${item ? number(item.reserveFundAmount) || "" : ""}" />
+            </div>
+          </div>
+        </section>
+        <div class="three-cols debt-financing-only">
           <div class="field">
             <label for="annualInterestRate">Taxa de juros (% a.a.)</label>
             <input id="annualInterestRate" name="annualInterestRate" type="number" min="0" step="0.01" placeholder="Ex: 8.99" value="${item ? number(item.annualInterestRate) || "" : ""}" />
@@ -6141,7 +6323,7 @@
             <input id="interestAmount" name="interestAmount" type="number" min="0" step="0.01" value="${item ? number(item.interestAmount) || "" : ""}" />
           </div>
         </div>
-        <div class="three-cols">
+        <div class="three-cols debt-financing-only">
           <div class="field">
             <label for="insuranceAmount">Valor do seguro embutido</label>
             <input id="insuranceAmount" name="insuranceAmount" type="number" min="0" step="0.01" value="${item ? number(item.insuranceAmount) || "" : ""}" />
@@ -6167,6 +6349,10 @@
         </div>
       </form>
     `;
+  }
+
+  function renderConsortiumModal(item = null) {
+    return renderDebtModal(item || { type: "consortium" });
   }
 
   function renderQuickExpenseModal() {
@@ -7772,6 +7958,7 @@
       `;
     }
     const sourceOptions = monthlyPaymentSourceOptions();
+    const creditCards = (state.creditCards || []).filter((card) => card.country === target.country);
     return `
       <div class="modal-head">
         <h2>Registrar pagamento</h2>
@@ -7792,6 +7979,7 @@
               <option value="extra" ${selectedAttr("extra", target.paymentMethod)}>Ganho extra</option>
               <option value="pix" ${selectedAttr("pix", target.paymentMethod)}>Pix</option>
               <option value="bank" ${selectedAttr("bank", target.paymentMethod)}>Debito em conta</option>
+              <option value="card" ${selectedAttr("card", target.paymentMethod)}>Cartão de crédito</option>
               <option value="kombini" ${selectedAttr("kombini", target.paymentMethod)}>Kombini</option>
               <option value="cash" ${selectedAttr("cash", target.paymentMethod)}>Dinheiro</option>
               <option value="other" ${selectedAttr("other", target.paymentMethod)}>Outro</option>
@@ -7805,11 +7993,19 @@
             </select>
           </div>
         </div>
-        <div class="field">
+        <div class="field monthly-payment-bank-field">
           <label for="monthlyPaymentBankAccountId">Conta usada</label>
           <select id="monthlyPaymentBankAccountId" name="bankAccountId">
             ${bankAccountSelectOptions(target.country, target.bankAccountId || "", "Sem conta vinculada")}
           </select>
+        </div>
+        <div class="field monthly-payment-card-field is-hidden">
+          <label for="monthlyPaymentCardId">Cartão usado</label>
+          <select id="monthlyPaymentCardId" name="cardId">
+            <option value="">Selecione o cartão</option>
+            ${creditCards.map((card) => `<option value="${card.id}">${escapeHtml(card.nickname || card.issuer)} · ${escapeHtml(card.currency)}</option>`).join("")}
+          </select>
+          ${creditCards.length ? "" : `<small class="field-hint">Cadastre um cartão deste país antes de escolher esta opção.</small>`}
         </div>
         <div class="two-cols">
           <div class="field">
@@ -8108,6 +8304,14 @@
     const data = formData(form);
     const current = findItem("debts", data.id);
     const contractLast4 = String(data.contractLast4 || "").replace(/\D/g, "").slice(-4);
+    if (data.type === "consortium" && number(data.monthlyAmortizationRate) <= 0) {
+      showToast("Informe a amortização mensal indicada no contrato ou extrato.");
+      return;
+    }
+    if (data.type === "consortium" && number(data.initialPaidInstallments) > 0 && number(data.initialPaidObjectPercent) <= 0) {
+      showToast("Informe o percentual do bem já pago indicado no extrato.");
+      return;
+    }
     const draft = {
       ...(current || {}),
       country: data.country,
@@ -8127,9 +8331,23 @@
       interestAmount: number(data.interestAmount),
       insuranceAmount: number(data.insuranceAmount),
       adminFeeAmount: number(data.adminFeeAmount),
+      groupNumber: String(data.groupNumber || "").trim(),
+      quotaNumber: String(data.quotaNumber || "").trim(),
+      groupTermMonths: clamp(Math.round(number(data.groupTermMonths)), 0, 1200),
+      currentAssetValue: number(data.currentAssetValue),
+      adminFeeRate: number(data.adminFeeRate),
+      initialPaidInstallments: clamp(Math.round(number(data.initialPaidInstallments)), 0, 1200),
+      initialPaidAmount: number(data.initialPaidAmount),
+      initialPaidObjectPercent: clamp(number(data.initialPaidObjectPercent), 0, 100),
+      initialAmountToPay: number(data.initialAmountToPay),
+      monthlyAmortizationRate: clamp(number(data.monthlyAmortizationRate), 0, 100),
+      commonFundAmount: number(data.commonFundAmount),
+      reserveFundAmount: number(data.reserveFundAmount),
       contractLast4
     };
-    draft.outstandingAmount = number(data.outstandingAmount) || debtEstimatedOutstanding(draft);
+    draft.outstandingAmount = draft.type === "consortium"
+      ? number(draft.initialAmountToPay) || Math.max(0, consortiumCurrentAssetValue(draft) - number(draft.initialPaidAmount))
+      : number(data.outstandingAmount) || debtEstimatedOutstanding(draft);
     const updated = upsertItem("debts", data.id, draft);
     saveState();
     closeModal();
@@ -8851,16 +9069,54 @@
       return;
     }
 
+    const paymentMethod = data.paymentMethod || "balance";
     const bankAccountId = data.bankAccountId || target.bankAccountId || "";
+    const creditCard = paymentMethod === "card" ? creditCardById(data.cardId) : null;
+    if (paymentMethod === "bank" && !bankAccountId) {
+      showToast("Selecione a conta bancária usada no pagamento.");
+      return;
+    }
+    if (paymentMethod === "card" && !creditCard) {
+      showToast("Selecione o cartão usado no pagamento.");
+      return;
+    }
     state.paidCommitments[key] = {
       paidAt: new Date().toISOString(),
-      method: data.paymentMethod || "balance",
+      method: paymentMethod,
       sourceId: data.sourceId || "",
-      bankAccountId,
+      bankAccountId: paymentMethod === "card" ? "" : bankAccountId,
+      cardId: creditCard?.id || "",
       note: String(data.note || "").trim()
     };
 
     const author = currentUserAuthor();
+    if (creditCard) {
+      state.cardPurchases.unshift({
+        id: uid("cp"),
+        cardId: creditCard.id,
+        country: creditCard.country,
+        title: target.transactionTitle || target.title,
+        category: target.category,
+        totalAmount: number(target.amount),
+        currency: target.currency,
+        installments: 1,
+        firstBillMonth: target.month,
+        purchaseDate: data.date || target.date,
+        note: monthlyPaymentNote(target, data),
+        paymentRef: data.paymentRef,
+        paymentKey: key,
+        consortiumAmortizationRate: target.kind === "debt" && target.type === "consortium" ? number(findItem("debts", target.id)?.monthlyAmortizationRate) : 0,
+        paidAtPurchase: true,
+        createdAt: new Date().toISOString(),
+        createdBy: author.id,
+        createdByName: author.name
+      });
+      saveState();
+      closeModal();
+      render();
+      showToast(`${target.category} enviado para a fatura do cartão.`);
+      return;
+    }
     state.transactions.unshift({
       id: uid("tx"),
       date: data.date || target.date,
@@ -8871,10 +9127,11 @@
       amount: number(target.amount),
       currency: target.currency,
       bankAccountId,
-      paymentMethod: data.paymentMethod || "balance",
+      paymentMethod,
       note: monthlyPaymentNote(target, data),
       paymentRef: data.paymentRef,
       paymentKey: key,
+      consortiumAmortizationRate: target.kind === "debt" && target.type === "consortium" ? number(findItem("debts", target.id)?.monthlyAmortizationRate) : 0,
       settlementOnly: target.kind === "card",
       createdAt: new Date().toISOString(),
       createdBy: author.id,
@@ -9020,19 +9277,22 @@
     if (kind === "debt") {
       const item = findItem("debts", id);
       if (!item) return null;
+      const consortium = item.type === "consortium";
       return {
         kind,
         id,
         paymentKey: debtPaymentKey(id, month),
         country: item.country,
-        type: "debt",
+        type: consortium ? "consortium" : "debt",
         title: item.title,
         transactionTitle: `Parcela ${item.title}`,
-        category: "Financiamento",
+        category: consortium ? "Consórcio" : "Financiamento",
         amount: debtNextPaymentAmount(item),
         currency: item.currency,
         date: debtDateForMonth(item, month),
-        month
+        month,
+        paymentMethod: normalizeDebtPaymentMethod(item.paymentMethod),
+        bankAccountId: item.bankAccountId || ""
       };
     }
 
@@ -9110,11 +9370,13 @@
     const method = monthlyPaymentMethodLabel(data.paymentMethod);
     const source = data.sourceId ? incomeSourceById(data.sourceId) : null;
     const account = data.bankAccountId ? bankAccountById(data.bankAccountId) : null;
+    const card = data.cardId ? creditCardById(data.cardId) : null;
     const pieces = [
       "Pago no app",
       method ? `via ${method}` : "",
       source?.id ? `origem ${source.name}` : "",
       account?.id ? `conta ${bankAccountName(account)}` : "",
+      card?.id ? `cartão ${card.nickname || card.issuer}` : "",
       data.note ? String(data.note).trim() : ""
     ].filter(Boolean);
     return pieces.join(" - ");
@@ -9142,9 +9404,45 @@
     return "manual";
   }
 
+  function normalizeDebtPaymentMethod(method) {
+    const value = normalizeLookupText(method || "balance");
+    if (/cartao|card/.test(value)) return "card";
+    if (/debito|conta|bank/.test(value)) return "bank";
+    if (/kombini|combini/.test(value)) return "kombini";
+    if (/dinheiro|cash/.test(value)) return "cash";
+    if (/pix/.test(value)) return "pix";
+    return "balance";
+  }
+
   function updateCreditCardPaymentFields() {
     const method = normalizeCardPaymentMethod(modalRoot.querySelector("#cardPaymentMethod")?.value);
     modalRoot.querySelector(".card-payment-bank-field")?.classList.toggle("is-hidden", method !== "bank");
+  }
+
+  function updateDebtTypeFields() {
+    const consortium = modalRoot.querySelector("#debtType")?.value === "consortium";
+    modalRoot.querySelector(".consortium-form-fields")?.classList.toggle("is-hidden", !consortium);
+    modalRoot.querySelectorAll(".debt-financing-only").forEach((field) => field.classList.toggle("is-hidden", consortium));
+    const originalLabel = modalRoot.querySelector("#debtOriginalAmountLabel");
+    const startLabel = modalRoot.querySelector("#debtStartDateLabel");
+    const installmentsLabel = modalRoot.querySelector("#debtInstallmentsLabel");
+    if (originalLabel) originalLabel.textContent = consortium ? "Valor do bem na adesão" : "Valor contratado";
+    if (startLabel) startLabel.textContent = consortium ? "Data de adesão" : "Data de início do contrato";
+    if (installmentsLabel) installmentsLabel.textContent = consortium ? "Prazo da cota (parcelas)" : "Parcelas contratadas";
+    ["consortiumGroupNumber", "consortiumQuotaNumber", "consortiumCurrentAssetValue", "consortiumMonthlyAmortizationRate", "contractedInstallments", "debtStartDate"].forEach((id) => {
+      const input = modalRoot.querySelector(`#${id}`);
+      if (input) input.required = consortium;
+    });
+  }
+
+  function updateMonthlyPaymentFields() {
+    const method = modalRoot.querySelector("#monthlyPaymentMethod")?.value || "balance";
+    const cardField = modalRoot.querySelector(".monthly-payment-card-field");
+    const bankField = modalRoot.querySelector(".monthly-payment-bank-field");
+    const cardSelect = modalRoot.querySelector("#monthlyPaymentCardId");
+    if (cardField) cardField.classList.toggle("is-hidden", method !== "card");
+    if (bankField) bankField.classList.toggle("is-hidden", method === "card");
+    if (cardSelect) cardSelect.required = method === "card";
   }
 
   function deleteItem(collection, id, message) {
@@ -10632,9 +10930,9 @@
           id: item.id,
           debtId: item.id,
           country: item.country,
-          type: "debt",
+          type: item.type === "consortium" ? "consortium" : "debt",
           title: item.title,
-          category: "Financiamento",
+          category: item.type === "consortium" ? "Consórcio" : "Financiamento",
           amount: debtNextPaymentAmount(item),
           currency: item.currency,
           date: dueDate,
@@ -10651,7 +10949,7 @@
 
   function isDebtActiveInMonth(item, month) {
     const progress = debtInstallmentProgress(item, month);
-    if (progress.total && progress.paid > progress.total) return false;
+    if (progress.total && progress.paid >= progress.total && !isDebtPaid(item.id, month)) return false;
     const startMonth = item.startDate ? item.startDate.slice(0, 7) : "";
     return !startMonth || month >= startMonth;
   }
@@ -11045,6 +11343,12 @@
     const fallbackTotal = total || (original && installment ? Math.ceil(original / installment) : 0);
     if (!fallbackTotal) return { paid: 0, remaining: 0, total: 0 };
 
+    if (item?.type === "consortium") {
+      const initialPaid = clamp(Math.round(number(item.initialPaidInstallments)), 0, fallbackTotal);
+      const paid = clamp(initialPaid + paidDebtMonthsCount(item.id, targetMonth), 0, fallbackTotal);
+      return { paid, remaining: Math.max(0, fallbackTotal - paid), total: fallbackTotal };
+    }
+
     let paid = 0;
     if (item?.startDate) {
       const start = parseLocalDate(item.startDate);
@@ -11076,6 +11380,9 @@
   }
 
   function debtEstimatedOutstanding(item) {
+    if (item?.type === "consortium") {
+      return consortiumRemainingAmount(item);
+    }
     const progress = debtInstallmentProgress(item);
     const original = number(item?.originalAmount);
     const storedOutstanding = number(item?.outstandingAmount);
@@ -11098,6 +11405,52 @@
 
     if (original > 0) estimate = Math.min(estimate, original);
     return round(Math.max(0, estimate), 2);
+  }
+
+  function consortiumCurrentAssetValue(item) {
+    return number(item?.currentAssetValue) || number(item?.originalAmount);
+  }
+
+  function consortiumPaidAmount(item, targetMonth = state.ui.selectedMonth) {
+    const cutoff = targetMonth || currentMonth();
+    const paymentRef = `debt:${item?.id}`;
+    const transactionTotal = (state.transactions || [])
+      .filter((entry) => entry.paymentRef === paymentRef && String(entry.date || "").slice(0, 7) <= cutoff)
+      .reduce((total, entry) => total + convert(entry.amount, entry.currency, item.currency, latestRate(String(entry.date || cutoff).slice(0, 7))), 0);
+    const cardTotal = (state.cardPurchases || [])
+      .filter((entry) => entry.paymentRef === paymentRef && String(entry.purchaseDate || "").slice(0, 7) <= cutoff)
+      .reduce((total, entry) => total + convert(entry.totalAmount, entry.currency, item.currency, latestRate(String(entry.purchaseDate || cutoff).slice(0, 7))), 0);
+    return round(number(item?.initialPaidAmount) + transactionTotal + cardTotal, item?.currency === "JPY" ? 0 : 2);
+  }
+
+  function consortiumPaidObjectPercent(item, targetMonth = state.ui.selectedMonth) {
+    const cutoff = targetMonth || currentMonth();
+    const paymentRef = `debt:${item?.id}`;
+    const currentRate = number(item?.monthlyAmortizationRate);
+    const transactionPercent = (state.transactions || [])
+      .filter((entry) => entry.paymentRef === paymentRef && String(entry.date || "").slice(0, 7) <= cutoff)
+      .reduce((total, entry) => total + (number(entry.consortiumAmortizationRate) || currentRate), 0);
+    const cardPercent = (state.cardPurchases || [])
+      .filter((entry) => entry.paymentRef === paymentRef && String(entry.purchaseDate || "").slice(0, 7) <= cutoff)
+      .reduce((total, entry) => total + (number(entry.consortiumAmortizationRate) || currentRate), 0);
+    const savedPercent = number(item?.initialPaidObjectPercent);
+    return clamp(savedPercent + transactionPercent + cardPercent, 0, 100);
+  }
+
+  function consortiumRemainingAmount(item, targetMonth = state.ui.selectedMonth) {
+    const initialRemaining = number(item?.initialAmountToPay);
+    if (!initialRemaining) {
+      return round(Math.max(0, consortiumCurrentAssetValue(item) - consortiumPaidAmount(item, targetMonth)), item?.currency === "JPY" ? 0 : 2);
+    }
+    const paidAfterRegistration = Math.max(0, consortiumPaidAmount(item, targetMonth) - number(item?.initialPaidAmount));
+    return round(Math.max(0, initialRemaining - paidAfterRegistration), item?.currency === "JPY" ? 0 : 2);
+  }
+
+  function consortiumCurrentInstallmentNumber(item, targetMonth = state.ui.selectedMonth) {
+    const progress = debtInstallmentProgress(item, targetMonth);
+    if (!progress.total) return 0;
+    const currentPaid = isDebtPaid(item.id, targetMonth);
+    return clamp(progress.paid + (currentPaid ? 0 : 1), 1, progress.total);
   }
 
   function debtProjectedOutstandingFromCurrentBalance(item, targetMonth = state.ui.selectedMonth) {
@@ -13313,6 +13666,7 @@
       transfer: "transfers",
       commitment: "commitments",
       debt: "debts",
+      consortium: "debts",
       investment: "investments",
       creditCard: "creditCards",
       cardPurchase: "cardPurchases",

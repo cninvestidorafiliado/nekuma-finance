@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  const cardClasses = ['overview-card', 'paypal-panel', 'dashboard-cards-panel', 'housing-panel', 'vehicle-panel', 'subscriptions-panel', 'financial-calendar-panel', 'work-calendar-panel', 'family-pie-panel', 'dashboard-trend-panel', 'emergency-reserve-panel', 'crypto-panel', 'goals-panel', 'debt-home-panel', 'family-tools-panel', 'family-panel', 'expenses-brasil', 'expenses-japao', 'recent-transactions-panel'];
+  const cardClasses = ['overview-card', 'paypal-panel', 'dashboard-cards-panel', 'housing-panel', 'vehicle-panel', 'subscriptions-panel', 'financial-calendar-panel', 'work-calendar-panel', 'family-pie-panel', 'dashboard-trend-panel', 'emergency-reserve-panel', 'crypto-panel', 'goals-panel', 'debt-home-panel', 'consortium-home-panel', 'family-tools-panel', 'family-panel', 'expenses-brasil', 'expenses-japao', 'recent-transactions-panel'];
   let sortables = [];
   let dragging = false;
   let pinned = {};
@@ -16,12 +16,21 @@
         cursor += percent;
         return `<circle class="expense-sector" data-category="${escape(item.key)}" cx="100" cy="100" r="72" pathLength="100" fill="none" stroke="${item.color}" stroke-width="24" stroke-dasharray="${Math.max(0.05, percent - 0.7)} ${100 - Math.max(0.05, percent - 0.7)}" stroke-dashoffset="${-offset}" transform="rotate(-90 100 100)" tabindex="0" role="button" aria-pressed="false" aria-label="${escape(item.label)}: ${escape(money(item.amount, model.currency))}, ${percent.toFixed(1)}%"><title>${escape(item.label)}</title></circle>`;
       }).join('');
+      const compactLegend = model.categories.map(item => {
+        const percent = item.amount / model.total * 100;
+        return `<button type="button" class="expense-legend-row" data-category="${escape(item.key)}" aria-pressed="false" style="--category-color:${item.color}"><i></i><span><strong>${escape(item.label)}</strong><small>${percent.toFixed(1).replace('.', ',')}%</small></span></button>`;
+      }).join('') || '<p class="empty-state">Nenhuma despesa registrada ou prevista neste mês.</p>';
+      const details = model.categories.map(item => {
+        const percent = item.amount / model.total * 100;
+        return `<div class="expense-detail-row" style="--category-color:${item.color}"><i></i><div><strong>${escape(item.label)}</strong><span>${percent.toFixed(1).replace('.', ',')}% · ${escape(money(item.amount, model.currency))}</span>${item.banks.map(bank => `<small>${escape(bank.name)} · ${escape(money(bank.amount, model.currency))}</small>`).join('')}</div></div>`;
+      }).join('');
       return `<article class="content-panel country-expenses-panel expenses-${model.country}" data-expense-country="${model.country}">
         <div class="panel-head"><div><h2>Despesas e aportes</h2><p class="row-meta">${escape(monthLabel)} · Registrados e previstos</p></div><span class="chip blue">${model.country === 'brasil' ? 'BRASIL' : 'JAPÃO'}</span></div>
         <div class="country-expenses-body">
           <div class="expense-donut"><svg viewBox="0 0 200 200" aria-label="Despesas por categoria"><circle cx="100" cy="100" r="72" fill="none" stroke="#e5eae7" stroke-width="24"/>${sectors}</svg><div class="expense-donut-total"><span>Total do mês</span><strong>${escape(money(model.total, model.currency))}</strong></div></div>
-          <div class="expense-legend">${model.categories.map(item => `<button type="button" class="expense-legend-row" data-category="${escape(item.key)}" aria-pressed="false" style="--category-color:${item.color}"><i></i><span><strong>${escape(item.label)}</strong><small>${(item.amount / model.total * 100).toFixed(1).replace('.', ',')}% · ${escape(money(item.amount, model.currency))}</small>${item.banks.map(bank => `<small class="expense-bank">${escape(bank.name)} · ${escape(money(bank.amount, model.currency))}</small>`).join('')}</span></button>`).join('') || '<p class="empty-state">Nenhuma despesa registrada ou prevista neste mês.</p>'}</div>
+          <div class="expense-legend">${compactLegend}</div>
         </div>
+        ${details ? `<details class="expense-details"><summary>Descrição das Despesas</summary><div class="expense-detail-list">${details}</div></details>` : ''}
         ${(model.pendingCountry || []).map(item => `<button class="small-action ghost" type="button" data-action="open-modal" data-modal="crypto" data-id="${escape(item.id)}">Definir país: ${escape(item.name)}</button>`).join('')}
       </article>`;
     }).join('');
