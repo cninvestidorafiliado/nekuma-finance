@@ -386,10 +386,11 @@
   let remoteSaveQueue = Promise.resolve();
   let resetInProgress = false;
   let stateGeneration = 0;
+  let bankAccountSortable = null;
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=168")
+      navigator.serviceWorker.register("./service-worker.js?v=170")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -1250,6 +1251,7 @@
         ...base.ui,
         ...(raw.ui || {}),
         selectedDashboardAccountId: String(raw.ui?.selectedDashboardAccountId || ""),
+        primaryBankAccountId: String(raw.ui?.primaryBankAccountId || ""),
         hideBalance: Boolean(raw.ui?.hideBalance),
         hideCalendarDetails: Boolean(raw.ui?.hideCalendarDetails),
         hideCryptoDetails: Boolean(raw.ui?.hideCryptoDetails),
@@ -1289,9 +1291,17 @@
       deletedItems: normalizeDeletedItems(raw.deletedItems || base.deletedItems)
     };
     normalized.ui.activeCountry = "global";
+    const orderedActiveAccounts = normalized.bankAccounts
+      .filter((account) => account.active !== false)
+      .slice()
+      .sort((a, b) => number(a.sortOrder) - number(b.sortOrder));
+    if (!orderedActiveAccounts.some((account) => account.id === normalized.ui.primaryBankAccountId)) {
+      normalized.ui.primaryBankAccountId = orderedActiveAccounts[0]?.id || "";
+    }
     if (normalized.ui.selectedDashboardAccountId && !normalized.bankAccounts.some((account) => account.id === normalized.ui.selectedDashboardAccountId && account.active !== false)) {
       normalized.ui.selectedDashboardAccountId = "";
     }
+    normalized.ui.selectedDashboardAccountId = normalized.ui.primaryBankAccountId || normalized.ui.selectedDashboardAccountId;
     const requestedTab = urlParams.get("tab");
     const validTabs = ["dashboard", "accounts", "crypto", "wise", "reports", "settings"];
     if (validTabs.includes(requestedTab)) normalized.ui.activeTab = requestedTab;
@@ -1425,6 +1435,7 @@
           currency,
           balanceDate: String(item.balanceDate || item.openingBalanceDate || dateInMonth(currentMonth(), new Date().getDate())).slice(0, 10),
           color: sanitizeColor(item.color, fallbackColor),
+          sortOrder: Number.isFinite(Number(item.sortOrder)) ? Number(item.sortOrder) : index,
           active: item.active !== false
         };
       })
@@ -1903,6 +1914,7 @@
         selectedMonth,
         activeCardIndex: 0,
         selectedDashboardAccountId: "",
+        primaryBankAccountId: "",
         hideBalance: false,
         hideCalendarDetails: false,
         hideCryptoDetails: false,
@@ -2088,6 +2100,7 @@
     }, state.ui.selectedMonth);
     refreshIcons();
     setupDashboardAccountCarousel();
+    setupBankAccountOrdering();
     setupCreditCardHomeCarousel();
     requestAnimationFrame(drawVisibleCharts);
     scheduleFxRefresh(false);
@@ -2572,10 +2585,65 @@
   function setPrimaryBankAccount(id) {
     const account = activeBankAccounts().find((item) => item.id === id);
     if (!account) return;
+    const orderedIds = activeBankAccounts().map((item) => item.id);
+    const nextOrder = [account.id, ...orderedIds.filter((accountId) => accountId !== account.id)];
+    applyBankAccountOrder(nextOrder);
+    state.ui.primaryBankAccountId = account.id;
     state.ui.selectedDashboardAccountId = account.id;
     saveState();
     renderKeepingScroll();
     showToast(`${bankAccountName(account)} agora e a conta principal.`);
+  }
+
+  function applyBankAccountOrder(ids) {
+    const positions = new Map(ids.map((id, index) => [id, index]));
+    state.bankAccounts = (state.bankAccounts || []).map((account) => ({
+      ...account,
+      sortOrder: positions.has(account.id) ? positions.get(account.id) : number(account.sortOrder)
+    }));
+  }
+
+  function setupBankAccountOrdering() {
+    if (bankAccountSortable) {
+      bankAccountSortable.destroy();
+      bankAccountSortable = null;
+    }
+    const grid = document.querySelector(".bank-account-grid[data-bank-account-sortable]");
+    if (!grid || !window.Sortable) return;
+    const remember = () => {
+      const ids = [...grid.querySelectorAll("[data-bank-account-id]")]
+        .map((card) => card.dataset.bankAccountId)
+        .filter(Boolean);
+      if (!ids.length) return;
+      applyBankAccountOrder(ids);
+      state.ui.primaryBankAccountId = ids[0];
+      state.ui.selectedDashboardAccountId = ids[0];
+      saveState();
+      renderKeepingScroll();
+      showToast(`${bankAccountName(bankAccountById(ids[0]))} agora e a conta principal.`);
+    };
+    bankAccountSortable = new window.Sortable(grid, {
+      draggable: "[data-bank-account-id]",
+      handle: ".bank-account-order-handle",
+      animation: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180,
+      ghostClass: "bank-account-drop-placeholder",
+      chosenClass: "bank-account-drag-chosen",
+      forceFallback: true,
+      fallbackOnBody: true,
+      fallbackTolerance: 5,
+      onEnd: remember
+    });
+    grid.addEventListener("keydown", (event) => {
+      if (!event.target.closest(".bank-account-order-handle") || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+      const card = event.target.closest("[data-bank-account-id]");
+      if (!card) return;
+      event.preventDefault();
+      const previous = card.previousElementSibling;
+      const next = card.nextElementSibling;
+      if (["ArrowLeft", "ArrowUp"].includes(event.key) && previous) grid.insertBefore(card, previous);
+      if (["ArrowRight", "ArrowDown"].includes(event.key) && next) grid.insertBefore(next, card);
+      remember();
+    });
   }
 
   function renderVisibilityToggle(panel, hidden, label) {
@@ -3179,13 +3247,16 @@
           </div>
         `).join("")}
       </div>
-      <div class="bank-account-grid">
+      <div class="bank-account-grid" data-bank-account-sortable>
         ${displayAccounts.map((account) => {
           const balance = bankAccountBalance(account, state.ui.selectedMonth);
           const author = authorLabel(account);
-          const isPrimary = state.ui.selectedDashboardAccountId === account.id;
+          const isPrimary = state.ui.primaryBankAccountId === account.id;
           return `
-            <article class="bank-account-card"${bankAccountStyleAttrs(account)}>
+            <article class="bank-account-card" data-bank-account-id="${escapeAttr(account.id)}"${bankAccountStyleAttrs(account)}>
+              <button class="bank-account-order-handle" type="button" aria-label="Mover ${escapeAttr(bankAccountName(account))}" title="Mover conta">
+                <i data-lucide="menu" aria-hidden="true"></i>
+              </button>
               <div class="bank-account-head">
                 <span class="bank-account-icon">${escapeHtml(countryMeta[account.country]?.short || "BK")}</span>
                 <div>
@@ -3238,14 +3309,45 @@
     }
     const currency = sanitizeCurrency(account.currency, primaryCurrency());
     const rate = latestRate(state.ui.selectedMonth);
-    const payables = dashboardUpcomingFinancialItems(99)
-      .filter((item) => item.bankAccountId ? item.bankAccountId === account.id : item.country === account.country)
+    const activity = bankAccountMonthlyActivity(account, state.ui.selectedMonth);
+    const payables = dashboardUpcomingAccountItems(account, 99)
       .reduce((total, item) => total + convert(item.amount, item.currency, currency, rate), 0);
     return {
       currency,
-      paid: convert(fallbackBreakdown.paid, fallbackBreakdown.currency, currency, rate),
+      paid: activity.paid,
       payables
     };
+  }
+
+  function dashboardUpcomingAccountItems(account, limit = 99) {
+    if (!account) return [];
+    const selectedMonth = state.ui.selectedMonth;
+    const current = currentMonth();
+    const today = startOfDay(new Date());
+    const minDate = selectedMonth === current ? today : parseLocalDate(dateInMonth(selectedMonth, 1));
+    if (selectedMonth < current) return [];
+    const standardItems = financialCalendarItems(selectedMonth, "global")
+      .filter((item) => !String(item.id || "").startsWith("housing:"))
+      .filter((item) => item.kind !== "income" && item.amount > 0 && !item.paid)
+      .filter((item) => item.bankAccountId === account.id)
+      .filter((item) => parseLocalDate(item.date) >= minDate);
+    const housingItems = (state.housingCards || [])
+      .filter((card) => card.active !== false)
+      .flatMap((card) => housingCardMonthRows(card, selectedMonth).map((item) => ({
+        ...item,
+        id: `housing:${card.id}:${item.key}`,
+        housingId: card.id,
+        country: card.country,
+        title: `${item.label} - ${card.name || "Moradia"}`,
+        category: "Moradia",
+        kind: "expense"
+      })))
+      .filter((item) => item.bankAccountId === account.id)
+      .filter((item) => item.amount > 0 && !item.paid)
+      .filter((item) => parseLocalDate(item.date) >= minDate);
+    return [...standardItems, ...housingItems]
+      .sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title))
+      .slice(0, limit);
   }
 
   function dashboardUpcomingFinancialItems(limit = 8) {
@@ -6313,6 +6415,13 @@
             ${currencyOptions(selectedCurrency)}
           </select>
         </div>
+        <div class="field">
+          <label for="commitmentBankAccountId">Conta responsavel pelo pagamento</label>
+          <select id="commitmentBankAccountId" name="bankAccountId">
+            ${bankAccountSelectOptions(activeCountry, item?.bankAccountId || "", "Selecione a conta")}
+          </select>
+          <small>Esta vinculacao define em qual conta a despesa aparece na Home.</small>
+        </div>
         <div class="two-cols">
           <div class="field">
             <label for="frequency">Frequencia</label>
@@ -8612,6 +8721,7 @@
       startMonth: dueDate.slice(0, 7),
       endMonth: "",
       alertDays: clamp(Math.round(number(data.alertDays)), 0, 60),
+      bankAccountId: data.bankAccountId || "",
       active: current?.active !== false
     });
     saveState();
@@ -8809,6 +8919,8 @@
     const data = formData(form);
     const country = data.country === "brasil" ? "brasil" : "japao";
     const accountId = data.id || uid(collectionPrefixes.bankAccounts || "ba");
+    const existingAccount = bankAccountById(accountId);
+    const nextSortOrder = activeBankAccounts().reduce((highest, account) => Math.max(highest, number(account.sortOrder)), -1) + 1;
     const updated = upsertItem("bankAccounts", accountId, {
       country,
       bankName: String(data.bankName || "").trim(),
@@ -8819,9 +8931,11 @@
       currency: sanitizeCurrency(data.currency, countryMeta[country].currency),
       balanceDate: data.balanceDate || dateInMonth(state.ui.selectedMonth || currentMonth(), new Date().getDate()),
       color: sanitizeColor(data.color, bankAccountColors[activeBankAccounts().length % bankAccountColors.length]),
+      sortOrder: existingAccount ? number(existingAccount.sortOrder) : nextSortOrder,
       active: true
     });
-    if (!state.ui.selectedDashboardAccountId || !activeBankAccounts().some((account) => account.id === state.ui.selectedDashboardAccountId)) {
+    if (!state.ui.primaryBankAccountId || !activeBankAccounts().some((account) => account.id === state.ui.primaryBankAccountId)) {
+      state.ui.primaryBankAccountId = accountId;
       state.ui.selectedDashboardAccountId = accountId;
     }
     saveState();
@@ -9648,7 +9762,8 @@
         amount: number(item.amount),
         currency: item.currency,
         date: commitmentDateForMonth(item, month),
-        month
+        month,
+        bankAccountId: item.bankAccountId || ""
       };
     }
 
@@ -9690,7 +9805,8 @@
         amount: number(item.amount),
         currency: item.currency,
         date: subscriptionDateForMonth(item, month),
-        month
+        month,
+        bankAccountId: item.bankAccountId || ""
       };
     }
 
@@ -9885,8 +10001,9 @@
         });
       });
     }
-    if (collection === "bankAccounts" && state.ui.selectedDashboardAccountId === id) {
+    if (collection === "bankAccounts" && (state.ui.selectedDashboardAccountId === id || state.ui.primaryBankAccountId === id)) {
       const fallback = activeBankAccounts()[0];
+      state.ui.primaryBankAccountId = fallback?.id || "";
       state.ui.selectedDashboardAccountId = fallback?.id || "";
     }
     saveState({ remoteNow: true });
@@ -11246,6 +11363,7 @@
         return {
           id: item.id,
           country: item.country,
+          bankAccountId: item.bankAccountId || "",
           type: item.type,
           title: item.title,
           category: item.category,
@@ -11427,6 +11545,7 @@
           id: item.id,
           debtId: item.id,
           country: item.country,
+          bankAccountId: item.bankAccountId || "",
           type: item.type === "consortium" ? "consortium" : "debt",
           title: item.title,
           category: item.type === "consortium" ? "Consórcio" : "Financiamento",
@@ -11467,6 +11586,7 @@
           id: card.id,
           cardId: card.id,
           country: card.country,
+          bankAccountId: card.bankAccountId || "",
           type: "card",
           title: `Fatura ${card.nickname || card.issuer}`,
           category: "Cartao",
@@ -11517,6 +11637,7 @@
         return {
           id: item.id,
           country: item.country,
+          bankAccountId: item.bankAccountId || "",
           type: "expense",
           title: subscriptionName(item),
           category: "Subscricao",
@@ -13280,8 +13401,8 @@
       .filter((account) => account.active !== false)
       .slice()
       .sort((a, b) => {
-        const countryDiff = String(a.country || "").localeCompare(String(b.country || ""));
-        if (countryDiff) return countryDiff;
+        const orderDiff = number(a.sortOrder) - number(b.sortOrder);
+        if (orderDiff) return orderDiff;
         return bankAccountName(a).localeCompare(bankAccountName(b));
       });
   }
