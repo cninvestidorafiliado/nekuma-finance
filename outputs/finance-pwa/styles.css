@@ -6859,7 +6859,7 @@ canvas {
 
 .crypto-empty {
   display: grid;
-  min-height: 220px;
+  min-height: 0;
   place-items: center;
   align-content: center;
   gap: 10px;

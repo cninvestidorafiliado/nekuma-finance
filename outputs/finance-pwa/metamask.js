@@ -56,12 +56,17 @@
     return connectInitialization;
   }
 
-  async function connectAccounts(chainId) {
+  async function connectAccounts(chainId, selectAccounts = false) {
     const existing = provider();
     if (existing && existing !== connectClient?.getProvider()) {
+      if (selectAccounts) {
+        await existing.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] });
+      }
       return { provider: existing, accounts: await existing.request({ method: 'eth_requestAccounts' }) };
     }
     const client = await prepareConnect();
+    // Renew only the transport session; saved wallets and balances remain in the app.
+    if (selectAccounts) await client.disconnect();
     const selected = supportedNetworks[chainId] ? chainId : '0x89';
     const result = await client.connect({ forceRequest: true, chainIds: [...new Set([selected, '0x1'])] });
     return { provider: client.getProvider(), accounts: result.accounts };

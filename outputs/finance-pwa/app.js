@@ -393,7 +393,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=183")
+      navigator.serviceWorker.register("./service-worker.js?v=184")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -5457,10 +5457,10 @@
   }
 
   function renderCryptoPanel(compact = false) {
-    return `<div class="crypto-origins">${renderMetaMaskGroup()}<div class="crypto-origin-group binance-group" data-binance-group></div><section class="crypto-origin-group manual-crypto-group" aria-label="Criptos manuais"><div class="panel-head"><h3><i data-lucide="coins" aria-hidden="true"></i>Criptos manuais</h3><button class="small-action" type="button" data-action="open-modal" data-modal="crypto"><i data-lucide="plus" aria-hidden="true"></i>Nova cripto</button></div>${renderManualCryptoPanel(compact)}</section></div>`;
+    return `<div class="crypto-origins">${renderMetaMaskGroup(compact)}<div class="crypto-origin-group binance-group" data-binance-group></div><section class="crypto-origin-group manual-crypto-group" aria-label="Criptos manuais"><div class="panel-head"><h3><i data-lucide="coins" aria-hidden="true"></i>Criptos manuais</h3><button class="small-action" type="button" data-action="open-modal" data-modal="crypto"><i data-lucide="plus" aria-hidden="true"></i>Nova cripto</button></div>${renderManualCryptoPanel(compact)}</section></div>`;
   }
 
-  function renderMetaMaskGroup() {
+  function renderMetaMaskGroup(compact = false) {
     const wallet = normalizeWeb3Wallet(state.web3Wallet);
     const wallets = wallet.wallets.length ? wallet.wallets : wallet.address ? [wallet] : [];
     const busy = web3FetchInFlight;
@@ -5482,8 +5482,8 @@
         ${busy || wallet.error ? `<button class="small-action ghost" type="button" data-action="restart-web3">Reiniciar conexao</button>` : ""}
         ${mobile && window.location.protocol === "https:" ? `<a class="small-action ghost" href="${escapeAttr(metaMaskBrowserUrl)}"><i data-lucide="external-link" aria-hidden="true"></i>Abrir na MetaMask</a>` : ""}
         ${wallets.length ? renderMetaMaskBalances(wallets) : ""}
-        ${wallets.length ? `<details class="metamask-details" ${state.ui.metamaskExpanded ? "open" : ""}><summary>Detalhamento da carteira MetaMask</summary><p class="row-meta">${escapeHtml(cryptoStatusText().label)} · Valores estimados. USDC.e utiliza a cotação de referência do USDC.</p>` : ""}
-        ${wallets.length ? wallets.map((item) => `
+        ${wallets.length && !compact ? `<details class="metamask-details" ${state.ui.metamaskExpanded ? "open" : ""}><summary>Detalhamento da carteira MetaMask</summary><p class="row-meta">${escapeHtml(cryptoStatusText().label)} · Valores estimados. USDC.e utiliza a cotação de referência do USDC.</p>` : ""}
+        ${wallets.length && !compact ? wallets.map((item) => `
           <div class="metamask-account">
             <div class="metamask-account-heading"><strong title="${escapeAttr(item.address)}">${escapeHtml(shortAddress(item.address))}</strong><span class="chip green">${escapeHtml(web3NetworkMeta(item.chainId).name)}</span></div>
             ${state.ui.hideCryptoDetails ? `<p class="row-meta">Saldos ocultos</p>` : `
@@ -5495,9 +5495,9 @@
             ${item.tokenError ? `<p class="row-meta web3-error">${escapeHtml(item.tokenError)}</p>` : ""}
             <small class="row-meta">Ultima consulta: ${item.updatedAt ? escapeHtml(new Date(item.updatedAt).toLocaleString("pt-BR")) : "Ainda nao consultada"}</small>
           </div>
-        `).join("") : `<p class="empty-state">Nenhuma carteira MetaMask conectada.</p>`}
-        ${wallets.length ? `<button class="small-action ghost" type="button" data-action="disconnect-web3">Remover conexoes do Nekuma</button>` : ""}
-        ${wallets.length ? `</details>` : ""}
+        `).join("") : !wallets.length ? `<p class="empty-state">Nenhuma carteira MetaMask conectada.</p>` : ""}
+        ${wallets.length && !compact ? `<button class="small-action ghost" type="button" data-action="disconnect-web3">Remover conexoes do Nekuma</button>` : ""}
+        ${wallets.length && !compact ? `</details>` : ""}
       </div>
     `;
   }
@@ -10661,7 +10661,7 @@
 
     try {
       const { accounts, provider } = await Promise.race([
-        window.NekumaMetaMask.connectAccounts(state.web3Wallet?.chainId),
+        window.NekumaMetaMask.connectAccounts(state.web3Wallet?.chainId, Boolean(state.web3Wallet?.address)),
         new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error("A conexao nao foi concluida. Volte ao Nekuma e reinicie a conexao.")), 120000); })
       ]);
       clearTimeout(timeout);
@@ -10677,7 +10677,7 @@
       saveState({ remoteNow: true });
       closeModal();
       renderKeepingScroll();
-      showToast("Carteira Web3 conectada.");
+      showToast(`Carteira conectada: ${shortAddress(address)}.`);
       refreshCryptoQuotes(true);
     } catch (error) {
       if (generation !== stateGeneration || operation !== web3OperationId) return;

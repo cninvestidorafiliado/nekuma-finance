@@ -41,6 +41,18 @@ function harness(injected, failOnce = false) {
   assert.equal(JSON.stringify(mobile.calls[1].chainIds), '["0x89","0x1"]');
   assert.equal(mobile.calls[1].forceRequest, true, 'Explicit connect must request authorization for the phone wallet');
   assert.equal(mobile.calls[1].account, undefined, 'Do not force the desktop account');
+  await mobile.api.connectAccounts('0x89', true);
+  assert.equal(mobile.calls.at(-2), 'disconnect', 'Adding a wallet renews the mobile session without deleting saved snapshots');
+  assert.equal(mobile.calls.at(-1).account, undefined);
+  const selectionCalls = [];
+  const secondAddress = '0x' + '34'.repeat(20);
+  const selection = harness({ isMetaMask: true, async request(request) {
+    selectionCalls.push(request);
+    return request.method === 'wallet_requestPermissions' ? [] : [secondAddress];
+  } });
+  assert.equal((await selection.api.connectAccounts('0x89', true)).accounts[0], secondAddress);
+  assert.equal(selectionCalls[0].method, 'wallet_requestPermissions');
+  assert.equal(JSON.stringify(selectionCalls[0].params), '[{"eth_accounts":{}}]');
   await mobile.api.disconnect();
   assert.equal(mobile.calls.at(-1), 'disconnect');
   const retry = harness(null, true);
