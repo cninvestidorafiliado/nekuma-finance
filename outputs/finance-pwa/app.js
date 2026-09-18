@@ -403,7 +403,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=193")
+      navigator.serviceWorker.register("./service-worker.js?v=194")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -4528,6 +4528,9 @@
         <details class="nubank-box-details">
           <summary>Detalhamento da Caixinha</summary>
           <div class="nubank-box-history">
+            <div><span>CDI de referência ${state.cdiRates?.ratesDate ? `· ${escapeHtml(formatShortDate(state.cdiRates.ratesDate))}` : "· estimativa local"}</span><strong>${formatPercent(number(state.cdiRates?.annualRate) || 13.9)} a.a.</strong></div>
+            <div><span>Rentabilidade contratada</span><strong>${formatPercent(number(box.cdiPercent) || 100)} do CDI</strong></div>
+            <div><span>Saldo estimado até</span><strong>${formatShortDate(localDateKey())}</strong></div>
             <div><span>Saldo informado em ${formatShortDate(box.balanceDate)}</span><strong>${formatMoney(number(box.currentAmount), "BRL")}</strong></div>
             ${contributions.length ? contributions.map((item) => `
               <div>
