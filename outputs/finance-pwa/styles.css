@@ -10098,7 +10098,7 @@ html.auth-mode { background: #f3f7f4; }
 .dashboard-group-work { background: rgba(82, 148, 199, .055); }
 .dashboard-group-investments { background: rgba(22, 105, 69, .06); }
 .dashboard-group-reports { background: rgba(93, 105, 105, .055); }
-.dashboard-group-heading { margin: 0 0 4px; padding: 0 2px 8px; font-size: 15px; font-weight: 750; color: #34554a; }
+.dashboard-group-heading { margin: 0 0 4px; padding: 4px 2px 12px; font-size: 16px; font-weight: 850; font-family: Manrope, Inter, ui-sans-serif, system-ui, sans-serif; text-align: center; color: #173d32; }
 .card-mini-carousel:has(.nekuma-card-face) { padding: 0; width: min(100%, 290px); margin-inline: auto; }
 .card-mini.nekuma-card-face { aspect-ratio: 1.586; min-height: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto 1fr auto; grid-template-areas: "label issuer" "number number" "name wave"; padding: 20px; gap: 12px; border: 0; border-radius: 8px; background: var(--card-color); color: var(--card-ink); box-shadow: none; isolation: isolate; }
 .nekuma-card-face::before { background: linear-gradient(115deg, rgba(255,255,255,.09) 0 26%, transparent 26% 65%, rgba(255,255,255,.05) 65%); }
