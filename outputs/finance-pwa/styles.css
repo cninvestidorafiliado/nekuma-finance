@@ -10092,6 +10092,21 @@ h1 {
 }
 
 html.auth-mode { background: #f3f7f4; }
+.dashboard-category-columns { gap: 0; align-items: stretch; min-height: 100dvh; }
+.dashboard-category-columns .dashboard-stable-lane { padding: 14px 14px 64px; border-right: 1px solid #c9d5d0; }
+.dashboard-category-columns .dashboard-stable-lane:last-child { border-right: 0; }
+.dashboard-group-work { background: rgba(82, 148, 199, .055); }
+.dashboard-group-investments { background: rgba(22, 105, 69, .06); }
+.dashboard-group-reports { background: rgba(93, 105, 105, .055); }
+.dashboard-group-heading { margin: 0 0 4px; padding: 0 2px 8px; font-size: 15px; font-weight: 750; color: #34554a; }
+.overview-card .account-swipe-carousel { padding: 0; perspective: none; scroll-padding-inline: 0; }
+.overview-card .account-swipe-card.has-bank-art { border: 0; background: transparent; box-shadow: none; transform: none; filter: none; opacity: 1; }
+.overview-card .account-swipe-card.has-bank-art::before { opacity: 1; transform: scale(1.08); }
+@media (min-width: 1180px) { .dashboard-category-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 760px) and (max-width: 1179px) {
+  .dashboard-category-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-category-columns .dashboard-group-reports { grid-column: 1 / -1; border-top: 1px solid #c9d5d0; }
+}
 body.auth-mode { background: #f3f7f4; color: #173d32; min-height: 100dvh; isolation: isolate; }
 body.auth-mode::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: #f3f7f4 url("./assets/login-landscape.png") center bottom / cover no-repeat; }
 .auth-mode .app-shell { width: 100%; max-width: none; padding: 0; min-height: 100dvh; }

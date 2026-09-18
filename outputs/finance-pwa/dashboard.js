@@ -107,6 +107,11 @@
   }
 
   function setup(root, layouts, save, month) {
+    const groups = [
+      { id: 'work', title: 'Trabalho e Familia', cards: ['overview-card', 'paypal-panel', 'subscriptions-panel', 'dashboard-cards-panel', 'housing-panel', 'vehicle-panel', 'family-panel', 'financial-calendar-panel'] },
+      { id: 'investments', title: 'Investimentos', cards: ['goals-panel', 'debt-home-panel', 'consortium-home-panel', 'emergency-reserve-panel', 'family-tools-panel', 'crypto-panel'] },
+      { id: 'reports', title: 'Graficos e Resumos', cards: ['work-calendar-panel', 'family-pie-panel', 'country-expenses-panel', 'dashboard-trend-panel', 'recent-transactions-panel'] }
+    ];
     sortables.forEach(sortable => sortable.destroy());
     sortables = [];
     const shell = root.querySelector('.desktop-dashboard-shell');
@@ -133,45 +138,54 @@
       });
     });
     const mobile = window.matchMedia('(max-width: 759px)').matches;
-    const mode = mobile ? 'mobile' : 'desktopLanes';
+    const mode = mobile ? 'mobile' : 'groupedLanes';
     let targets = zones;
     if (mobile) {
       const zone = document.createElement('div');
       zone.className = 'dashboard-mobile-zone';
       shell.append(zone);
-      const order = [...(Array.isArray(layouts.mobile) ? layouts.mobile : []).map(migrateKey), ...cardClasses];
+      const order = [...(Array.isArray(layouts.mobile) ? layouts.mobile : []).map(migrateKey), ...groups.flatMap(group => group.cards), ...cardClasses];
       new Set(order).forEach(key => { if (cards.has(key)) zone.append(cards.get(key)); });
       zones.forEach(column => column.remove());
       targets = [zone];
     } else {
       const zone = document.createElement('div');
-      zone.className = 'dashboard-stable-columns';
+      zone.className = 'dashboard-stable-columns dashboard-category-columns';
       shell.append(zone);
       const legacyOrder = Array.isArray(layouts.desktop)
         ? layouts.desktop.flatMap(column => Array.isArray(column) ? column : [])
         : [];
       const order = [...(Array.isArray(layouts.desktopFlow) ? layouts.desktopFlow : legacyOrder).map(migrateKey), ...cardClasses];
-      const count = window.matchMedia('(min-width: 1600px)').matches ? 3 : window.matchMedia('(min-width: 760px)').matches ? 2 : 1;
-      const lanes = Array.from({ length: count }, () => {
+      const lanes = groups.map(group => {
         const lane = document.createElement('div');
-        lane.className = 'dashboard-stable-lane';
+        lane.className = `dashboard-stable-lane dashboard-group-${group.id}`;
+        lane.dataset.dashboardGroup = group.id;
+        const heading = document.createElement('h2');
+        heading.className = 'dashboard-group-heading';
+        heading.textContent = group.title;
+        lane.append(heading);
         zone.append(lane);
         return lane;
       });
-      const saved = Array.isArray(layouts.desktopLanes) ? layouts.desktopLanes : [];
+      const saved = Array.isArray(layouts.groupedLanes) ? layouts.groupedLanes : [];
       const placed = new Set();
-      saved.forEach((keys, index) => (Array.isArray(keys) ? keys : []).map(migrateKey).forEach(key => {
-        if (cards.has(key) && !placed.has(key)) { lanes[index % count].append(cards.get(key)); placed.add(key); }
-      }));
+      groups.forEach((group, index) => {
+        const keys = [...(Array.isArray(saved[index]) ? saved[index] : []).map(migrateKey), ...group.cards];
+        new Set(keys).forEach(key => {
+          if (group.cards.includes(key) && cards.has(key) && !placed.has(key)) {
+            lanes[index].append(cards.get(key)); placed.add(key);
+          }
+        });
+      });
       new Set(order).forEach(key => {
         if (!cards.has(key) || placed.has(key)) return;
-        const lane = lanes.reduce((best, item) => item.offsetHeight < best.offsetHeight ? item : best);
+        const lane = lanes[0];
         lane.append(cards.get(key));
         placed.add(key);
       });
       zones.forEach(column => column.remove());
       targets = lanes;
-      if (!saved.length) save({ ...layouts, desktopLanes: lanes.map(lane => [...lane.children].map(card => card.dataset.dashboardCard)) });
+      if (!saved.length) save({ ...layouts, groupedLanes: lanes.map(lane => [...lane.children].filter(card => card.dataset.dashboardCard).map(card => card.dataset.dashboardCard)) });
     }
     const remember = () => {
       const orders = targets.map(zone => [...zone.children].filter(card => card.dataset.dashboardCard).map(card => card.dataset.dashboardCard));
@@ -180,7 +194,7 @@
     targets.forEach(zone => {
       if (!window.Sortable) return;
       sortables.push(new window.Sortable(zone, {
-        group: 'dashboard', draggable: '[data-dashboard-card]', handle: '.dashboard-handle',
+        group: { name: mobile ? 'dashboard-mobile' : `dashboard-${zone.dataset.dashboardGroup}`, pull: false, put: false }, draggable: '[data-dashboard-card]', handle: '.dashboard-handle',
         animation: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180,
         ghostClass: 'dashboard-drop-placeholder', chosenClass: 'dashboard-drag-chosen',
         forceFallback: true, fallbackOnBody: true, fallbackTolerance: 5, emptyInsertThreshold: 40,
@@ -191,11 +205,8 @@
         if (!event.target.closest('.dashboard-handle') || !event.key.startsWith('Arrow')) return;
         const card = event.target.closest('[data-dashboard-card]');
         event.preventDefault();
-        if (event.key === 'ArrowUp' && card.previousElementSibling) zone.insertBefore(card, card.previousElementSibling);
+        if (event.key === 'ArrowUp' && card.previousElementSibling?.dataset.dashboardCard) zone.insertBefore(card, card.previousElementSibling);
         if (event.key === 'ArrowDown' && card.nextElementSibling) zone.insertBefore(card.nextElementSibling, card);
-        const index = targets.indexOf(zone);
-        if (event.key === 'ArrowLeft' && index > 0) targets[index - 1].append(card);
-        if (event.key === 'ArrowRight' && index < targets.length - 1) targets[index + 1].append(card);
         card.querySelector('.dashboard-handle').focus();
         remember();
       });
