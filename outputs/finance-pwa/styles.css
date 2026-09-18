@@ -10099,6 +10099,28 @@ html.auth-mode { background: #f3f7f4; }
 .dashboard-group-investments { background: rgba(22, 105, 69, .06); }
 .dashboard-group-reports { background: rgba(93, 105, 105, .055); }
 .dashboard-group-heading { margin: 0 0 4px; padding: 0 2px 8px; font-size: 15px; font-weight: 750; color: #34554a; }
+.card-mini-carousel:has(.nekuma-card-face) { padding: 0; width: min(100%, 290px); margin-inline: auto; }
+.card-mini.nekuma-card-face { aspect-ratio: 1.586; min-height: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto 1fr auto; grid-template-areas: "label issuer" "number number" "name wave"; padding: 20px; gap: 12px; border: 0; border-radius: 8px; background: var(--card-color); color: var(--card-ink); box-shadow: none; isolation: isolate; }
+.nekuma-card-face::before { background: linear-gradient(115deg, rgba(255,255,255,.09) 0 26%, transparent 26% 65%, rgba(255,255,255,.05) 65%); }
+.nekuma-card-face .card-mini-brand { font-size: 20px; font-style: italic; color: inherit; align-self: start; }
+.nekuma-card-issuer { grid-area: issuer; text-align: right; font-size: 12px; overflow-wrap: anywhere; align-self: start; }
+.nekuma-card-face .card-mini-name { grid-area: name; color: inherit; font-size: 12px; font-weight: 750; text-transform: uppercase; }
+.nekuma-card-face .card-mini-last4 { grid-area: number; font-size: 18px; color: inherit; font-family: ui-monospace, monospace; font-weight: 500; text-align: center; white-space: nowrap; }
+.nekuma-card-face .card-mini-wave { grid-area: wave; justify-self: end; background: none; color: inherit; width: 24px; height: 24px; }
+.nekuma-card-face .nekuma-card-emboss { position: absolute; z-index: 0; left: 20px; bottom: 34px; font-size: 56px; line-height: 1; font-weight: 850; color: var(--card-color); text-shadow: -1px -1px 1px rgba(255,255,255,.28), 1px 2px 2px rgba(0,0,0,.28); opacity: .65; pointer-events: none; }
+.nekuma-card-invoice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 8px; }
+.nekuma-card-invoice > div:first-child { display: grid; gap: 6px; min-width: 0; }
+.nekuma-card-invoice strong { font-size: 22px; color: #173d32; overflow-wrap: anywhere; }
+.nekuma-card-invoice .money-converted { font-size: 11px; }
+.nekuma-card-invoice .chips { flex-wrap: wrap; }
+.nekuma-card-invoice button svg { width: 16px; height: 16px; }
+.nekuma-wallet-total { margin: 0; font-size: 11px; }
+@container panel (max-width: 340px) {
+  .card-mini.nekuma-card-face { padding: 16px; gap: 8px; }
+  .nekuma-card-face .card-mini-brand { font-size: 17px; }
+  .nekuma-card-face .card-mini-last4 { font-size: 15px; }
+  .nekuma-card-face .nekuma-card-emboss { font-size: 48px; left: 16px; bottom: 32px; }
+}
 .overview-card .account-swipe-carousel { padding: 0; perspective: none; scroll-padding-inline: 0; }
 .overview-card .account-swipe-card.has-bank-art { border: 0; background: transparent; box-shadow: none; transform: none; filter: none; opacity: 1; }
 .overview-card .account-swipe-card.has-bank-art::before { opacity: 1; transform: scale(1.08); }

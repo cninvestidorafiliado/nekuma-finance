@@ -403,7 +403,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=188")
+      navigator.serviceWorker.register("./service-worker.js?v=190")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -4559,6 +4559,9 @@
     const total = cards.length;
     const activeIndex = normalizeCardCarouselIndex(total);
     const wallet = cardWalletSummary(cards);
+    const selectedCard = cards[activeIndex];
+    const selectedBill = creditCardMonthBill(selectedCard, state.ui.selectedMonth);
+    const selectedPaid = isCardBillPaid(selectedCard.id, state.ui.selectedMonth);
     return `
       <div class="card-mini-widget">
         <div class="card-mini-carousel" aria-label="Cartoes cadastrados">
@@ -4569,29 +4572,30 @@
             ${cards.map((card, index) => `<button class="carousel-dot ${index === activeIndex ? "is-active" : ""}" type="button" data-action="card-carousel-select" data-index="${index}" data-total="${total}" title="${escapeAttr(card.nickname || card.issuer || "Cartao")}"></button>`).join("")}
           </div>
         ` : ""}
-        <div class="card-mini-total">${formatMoney(wallet.total, wallet.currency)}</div>
+        <div class="nekuma-card-invoice"><div><span class="row-meta">Fatura do mês · ${selectedPaid ? "Pago" : `Vence ${selectedCard.dueDay || "--"}`}</span><strong>${formatMoneyWithPrimary(selectedBill.total, selectedCard.currency, state.ui.selectedMonth)}</strong></div><div class="chips"><button class="small-action ghost" type="button" data-action="open-modal" data-modal="creditCard" data-id="${escapeAttr(selectedCard.id)}" aria-label="Editar cartão"><i data-lucide="pencil" aria-hidden="true"></i></button><button class="small-action" type="button" data-action="${selectedPaid ? "none" : "open-modal"}" data-modal="monthlyPayment" data-payment-id="card:${escapeAttr(selectedCard.id)}" ${selectedPaid ? "disabled" : ""}>${selectedPaid ? "Pago" : "Pagar fatura"}</button></div></div>
+        ${total > 1 ? `<p class="row-meta nekuma-wallet-total">Total dos cartões ${formatMoney(wallet.total, wallet.currency)}</p>` : ""}
       </div>
     `;
   }
 
   function renderCreditCardMiniCard(card, index, activeIndex, total) {
-    const bill = creditCardMonthBill(card, state.ui.selectedMonth);
     const active = index === activeIndex;
     return `
       <button
-        class="card-mini ${active ? "is-active" : ""} ${card.country === "brasil" ? "br-card" : "jp-card"} ${cardVisualStyle(card)}"
+        class="card-mini nekuma-card-face ${active ? "is-active" : ""} ${card.country === "brasil" ? "br-card" : "jp-card"} ${cardVisualStyle(card)}"
         type="button"
         data-action="card-carousel-select"
         data-index="${index}"
         data-total="${total}"
         ${cardStyleAttrs(card)}
-        aria-label="${active ? "Cartao atual" : "Selecionar cartao"}"
+        aria-label="${active ? "Cartao atual" : "Selecionar cartao"}: ${escapeAttr(card.nickname || card.issuer || "Cartao")}, final ${escapeAttr(card.last4 || "0000")}"
       >
         <span class="card-mini-brand">${escapeHtml(cardNetworkLabel(card))}</span>
+        <span class="nekuma-card-issuer">${escapeHtml(card.issuer || "Nekuma Finance")}</span>
+        <span class="nekuma-card-emboss" aria-hidden="true">Nekuma</span>
         <span class="card-mini-name">${escapeHtml(card.nickname || card.issuer || "Cartao")}</span>
-        <span class="card-mini-bill">${formatMoneyWithPrimary(bill.total, card.currency, state.ui.selectedMonth)}</span>
-        <span class="card-mini-last4">****${escapeHtml(card.last4 || "0000")}</span>
-        <span class="card-mini-wave" aria-hidden="true"><i data-lucide="contactless"></i></span>
+        <span class="card-mini-last4">•••• &nbsp; •••• &nbsp; •••• &nbsp; ${escapeHtml(card.last4 || "0000")}</span>
+        <span class="card-mini-wave" aria-hidden="true"><i data-lucide="nfc"></i></span>
       </button>
     `;
   }
@@ -4715,7 +4719,9 @@
 
   function cardStyleAttrs(card) {
     const color = sanitizeColor(card?.color, card?.country === "brasil" ? "#2563eb" : "#0f9f6e");
-    return `style="--card-color:${escapeAttr(color)};--card-color-rgb:${escapeAttr(hexToRgbValues(color))}"`;
+    const rgb = hexToRgbValues(color).split(',').map(Number);
+    const ink = rgb[0] * .299 + rgb[1] * .587 + rgb[2] * .114 > 170 ? '#162b24' : '#ffffff';
+    return `style="--card-color:${escapeAttr(color)};--card-color-rgb:${escapeAttr(hexToRgbValues(color))};--card-ink:${ink}"`;
   }
 
   function cardNetworkLabel(card) {
