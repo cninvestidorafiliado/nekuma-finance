@@ -19,6 +19,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
     await page.evaluate(() => {
       const t = window.testApp, s = t.createInitialState(), month = s.ui.selectedMonth;
       s.bankAccounts = [{ id: 'br', country: 'brasil', bankName: 'Nubank', currency: 'BRL' }, { id: 'jp', country: 'japao', bankName: 'Yucho', currency: 'JPY' }];
+      s.creditCards = [{ id: 'test-card', country: 'japao', nickname: 'Pink', issuer: 'Rakuten', brand: 'Visa', currency: 'JPY', color: '#345ac7', last4: '1234', dueDay: 27, closingDay: 10 }];
       s.transactions = ['br', 'jp'].map((id, i) => ({ id, date: `${month}-01`, type: 'expense', title: 'Teste', category: 'Moradia', country: i ? 'japao' : 'brasil', currency: i ? 'JPY' : 'BRL', amount: i ? 5000 : 200, bankAccountId: id }));
       s.ui.dashboardLayouts = { desktopLanes: [['expenses-brasil', 'crypto-panel'], ['expenses-japao', 'housing-panel']] };
       s.web3Wallet = { address: '0x' + '12'.repeat(20), chainId: '0x89', balance: '0.09', status: 'connected', tokens: [{ symbol: 'USDC.e', balance: '3.4', contract: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', decimals: 6 }] };
@@ -59,6 +60,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       await page.locator('.country-expenses-panel').screenshot({ path: path.resolve(`work/expense-carousel-${width}.png`) });
       await page.locator('.crypto-panel').screenshot({ path: path.resolve(`work/crypto-origins-${width}.png`) });
+      await page.locator('.dashboard-cards-panel').screenshot({ path: path.resolve(`work/nekuma-cards-${width}.png`) });
+      assert.equal(await page.locator('.nekuma-card-face .nekuma-card-emboss').textContent(), 'Nekuma');
+      assert.equal(await page.locator('.nekuma-card-face .card-mini-bill').count(), 0);
+      assert.ok(await page.locator('.nekuma-card-face .card-mini-last4').evaluate(el => {
+        const card = el.closest('.nekuma-card-face').getBoundingClientRect();
+        const range = document.createRange(); range.selectNodeContents(el);
+        const text = range.getBoundingClientRect();
+        return text.left >= card.left && text.right <= card.right && el.scrollWidth <= el.clientWidth + 1;
+      }), 'Masked number and all four digits stay inside the card');
+      assert.equal(await page.locator('.nekuma-card-invoice [data-modal="monthlyPayment"]').count(), 1);
       if (width === 1440) await page.locator('.dashboard-category-columns').screenshot({ path: path.resolve('work/dashboard-groups-1440.png') });
       assert.equal(await page.locator('.crypto-origins > .crypto-origin-group').count(), 3);
       assert.ok(await page.locator('.metamask-group .crypto-provider-logo').evaluate(img => img.complete && img.naturalWidth > 0));
