@@ -28,6 +28,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
     assert.equal(await page.locator('.country-expenses-panel').count(), 1);
     assert.equal(await page.locator('.dashboard-category-columns > [data-dashboard-group]').count(), 3);
     assert.equal(await page.locator('.crypto-panel').evaluate(el => el.parentElement.dataset.dashboardGroup), 'investments');
+    assert.equal(await page.locator('.nubank-boxes-home-panel').count(), 1);
+    assert.equal(await page.locator('.nubank-boxes-home-panel').evaluate(el => el.parentElement.dataset.dashboardGroup), 'investments');
     assert.equal(await page.locator('.housing-panel').evaluate(el => el.parentElement.dataset.dashboardGroup), 'work');
     assert.equal(await page.locator('.country-expenses-panel').evaluate(el => el.parentElement.dataset.dashboardGroup), 'reports');
     const bottoms = await page.locator('.dashboard-category-columns > [data-dashboard-group]').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().bottom));

@@ -403,7 +403,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=192")
+      navigator.serviceWorker.register("./service-worker.js?v=193")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -3066,6 +3066,8 @@
           <section class="content-panel goals-panel">
             ${renderFinancialGoalsPanel()}
           </section>
+
+          ${hasNubankAccount() ? `<section class="content-panel nubank-boxes-home-panel">${renderNubankBoxesPanel()}</section>` : ""}
 
           <section class="content-panel family-tools-panel">
             ${renderBusinessShoppingPanel()}
