@@ -403,7 +403,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=194")
+      navigator.serviceWorker.register("./service-worker.js?v=195")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -5008,10 +5008,8 @@
     const currency = primaryCurrency();
     const reserve = emergencyReserveStats(goal, summary);
     const target = reserve.target;
-    const monthlyBase = reserve.monthlyBase;
-    const saved = reserve.saved;
-    const missing = Math.max(0, target - saved);
-    const percent = target ? clamp(Math.round((saved / target) * 100), 0, 100) : 0;
+    const percent = target ? clamp(Math.round((reserve.saved / target) * 100), 0, 100) : 0;
+    const reserveHue = Math.round(percent * 1.2);
     return `
       <div class="panel-head">
         <div>
@@ -5022,27 +5020,12 @@
           ${goal ? `<button class="small-action ghost" type="button" data-action="open-modal" data-modal="emergencyReserve" data-id="${goal.id}">Editar</button><button class="small-action" type="button" data-action="open-modal" data-modal="goalContribution" data-id="${goal.id}">Aporte</button>` : `<button class="small-action" type="button" data-action="open-modal" data-modal="emergencyReserve">Criar</button>`}
         </div>
       </div>
-      <div class="emergency-card">
-        <span>${reserve.mode === "manual" ? "Meta estipulada" : `Necessario para ${reserve.months} meses`}</span>
+      <div class="emergency-card" style="--reserve-progress:${percent}%;--reserve-hue:${reserveHue}" data-reserve-progress="${percent}">
+        <span>Meta estipulada</span>
         <strong>${formatMoneyWithPrimary(target, currency)}</strong>
-        <small>Gastos ${formatMoneyWithPrimary(monthlyBase, currency)} - Renda ${formatMoneyWithPrimary(reserve.incomeBase, currency)}</small>
-        <div class="emergency-progress" aria-label="Progresso da reserva">
+        <div class="emergency-progress-label"><span>Progresso</span><strong>${formatPercent(percent)}</strong></div>
+        <div class="emergency-progress" role="progressbar" aria-label="Progresso da reserva" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}">
           <span style="width:${percent > 0 ? Math.max(3, percent) : 0}%"></span>
-        </div>
-      </div>
-      <div class="pro-summary-grid">
-        <div>
-          <span>Guardado</span>
-          <strong>${formatMoneyWithPrimary(saved, currency)}</strong>
-        </div>
-        <div>
-          <span>Falta</span>
-          <strong>${formatMoneyWithPrimary(missing, currency)}</strong>
-        </div>
-        <div>
-          <span>${formatPercent(reserve.contributionPercent)} da renda</span>
-          <strong>${formatMoneyWithPrimary(reserve.monthlyContribution, currency)}</strong>
-          <small>${reserve.monthsToGoal ? `${reserve.monthsToGoal} meses ate completar` : "Sem renda calculada"}</small>
         </div>
       </div>
     `;
