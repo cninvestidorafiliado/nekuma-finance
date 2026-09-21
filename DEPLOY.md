@@ -77,3 +77,18 @@ Se publicar manualmente com Wrangler, rode o comando a partir da raiz do projeto
 ```bash
 npx wrangler pages deploy outputs/finance-pwa-online --project-name=nekuma-finance --branch=main
 ```
+
+## Nekuma IA no Cloudflare
+
+A Nekuma IA usa `functions/api/ai.js`. Adicione estas variaveis em **Settings >
+Variables and Secrets** no projeto Cloudflare Pages:
+
+```text
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-5-mini
+SUPABASE_URL=https://seu-projeto.supabase.co
+SUPABASE_ANON_KEY=sua_anon_key
+```
+
+Marque `OPENAI_API_KEY` como secret. Depois de salvar, faca um novo deploy para
+que a Function receba a configuracao. Nunca exponha essa chave no frontend.

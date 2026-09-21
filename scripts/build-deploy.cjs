@@ -14,6 +14,7 @@ const publicFiles = [
   "dashboard.js",
   "metamask.js",
   "binance.js",
+  "assistant.js",
   "styles.css",
   "service-worker.js",
   "manifest.webmanifest",
@@ -68,6 +69,7 @@ function withVersion(fileName, content) {
       .replace(/dashboard\.js\?v=\d+/g, `dashboard.js?v=${version}`)
       .replace(/metamask\.js\?v=\d+/g, `metamask.js?v=${version}`)
       .replace(/binance\.js\?v=\d+/g, `binance.js?v=${version}`)
+      .replace(/assistant\.js\?v=\d+/g, `assistant.js?v=${version}`)
       .replace(/app\.js\?v=\d+/g, `app.js?v=${version}`);
   }
 
@@ -79,6 +81,7 @@ function withVersion(fileName, content) {
     return content
       .replace(/nekuma-finance-v\d+/g, `nekuma-finance-v${version}`)
       .replace(/binance\.js\?v=\d+/g, `binance.js?v=${version}`)
+      .replace(/assistant\.js\?v=\d+/g, `assistant.js?v=${version}`)
       .replace(/dashboard\.js\?v=\d+/g, `dashboard.js?v=${version}`)
       .replace(/metamask\.js\?v=\d+/g, `metamask.js?v=${version}`)
       .replace(/styles\.css\?v=\d+/g, `styles.css?v=${version}`)

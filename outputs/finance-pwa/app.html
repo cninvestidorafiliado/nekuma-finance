@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;650;750;850&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=195" />
+    <link rel="stylesheet" href="./styles.css?v=197" />
   </head>
   <body>
     <div class="app-shell">
@@ -29,6 +29,10 @@
           </div>
         </div>
         <div class="top-actions">
+          <button class="icon-button ai-top-button" id="nekuma-ai-button" type="button" aria-label="Abrir Nekuma IA" title="Nekuma IA" hidden>
+            <span data-lucide="sparkles" aria-hidden="true"></span>
+            <span>IA</span>
+          </button>
           <button class="icon-button news-button" id="app-news-button" type="button" data-action="open-app-news" aria-label="Novidades do app" title="Novidades">
             <span data-lucide="circle-alert" aria-hidden="true"></span>
             <span class="news-badge" id="app-news-badge" aria-hidden="true"></span>
@@ -73,15 +77,17 @@
     </div>
 
     <div id="modal-root"></div>
+    <div id="ai-root" class="ai-root" aria-hidden="true"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./assets/vendor/lucide.min.js"></script>
     <script src="./supabase-config.js?v=26"></script>
     <script src="./assets/vendor/Sortable.min.js"></script>
-    <script src="./dashboard.js?v=195"></script>
-    <script src="./metamask.js?v=195"></script>
-    <script src="./binance.js?v=195"></script>
-    <script src="./app.js?v=195"></script>
+    <script src="./dashboard.js?v=197"></script>
+    <script src="./metamask.js?v=197"></script>
+    <script src="./binance.js?v=197"></script>
+    <script src="./assistant.js?v=197"></script>
+    <script src="./app.js?v=197"></script>
   </body>
 </html>

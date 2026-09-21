@@ -94,6 +94,26 @@ PAYPAL_ALLOWED_EMAILS
 
 O endpoint exige login Supabase e, quando `PAYPAL_ALLOWED_EMAILS` estiver preenchido, apenas esses emails podem consultar o saldo.
 
+### Nekuma IA
+
+O painel Nekuma IA usa a Cloudflare Pages Function `/api/ai`. A funcao valida a
+sessao do Supabase e envia ao modelo somente um resumo financeiro do mes
+selecionado. A primeira versao e somente leitura e nao executa pagamentos nem
+altera cadastros.
+
+Configure no Cloudflare Pages, em **Settings > Variables and Secrets**:
+
+```text
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-5-mini
+SUPABASE_URL=https://seu-projeto.supabase.co
+SUPABASE_ANON_KEY=sua_anon_key
+```
+
+Defina `OPENAI_API_KEY` como secret. `OPENAI_MODEL` e opcional; quando ausente,
+o servidor usa `gpt-5-mini`. A chave nunca deve ser colocada em `app.js`,
+`assistant.js` ou outro arquivo publico.
+
 ## Supabase
 
 Exemplo de `supabase-config.js`:

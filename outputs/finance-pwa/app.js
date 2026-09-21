@@ -400,10 +400,11 @@
   let resetInProgress = false;
   let stateGeneration = 0;
   let bankAccountSortable = null;
+  let aiAssistantLoadAttempted = false;
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=195")
+      navigator.serviceWorker.register("./service-worker.js?v=197")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -2125,6 +2126,7 @@
     updateAppNewsButton();
     if (remoteStore.enabled && remoteSession.status !== "ready") {
       window.NekumaBinance?.clear();
+      window.NekumaAI?.clear();
       app.innerHTML = renderAuthGate();
       refreshIcons();
       return;
@@ -2154,6 +2156,7 @@
     setupStableTabColumns();
     refreshIcons();
     window.NekumaBinance?.mount({ token: currentSupabaseAccessToken, money: formatMoney, convert, hidden: () => state.ui.hideCryptoDetails, icon: symbol => renderCryptoTokenIcon({ symbol, color: cryptoCatalog[symbol]?.color || '#71877e' }), icons: refreshIcons });
+    mountAiAssistant();
     setupDashboardAccountCarousel();
     setupBankAccountOrdering();
     setupCreditCardHomeCarousel();
@@ -11167,6 +11170,159 @@
     return {
       ...fiat,
       ...btc
+    };
+  }
+
+  function mountAiAssistant() {
+    const mount = () => window.NekumaAI?.mount({
+      token: currentSupabaseAccessToken,
+      context: buildAiFinancialContext,
+      icons: refreshIcons
+    });
+    if (window.NekumaAI) {
+      mount();
+      return;
+    }
+    if (aiAssistantLoadAttempted) return;
+    aiAssistantLoadAttempted = true;
+    const script = document.createElement("script");
+    script.src = "./assistant.js?v=197";
+    script.onload = mount;
+    script.onerror = () => {
+      aiAssistantLoadAttempted = false;
+      console.error("Nao foi possivel carregar a interface da Nekuma IA.");
+    };
+    document.body.appendChild(script);
+  }
+
+  function buildAiFinancialContext() {
+    const month = state.ui.selectedMonth || currentMonth();
+    const currency = primaryCurrency();
+    const rate = latestRate(month);
+    const summary = summarizeMonth(month, "global");
+    const selectedAccount = selectedDashboardAccount();
+    const calendar = financialCalendarItems(month, "global");
+    const openItems = calendar
+      .filter((item) => item.kind !== "income" && !item.paid && number(item.amount) > 0)
+      .slice(0, 30)
+      .map(aiCalendarItem);
+    const paidItems = calendar
+      .filter((item) => item.kind !== "income" && item.paid && number(item.amount) > 0)
+      .slice(-20)
+      .map(aiCalendarItem);
+    const categoryTotals = new Map();
+    const addCategory = (category, amount, sourceCurrency) => {
+      const key = String(category || "Outras despesas").slice(0, 80);
+      const converted = convert(number(amount), sourceCurrency, currency, rate);
+      categoryTotals.set(key, (categoryTotals.get(key) || 0) + converted);
+    };
+    monthTransactions(month, "global")
+      .filter((item) => allOutflowTypes.includes(item.type) && !item.settlementOnly)
+      .forEach((item) => addCategory(item.category, item.amount, item.currency));
+    cardPurchaseExpenseEntries(month, "global")
+      .forEach((item) => addCategory(item.category, item.amount, item.currency));
+
+    const accounts = activeBankAccounts().map((account) => {
+      const activity = bankAccountMonthlyActivity(account, month);
+      return {
+        name: bankAccountName(account),
+        country: countryMeta[account.country]?.label || account.country,
+        currency: account.currency,
+        balance: bankAccountBalance(account, month),
+        receivedThisMonth: activity.received,
+        paidThisMonth: activity.paid,
+        selectedOnDashboard: selectedAccount?.id === account.id
+      };
+    });
+
+    const goals = activeFinancialGoals().map((goal) => {
+      const progress = goalProgress(goal);
+      return {
+        name: goalName(goal),
+        currency: goal.currency,
+        target: progress.target,
+        saved: progress.saved,
+        remaining: progress.remaining,
+        progressPercent: progress.percent,
+        targetDate: goal.targetDate || null
+      };
+    });
+    const reserveGoal = emergencyGoal();
+    const reserve = emergencyReserveStats(reserveGoal, summary);
+    const salary = factorySources().map((source) => {
+      const estimate = estimateFactorySourceSalary(source, month, month);
+      const deductions = estimateSalaryDeductions(source, estimate.total, month);
+      return {
+        company: String(source.name || "Empresa").slice(0, 80),
+        currency: estimate.currency,
+        grossEstimate: round(estimate.total, estimate.currency === "JPY" ? 0 : 2),
+        deductionsEstimate: deductions.total,
+        netEstimate: deductions.net,
+        workDays: estimate.workDays
+      };
+    }).filter((item) => item.grossEstimate > 0 || item.deductionsEstimate > 0);
+
+    return {
+      generatedAt: new Date().toISOString(),
+      selectedMonth: month,
+      baseCurrency: currency,
+      overview: {
+        actualInflow: round(summary.actualInflow, 2),
+        actualOutflow: round(summary.actualOutflow, 2),
+        currentDifference: round(summary.actualBalance, 2),
+        projectedInflow: round(summary.projectedInflow, 2),
+        projectedOutflow: round(summary.projectedOutflow, 2),
+        projectedDifference: round(summary.projectedBalance, 2),
+        openBillsTotal: round(summary.plannedOutflow, 2)
+      },
+      accounts,
+      salary,
+      spendingByCategory: [...categoryTotals.entries()]
+        .map(([category, amount]) => ({ category, amount: round(amount, 2), currency }))
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 15),
+      openItems,
+      paidItems,
+      recentTransactions: monthTransactions(month, "global").slice(0, 20).map((item) => ({
+        date: item.date,
+        title: String(item.title || "Lançamento").slice(0, 100),
+        category: String(item.category || "Sem categoria").slice(0, 80),
+        type: item.type,
+        amount: number(item.amount),
+        currency: item.currency
+      })),
+      goals,
+      emergencyReserve: {
+        currency,
+        target: round(reserve.target, 2),
+        saved: round(reserve.saved, 2),
+        remaining: round(Math.max(0, reserve.target - reserve.saved), 2),
+        suggestedMonthlyContribution: round(reserve.monthlyContribution, 2),
+        estimatedMonthsToGoal: reserve.monthsToGoal
+      },
+      nubankBoxes: (state.nubankBoxes || []).slice(0, 10).map((box) => {
+        const projection = nubankBoxProjection(box);
+        return {
+          name: String(box.name || "Caixinha").slice(0, 80),
+          currency: "BRL",
+          netEstimatedBalance: round(projection.net, 2),
+          principal: round(projection.principal, 2),
+          netYield: round(projection.net - projection.principal, 2),
+          goal: number(box.goalAmount),
+          cdiPercent: number(box.cdiPercent) || 100
+        };
+      })
+    };
+  }
+
+  function aiCalendarItem(item) {
+    return {
+      date: item.date,
+      title: String(item.title || "Conta").slice(0, 100),
+      category: String(item.category || "Sem categoria").slice(0, 80),
+      amount: number(item.amount),
+      currency: item.currency,
+      status: String(item.status || (item.paid ? "Pago" : "Aberto")).slice(0, 40)
     };
   }
 
