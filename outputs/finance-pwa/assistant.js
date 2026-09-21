@@ -100,16 +100,15 @@
 
   function renderWelcome() {
     const suggestions = [
+      ...(window.NekumaHelp?.suggestions || []),
       "Como estão minhas finanças neste mês?",
-      "Quais contas ainda preciso pagar?",
       "Quanto posso guardar sem comprometer o mês?",
-      "Analise minha reserva de emergência."
     ];
     return `
       <section class="ai-welcome">
         <div class="ai-welcome-icon"><i data-lucide="bar-chart-3" aria-hidden="true"></i></div>
         <h3>O que vamos analisar?</h3>
-        <p>Eu uso o mês selecionado no Nekuma para explicar saldos, despesas, contas abertas e metas.</p>
+        <p>Posso ensinar a usar o Nekuma sem limite ou analisar seus dados financeiros com a franquia diária.</p>
         <div class="ai-suggestions">
           ${suggestions.map((text) => `<button type="button" data-ai-suggestion="${escapeAttr(text)}">${escapeHtml(text)}</button>`).join("")}
         </div>
@@ -118,7 +117,10 @@
   }
 
   function renderMessage(message) {
-    return `<div class="ai-message is-${message.role === "user" ? "user" : "assistant"}"><span>${escapeHtml(message.text)}</span></div>`;
+    const kind = message.role === "assistant" && message.kind
+      ? `<small class="ai-message-kind is-${escapeAttr(message.kind)}">${message.kind === "help" ? "Ajuda do app · ilimitada" : message.kind === "calculation" ? "Cálculo do Nekuma · ilimitado" : message.kind === "analysis" ? "Análise com IA" : "Aviso"}</small>`
+      : "";
+    return `<div class="ai-message is-${message.role === "user" ? "user" : "assistant"}"><span>${kind}${escapeHtml(message.text)}</span></div>`;
   }
 
   async function submitQuestion(rawQuestion) {
@@ -127,6 +129,26 @@
     const history = messages.slice(-6);
     messages.push({ role: "user", text: question });
     messages = messages.slice(-MAX_MESSAGES);
+    const help = window.NekumaHelp?.answer(question);
+    if (help) {
+      messages.push({ role: "assistant", kind: "help", text: help.text });
+      messages = messages.slice(-MAX_MESSAGES);
+      saveMessages();
+      render();
+      root.querySelector("textarea")?.focus();
+      return;
+    }
+    let context = null;
+    try { context = await options.context?.(); } catch {}
+    const calculation = window.NekumaHelp?.financialAnswer(question, context);
+    if (calculation) {
+      messages.push({ role: "assistant", kind: "calculation", text: calculation });
+      messages = messages.slice(-MAX_MESSAGES);
+      saveMessages();
+      render();
+      root.querySelector("textarea")?.focus();
+      return;
+    }
     sending = true;
     saveMessages();
     render();
@@ -134,7 +156,7 @@
     try {
       const token = await options.token?.();
       if (!token) throw new Error("Sua sessão expirou. Entre novamente no Nekuma.");
-      const context = await options.context?.();
+      if (!context) context = await options.context?.();
       const response = await fetch("./api/ai", {
         method: "POST",
         cache: "no-store",
@@ -147,12 +169,18 @@
       });
       const payload = await response.json().catch(() => ({}));
       updateDailyUsage(payload);
-      if (!response.ok) throw new Error(payload.error || "A Nekuma IA está indisponível agora.");
-      messages.push({ role: "assistant", text: String(payload.answer || "Não consegui gerar uma resposta.") });
+      if (!response.ok) {
+        const localOnly = ["127.0.0.1", "localhost"].includes(location.hostname);
+        throw new Error(payload.error || (localOnly
+          ? "A análise com Qwen depende do Cloudflare e deve ser testada no app publicado. Ajuda e cálculos do Nekuma continuam disponíveis localmente."
+          : "A Nekuma IA está indisponível agora."));
+      }
+      messages.push({ role: "assistant", kind: "analysis", text: String(payload.answer || "Não consegui gerar uma resposta.") });
     } catch (error) {
       const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
       messages.push({
         role: "assistant",
+        kind: "system",
         text: timedOut ? "A análise demorou mais que o esperado. Tente novamente em alguns instantes." : (error.message || "Não consegui concluir a análise.")
       });
     } finally {
@@ -195,8 +223,8 @@
   function usageText() {
     if (dailyUsage.date !== utcDate()) dailyUsage = { date: utcDate(), limit: 3, remaining: null };
     return dailyUsage.remaining === null
-      ? `${dailyUsage.limit} perguntas disponíveis por dia`
-      : `${dailyUsage.remaining} de ${dailyUsage.limit} perguntas restantes hoje`;
+      ? `Ajuda e cálculos ilimitados · ${dailyUsage.limit} análises com IA por dia`
+      : `Ajuda e cálculos ilimitados · ${dailyUsage.remaining} de ${dailyUsage.limit} análises com IA restantes hoje`;
   }
 
   function utcDate() {
@@ -204,7 +232,7 @@
   }
 
   function validMessage(message) {
-    return message && ["user", "assistant"].includes(message.role) && typeof message.text === "string";
+    return message && ["user", "assistant"].includes(message.role) && typeof message.text === "string" && (!message.kind || ["help", "calculation", "analysis", "system"].includes(message.kind));
   }
 
   function escapeHtml(value) {

@@ -5,6 +5,7 @@ const files = [
   "outputs/finance-pwa/dashboard.js",
   "outputs/finance-pwa/metamask.js",
   "outputs/finance-pwa/binance.js",
+  "outputs/finance-pwa/assistant-help.js",
   "outputs/finance-pwa/assistant.js",
   "functions/api/binance.js",
   "functions/api/ai.js",

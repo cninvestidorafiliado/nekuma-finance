@@ -59,6 +59,7 @@ export async function onRequest({ request, env }) {
   if (!message) return json({ error: "Digite uma pergunta para a Nekuma IA." }, 400);
   const contextText = JSON.stringify(body?.context || {});
   if (new TextEncoder().encode(contextText).length > MAX_CONTEXT_BYTES) return json({ error: "O resumo financeiro está grande demais para análise." }, 413);
+  const financialFacts = buildFinancialFacts(body?.context);
   const history = Array.isArray(body?.history)
     ? body.history.filter(validHistoryMessage).slice(-6).map((item) => ({ role: item.role, content: String(item.text).slice(0, 1200) }))
     : [];
@@ -84,7 +85,7 @@ export async function onRequest({ request, env }) {
     ...history,
     {
       role: "user",
-      content: `Pergunta: ${message}\n\nResumo financeiro estruturado do usuário:\n${contextText}`
+      content: `Pergunta: ${message}\n\nFatos calculados pelo Nekuma (use estes valores; não recalcule):\n${JSON.stringify(financialFacts)}\n\nResumo financeiro estruturado do usuário:\n${contextText}`
     }
   ];
 
@@ -119,6 +120,41 @@ export async function onRequest({ request, env }) {
 function dailyLimit(value) {
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, 20) : DEFAULT_DAILY_LIMIT;
+}
+
+function buildFinancialFacts(context) {
+  const source = context && typeof context === "object" ? context : {};
+  const overview = source.overview && typeof source.overview === "object" ? source.overview : {};
+  const reserve = source.emergencyReserve && typeof source.emergencyReserve === "object" ? source.emergencyReserve : {};
+  const income = finiteNumber(overview.projectedInflow);
+  const outflow = finiteNumber(overview.projectedOutflow);
+  const available = Math.max(0, finiteNumber(overview.projectedDifference, income - outflow));
+  const openItems = Array.isArray(source.openItems) ? source.openItems : [];
+  return {
+    currency: String(source.baseCurrency || "").slice(0, 8),
+    projectedIncome: income,
+    projectedExpenses: outflow,
+    projectedAvailable: roundMoney(available),
+    openBillCount: openItems.length,
+    openBillsTotal: roundMoney(finiteNumber(overview.openBillsTotal, openItems.reduce((total, item) => total + finiteNumber(item?.amount), 0))),
+    savingsScenarios: [5, 10, 20].map((percent) => ({ percent, amount: roundMoney(income * percent / 100) })),
+    emergencyReserve: {
+      target: roundMoney(finiteNumber(reserve.target)),
+      saved: roundMoney(finiteNumber(reserve.saved)),
+      remaining: roundMoney(finiteNumber(reserve.remaining)),
+      suggestedMonthlyContribution: roundMoney(finiteNumber(reserve.suggestedMonthlyContribution)),
+      estimatedMonthsToGoal: Math.max(0, Math.round(finiteNumber(reserve.estimatedMonthsToGoal)))
+    }
+  };
+}
+
+function finiteNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function roundMoney(value) {
+  return Math.round(finiteNumber(value) * 100) / 100;
 }
 
 async function ensureUsageTable(db) {
@@ -175,4 +211,4 @@ function extractOutputText(payload) {
     .trim();
 }
 
-export { dailyLimit, extractOutputText, releaseQuestion, reserveQuestion, validHistoryMessage };
+export { buildFinancialFacts, dailyLimit, extractOutputText, releaseQuestion, reserveQuestion, validHistoryMessage };

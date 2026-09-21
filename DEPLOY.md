@@ -93,3 +93,6 @@ AI_DAILY_LIMIT=3
 O modelo padrao e `@cf/qwen/qwen3-30b-a3b-fp8`. Nao e necessaria uma chave de
 API externa. A tabela de limite diario e criada automaticamente no D1 no
 primeiro uso. Depois de mudar bindings ou variaveis, faca um novo deploy.
+Perguntas sobre o uso do app e calculos financeiros comuns sao respondidos
+localmente por `assistant-help.js`. Eles nao usam Workers AI nem a franquia de
+tres analises interpretativas por dia.

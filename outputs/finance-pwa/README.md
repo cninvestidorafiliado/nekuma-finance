@@ -102,6 +102,12 @@ perguntas por usuario/dia no D1 e envia ao modelo somente um resumo financeiro
 do mes selecionado. A IA e somente leitura e nao executa pagamentos nem altera
 cadastros.
 
+O agente e hibrido. `assistant-help.js` responde localmente e sem limite as
+duvidas sobre como usar o aplicativo e os calculos mais comuns: resumo mensal,
+contas abertas, saldos, gastos, reserva e cenarios de economia. Somente analises
+interpretativas livres chamam o Qwen e consomem a franquia diaria. Antes dessa
+chamada, o servidor calcula os fatos financeiros; o modelo apenas os interpreta.
+
 O `wrangler.toml` configura os bindings `AI` e `BINANCE_DB`. Mantenha no
 Cloudflare Pages, em **Settings > Variables and Secrets**:
 
