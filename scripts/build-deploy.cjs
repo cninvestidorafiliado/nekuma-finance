@@ -31,7 +31,7 @@ function main() {
   assertPathInside(outputDir, path.join(root, "outputs"));
   assertExists(sourceDir);
 
-  fs.rmSync(outputDir, { recursive: true, force: true });
+  resetOutputDir();
   fs.mkdirSync(outputDir, { recursive: true });
 
   publicFiles.forEach(copyPublicFile);
@@ -40,6 +40,19 @@ function main() {
 
   console.log(`Deploy pronto em ${relative(outputDir)}`);
   console.log(`Versao PWA: ${version}`);
+}
+
+function resetOutputDir() {
+  try {
+    fs.rmSync(outputDir, { recursive: true, force: true });
+  } catch (error) {
+    if (!["EBUSY", "EPERM"].includes(error.code) || !fs.existsSync(outputDir)) throw error;
+    for (const entry of fs.readdirSync(outputDir)) {
+      const target = path.join(outputDir, entry);
+      assertPathInside(target, outputDir);
+      fs.rmSync(target, { recursive: true, force: true });
+    }
+  }
 }
 
 function copyPublicFile(fileName) {

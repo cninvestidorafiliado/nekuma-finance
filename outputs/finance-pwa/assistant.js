@@ -6,6 +6,7 @@
   let options = null;
   let messages = loadMessages();
   let sending = false;
+  let dailyUsage = loadDailyUsage();
 
   const launcher = document.getElementById("nekuma-ai-button");
   const root = document.getElementById("ai-root");
@@ -76,6 +77,7 @@
           </button>
         </header>
         <div class="ai-privacy-note"><i data-lucide="shield-check" aria-hidden="true"></i> Somente leitura. Nenhum pagamento ou alteração será realizado.</div>
+        <div class="ai-usage-note"><i data-lucide="message-circle" aria-hidden="true"></i> ${usageText()}</div>
         <div class="ai-conversation" data-ai-conversation>
           ${messages.length ? messages.map(renderMessage).join("") : renderWelcome()}
           ${sending ? `<div class="ai-message is-assistant is-loading"><span></span><span></span><span></span><em>Analisando seus dados...</em></div>` : ""}
@@ -144,6 +146,7 @@
         signal: AbortSignal.timeout(45000)
       });
       const payload = await response.json().catch(() => ({}));
+      updateDailyUsage(payload);
       if (!response.ok) throw new Error(payload.error || "A Nekuma IA está indisponível agora.");
       messages.push({ role: "assistant", text: String(payload.answer || "Não consegui gerar uma resposta.") });
     } catch (error) {
@@ -172,6 +175,32 @@
 
   function saveMessages() {
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
+  }
+
+  function loadDailyUsage() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(`${STORAGE_KEY}-usage`) || "null");
+      return saved?.date === utcDate() ? saved : { date: utcDate(), limit: 3, remaining: null };
+    } catch {
+      return { date: utcDate(), limit: 3, remaining: null };
+    }
+  }
+
+  function updateDailyUsage(payload) {
+    if (!Number.isInteger(payload?.limit) || !Number.isInteger(payload?.remaining)) return;
+    dailyUsage = { date: utcDate(), limit: payload.limit, remaining: payload.remaining };
+    try { localStorage.setItem(`${STORAGE_KEY}-usage`, JSON.stringify(dailyUsage)); } catch {}
+  }
+
+  function usageText() {
+    if (dailyUsage.date !== utcDate()) dailyUsage = { date: utcDate(), limit: 3, remaining: null };
+    return dailyUsage.remaining === null
+      ? `${dailyUsage.limit} perguntas disponíveis por dia`
+      : `${dailyUsage.remaining} de ${dailyUsage.limit} perguntas restantes hoje`;
+  }
+
+  function utcDate() {
+    return new Date().toISOString().slice(0, 10);
   }
 
   function validMessage(message) {

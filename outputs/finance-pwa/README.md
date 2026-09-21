@@ -96,23 +96,24 @@ O endpoint exige login Supabase e, quando `PAYPAL_ALLOWED_EMAILS` estiver preenc
 
 ### Nekuma IA
 
-O painel Nekuma IA usa a Cloudflare Pages Function `/api/ai`. A funcao valida a
-sessao do Supabase e envia ao modelo somente um resumo financeiro do mes
-selecionado. A primeira versao e somente leitura e nao executa pagamentos nem
-altera cadastros.
+O painel Nekuma IA usa a Cloudflare Pages Function `/api/ai` e o Qwen 3 no
+Workers AI. A funcao valida a sessao do Supabase, aplica o limite de tres
+perguntas por usuario/dia no D1 e envia ao modelo somente um resumo financeiro
+do mes selecionado. A IA e somente leitura e nao executa pagamentos nem altera
+cadastros.
 
-Configure no Cloudflare Pages, em **Settings > Variables and Secrets**:
+O `wrangler.toml` configura os bindings `AI` e `BINANCE_DB`. Mantenha no
+Cloudflare Pages, em **Settings > Variables and Secrets**:
 
 ```text
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-5-mini
 SUPABASE_URL=https://seu-projeto.supabase.co
 SUPABASE_ANON_KEY=sua_anon_key
+AI_DAILY_LIMIT=3
 ```
 
-Defina `OPENAI_API_KEY` como secret. `OPENAI_MODEL` e opcional; quando ausente,
-o servidor usa `gpt-5-mini`. A chave nunca deve ser colocada em `app.js`,
-`assistant.js` ou outro arquivo publico.
+`AI_DAILY_LIMIT` e opcional; quando ausente, o servidor permite tres perguntas.
+`AI_MODEL` tambem e opcional e usa `@cf/qwen/qwen3-30b-a3b-fp8` por padrao. A
+tabela `ai_daily_usage` e criada automaticamente no D1 no primeiro uso.
 
 ## Supabase
 

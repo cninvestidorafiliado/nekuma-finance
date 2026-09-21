@@ -78,17 +78,18 @@ Se publicar manualmente com Wrangler, rode o comando a partir da raiz do projeto
 npx wrangler pages deploy outputs/finance-pwa-online --project-name=nekuma-finance --branch=main
 ```
 
-## Nekuma IA no Cloudflare
+## Nekuma IA com Qwen no Cloudflare
 
-A Nekuma IA usa `functions/api/ai.js`. Adicione estas variaveis em **Settings >
-Variables and Secrets** no projeto Cloudflare Pages:
+A Nekuma IA usa `functions/api/ai.js`, o binding `AI` do Workers AI e o banco
+D1 ja vinculado como `BINANCE_DB`. O `wrangler.toml` contem esses bindings.
+Mantenha estas variaveis em **Settings > Variables and Secrets**:
 
 ```text
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-5-mini
 SUPABASE_URL=https://seu-projeto.supabase.co
 SUPABASE_ANON_KEY=sua_anon_key
+AI_DAILY_LIMIT=3
 ```
 
-Marque `OPENAI_API_KEY` como secret. Depois de salvar, faca um novo deploy para
-que a Function receba a configuracao. Nunca exponha essa chave no frontend.
+O modelo padrao e `@cf/qwen/qwen3-30b-a3b-fp8`. Nao e necessaria uma chave de
+API externa. A tabela de limite diario e criada automaticamente no D1 no
+primeiro uso. Depois de mudar bindings ou variaveis, faca um novo deploy.

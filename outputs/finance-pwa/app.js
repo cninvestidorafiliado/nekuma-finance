@@ -404,7 +404,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=197")
+      navigator.serviceWorker.register("./service-worker.js?v=198")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -11186,7 +11186,7 @@
     if (aiAssistantLoadAttempted) return;
     aiAssistantLoadAttempted = true;
     const script = document.createElement("script");
-    script.src = "./assistant.js?v=197";
+    script.src = "./assistant.js?v=198";
     script.onload = mount;
     script.onerror = () => {
       aiAssistantLoadAttempted = false;
