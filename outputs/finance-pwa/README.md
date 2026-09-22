@@ -117,9 +117,11 @@ A visao detalhada da carteira consolida os ativos manuais, MetaMask e Binance.
 O topo converte o valor total estimado para BTC. Para cada posicao, mostra valor
 investido quando informado, preco atual, variacoes de 24 horas e 7 dias,
 rendimento desde a compra, grafico de sete dias e a carteira ou instituicao de
-custodia. Dois paineis adicionais mostram as cinco maiores criptos nao estaveis
-por capitalizacao de mercado e as cinco memecoins com maior alta em 24 horas. Os dados usam o endpoint
-`coins/markets` da CoinGecko e sao apenas informativos, sem recomendacao de compra.
+custodia. Quatro cards compactos mostram criptos populares, novas listagens,
+maiores altas e memecoins. Os cards usam `coins/markets` e `search/trending` da
+CoinGecko; o card Novas prioriza projetos recentes presentes nas tendencias, e
+nao representa a lista cronologica completa do servico. Os dados sao apenas
+informativos, sem recomendacao de compra.
 
 O `wrangler.toml` configura os bindings `AI` e `BINANCE_DB`. Mantenha no
 Cloudflare Pages, em **Settings > Variables and Secrets**:

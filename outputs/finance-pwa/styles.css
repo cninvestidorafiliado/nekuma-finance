@@ -10151,26 +10151,32 @@ h1 {
 .crypto-total-graph-empty { align-self: center; padding: 18px; color: #a9bfb5; border: 1px dashed rgb(255 255 255 / 20%); font-size: 0.76rem; text-align: center; }
 
 .crypto-holdings-card .panel-head { align-items: flex-start; }
-.crypto-discovery-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; min-width: 0; }
+.crypto-discovery-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; min-width: 0; }
 .crypto-market-radar { display: flex; flex-direction: column; min-width: 0; }
-.crypto-market-radar .panel-head { align-items: flex-start; }
+.crypto-market-radar.content-panel { padding: 15px; }
+.crypto-market-radar .panel-head { align-items: flex-start; gap: 8px; margin-bottom: 2px; }
+.crypto-market-radar .panel-head h2 { font-size: 0.88rem; }
+.crypto-market-radar .panel-head .row-meta { margin-top: 3px; font-size: 0.62rem; }
+.crypto-market-more { display: inline-flex; align-items: center; gap: 1px; flex: 0 0 auto; color: #2c4c40; font-size: 0.68rem; font-weight: 850; text-decoration: none; }
+.crypto-market-more:hover { color: #168157; }
+.crypto-market-more svg { width: 13px; height: 13px; }
 .crypto-market-list { display: grid; margin-top: 10px; }
-.crypto-market-row { display: grid; grid-template-columns: 24px 34px minmax(0, 1fr) minmax(96px, auto); align-items: center; gap: 9px; min-width: 0; padding: 11px 0; border-bottom: 1px solid #e0e7e3; }
+.crypto-market-row { display: grid; grid-template-columns: 18px 28px minmax(0, 1fr) minmax(68px, auto); align-items: center; gap: 6px; min-width: 0; padding: 9px 0; border-bottom: 1px solid #e0e7e3; }
 .crypto-market-row:last-child { border-bottom: 0; }
 .crypto-market-rank { color: #8a9892; font-size: 0.68rem; font-weight: 850; text-align: center; }
 .crypto-market-row > img,
-.crypto-market-row > .crypto-token-icon { width: 30px; height: 30px; border-radius: 50%; }
+.crypto-market-row > .crypto-token-icon { width: 27px; height: 27px; border-radius: 50%; }
 .crypto-market-row > div { min-width: 0; }
 .crypto-market-row > div > strong,
 .crypto-market-row > div > small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.crypto-market-row > div > strong { font-size: 0.79rem; }
-.crypto-market-row > div > small { margin-top: 2px; color: #7c8a84; font-size: 0.64rem; }
+.crypto-market-row > div > strong { font-size: 0.7rem; }
+.crypto-market-row > div > small { margin-top: 2px; color: #7c8a84; font-size: 0.58rem; }
 .crypto-market-price { text-align: right; }
-.crypto-market-price > span { display: block; margin-top: 3px; font-size: 0.7rem; font-weight: 850; }
-.crypto-market-empty { display: grid; justify-items: center; align-content: center; gap: 8px; min-height: 210px; padding: 20px; color: #76867f; text-align: center; }
+.crypto-market-price > span { display: block; margin-top: 3px; font-size: 0.62rem; font-weight: 850; }
+.crypto-market-empty { display: grid; justify-items: center; align-content: center; gap: 8px; min-height: 120px; padding: 14px; color: #76867f; text-align: center; }
 .crypto-market-empty svg { width: 30px; height: 30px; color: #bf8a1e; }
 .crypto-market-empty p { margin: 0; font-size: 0.76rem; }
-.crypto-market-disclaimer { margin: auto 0 0; padding-top: 12px; color: #85928c; border-top: 1px solid #edf1ef; font-size: 0.62rem; line-height: 1.45; }
+.crypto-market-source { margin: auto 0 0; padding-top: 9px; color: #87948e; border-top: 1px solid #edf1ef; font-size: 0.56rem; line-height: 1.4; }
 .crypto-management-card { padding-block: 16px; }
 .crypto-management-card .crypto-management { margin: 0; padding: 0; border: 0; }
 .crypto-management-card .crypto-origins.is-controls-only { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 12px; }
@@ -10477,7 +10483,7 @@ h1 {
 
 @media (max-width: 900px) {
   .crypto-total-card { grid-template-columns: 1fr; gap: 18px; }
-  .crypto-discovery-grid { grid-template-columns: 1fr; }
+  .crypto-discovery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .crypto-management-card .crypto-origins.is-controls-only { grid-template-columns: 1fr; }
   .crypto-management-card .crypto-origins.is-controls-only .crypto-origin-group { border-right: 0; border-bottom: 1px solid #dfe7e2; }
   .crypto-management-card .crypto-origins.is-controls-only .crypto-origin-group:last-child { border-bottom: 0; }
@@ -10492,6 +10498,7 @@ h1 {
   .crypto-total-actions .chip { min-width: 0; font-size: 0.64rem; }
   .crypto-total-actions .small-action { flex: 0 0 auto; padding-inline: 10px; }
   .crypto-total-sparkline { height: 88px; }
+  .crypto-discovery-grid { grid-template-columns: 1fr; }
   .crypto-market-row { grid-template-columns: 20px 30px minmax(0, 1fr) minmax(86px, auto); gap: 7px; }
   .crypto-market-row > img,
   .crypto-market-row > .crypto-token-icon { width: 28px; height: 28px; }

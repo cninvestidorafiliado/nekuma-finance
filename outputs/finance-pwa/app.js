@@ -404,7 +404,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=205")
+      navigator.serviceWorker.register("./service-worker.js?v=207")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -4833,7 +4833,9 @@
           ${renderCryptoPortfolioTable()}
         </section>
         <div class="crypto-discovery-grid">
-          ${renderCryptoMarketRadarCard("leaders")}
+          ${renderCryptoMarketRadarCard("popular")}
+          ${renderCryptoMarketRadarCard("new")}
+          ${renderCryptoMarketRadarCard("gainers")}
           ${renderCryptoMarketRadarCard("memes")}
         </div>
         <section class="content-panel crypto-management-card">
@@ -4889,12 +4891,17 @@
 
   function renderCryptoMarketRadarCard(kind) {
     const market = state.cryptoQuotes?.marketRadar || {};
-    const items = kind === "memes" ? market.memes || [] : market.leaders || [];
-    const title = kind === "memes" ? "Memecoins em alta" : "Principais do mercado";
-    const subtitle = kind === "memes" ? "5 memecoins com melhor desempenho em 24h" : "5 maiores criptos por capitalização de mercado";
+    const configs = {
+      popular: { title: "Populares", subtitle: "Principais do mercado", items: market.leaders || [], url: "https://www.coingecko.com/", source: "CoinGecko" },
+      new: { title: "Novas", subtitle: "Projetos recentes em tendência", items: market.newCoins || [], url: "https://www.coingecko.com/en/new-cryptocurrencies", source: "CoinGecko" },
+      gainers: { title: "Maiores altas", subtitle: "Melhor desempenho em 24h", items: market.gainers || [], url: "https://www.coingecko.com/en/crypto-gainers-losers", source: "CoinGecko" },
+      memes: { title: "Memecoins", subtitle: "Memes em alta nas últimas 24h", items: market.memes || [], url: "https://www.coingecko.com/en/categories/meme-token", source: "CoinGecko" }
+    };
+    const config = configs[kind] || configs.popular;
+    const items = config.items.slice(0, 3);
     return `
       <section class="content-panel crypto-market-radar is-${escapeAttr(kind)}">
-        <div class="panel-head"><div><span class="mini-label">Movimento de mercado</span><h2>${escapeHtml(title)}</h2><p class="row-meta">${escapeHtml(subtitle)}</p></div><span class="chip ${kind === "memes" ? "gold" : "green"}">${kind === "memes" ? "Meme" : "Top 5"}</span></div>
+        <div class="panel-head"><div><h2>${escapeHtml(config.title)}</h2><p class="row-meta">${escapeHtml(config.subtitle)}</p></div><a class="crypto-market-more" href="${escapeAttr(config.url)}" target="_blank" rel="noopener noreferrer">Mais<i data-lucide="chevron-right" aria-hidden="true"></i></a></div>
         ${items.length ? `<div class="crypto-market-list">${items.map((item, index) => `
           <div class="crypto-market-row">
             <span class="crypto-market-rank">${index + 1}</span>
@@ -4902,8 +4909,8 @@
             <div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.symbol)}</small></div>
             <div class="crypto-market-price"><strong>${formatDetailedCryptoPrice(convert(item.priceUsd, "USD", primaryCurrency(), latestRate(state.ui.selectedMonth)), primaryCurrency())}</strong><span class="${item.change24h >= 0 ? "income" : "expense"}">${formatPercent(item.change24h)}</span></div>
           </div>
-        `).join("")}</div>` : `<div class="crypto-market-empty"><i data-lucide="radar" aria-hidden="true"></i><p>${state.cryptoQuotes?.status === "loading" ? "Atualizando o radar..." : "Atualize as cotações para carregar o radar."}</p></div>`}
-        <p class="crypto-market-disclaimer">Desempenho passado não garante valorização futura. Este radar não é recomendação de compra.</p>
+        `).join("")}</div>` : `<div class="crypto-market-empty"><i data-lucide="radar" aria-hidden="true"></i><p>${state.cryptoQuotes?.status === "loading" ? "Atualizando..." : "Dados temporariamente indisponíveis."}</p></div>`}
+        <p class="crypto-market-source">Fonte: ${escapeHtml(config.source)} · Dados informativos</p>
       </section>
     `;
   }
@@ -11270,7 +11277,7 @@
     if (!hasPortfolio && state.ui.activeTab !== "crypto") return;
     cryptoRefreshTimer = setTimeout(() => scheduleCryptoRefresh(false), 60000);
     const updatedAt = state.cryptoQuotes?.updatedAt ? new Date(state.cryptoQuotes.updatedAt).getTime() : 0;
-    const stale = !updatedAt || Date.now() - updatedAt >= CRYPTO_QUOTE_INTERVAL;
+    const stale = !updatedAt || Date.now() - updatedAt >= CRYPTO_QUOTE_INTERVAL || state.cryptoQuotes?.marketRadar?.version !== 4;
     if (!document.hidden && (force || stale)) refreshCryptoQuotes(force);
   }
 
@@ -11604,7 +11611,7 @@
     if (aiAssistantLoadAttempted) return;
     aiAssistantLoadAttempted = true;
     const script = document.createElement("script");
-    script.src = "./assistant.js?v=205";
+    script.src = "./assistant.js?v=207";
     script.onload = mount;
     script.onerror = () => {
       aiAssistantLoadAttempted = false;
@@ -13742,12 +13749,34 @@
 
   async function fetchCryptoMarketRadar() {
     const base = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&page=1&sparkline=false&price_change_percentage=24h";
-    const [marketResponse, memeResponse] = await Promise.all([
-      fetch(`${base}&per_page=25`, { cache: "no-store" }),
-      fetch(`${base}&per_page=100&category=meme-token`, { cache: "no-store" })
+    const requestJson = async (url) => {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error("Falha ao buscar dados de mercado");
+      return response.json();
+    };
+    const [marketResult, memeResult, newResult] = await Promise.allSettled([
+      requestJson(`${base}&per_page=100`),
+      requestJson(`${base}&per_page=100&category=meme-token`),
+      requestJson("https://api.coingecko.com/api/v3/search/trending")
     ]);
-    if (!marketResponse.ok || !memeResponse.ok) throw new Error("Falha ao buscar o radar de mercado");
-    const [market, memes] = await Promise.all([marketResponse.json(), memeResponse.json()]);
+    const market = marketResult.status === "fulfilled" ? marketResult.value : [];
+    const memes = memeResult.status === "fulfilled" ? memeResult.value : [];
+    const trending = newResult.status === "fulfilled" ? newResult.value?.coins || [] : [];
+    const newCoins = trending
+      .map((entry) => entry?.item)
+      .filter((item) => item && number(item.data?.price) > 0)
+      .sort((a, b) => number(b.coin_id) - number(a.coin_id))
+      .slice(0, 3)
+      .map((item) => ({
+        id: String(item.id || ""),
+        symbol: String(item.symbol || "").toUpperCase(),
+        name: String(item.name || item.symbol || "Cripto"),
+        image: String(item.small || item.thumb || ""),
+        priceUsd: number(item.data?.price),
+        change24h: number(item.data?.price_change_percentage_24h?.usd),
+        marketCapRank: number(item.market_cap_rank)
+      }));
+    if (!market.length && !memes.length && !newCoins.length) throw new Error("Falha ao buscar o radar de mercado");
     const normalize = (items, sortByChange = true) => (Array.isArray(items) ? items : [])
       .filter((item) => Number.isFinite(Number(item.price_change_percentage_24h)))
       .sort(sortByChange ? (a, b) => Number(b.price_change_percentage_24h) - Number(a.price_change_percentage_24h) : (a, b) => number(a.market_cap_rank) - number(b.market_cap_rank))
@@ -13763,7 +13792,14 @@
       }));
     const stablecoins = new Set(["USDT", "USDC", "USDS", "DAI", "FDUSD", "USDE", "PYUSD", "TUSD", "BUSD"]);
     const leaders = (Array.isArray(market) ? market : []).filter((item) => !stablecoins.has(String(item.symbol || "").toUpperCase()));
-    return { leaders: normalize(leaders, false), memes: normalize(memes), updatedAt: new Date().toISOString() };
+    return {
+      version: 4,
+      leaders: normalize(leaders, false),
+      gainers: normalize(leaders),
+      memes: normalize(memes),
+      newCoins,
+      updatedAt: new Date().toISOString()
+    };
   }
 
   function collectSalaryProgressions(form) {
