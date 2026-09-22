@@ -404,7 +404,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=208")
+      navigator.serviceWorker.register("./service-worker.js?v=212")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -2985,6 +2985,8 @@
           ${renderToolbar()}
         </div>
 
+        ${renderDesktopFinanceStrip(summary)}
+
         <aside class="desktop-dashboard-column desktop-dashboard-left">
           <section class="content-panel overview-card balance-section-card">
             ${renderBalanceOverview(summary)}
@@ -3170,6 +3172,79 @@
     `;
   }
 
+  function renderDesktopFinanceStrip(summary) {
+    const hideBalance = Boolean(state.ui.hideBalance);
+    const salaryCards = dashboardSalaryCards(state.ui.selectedMonth);
+    const accounts = activeBankAccounts();
+    const salaryAccountIds = new Set(salaryCards.map((card) => card.bankAccountId).filter(Boolean));
+    const additionalAccounts = accounts.filter((account) => !salaryAccountIds.has(account.id));
+    return `
+      <section class="dashboard-finance-strip" aria-label="Salário previsto e contas bancárias">
+        <div class="dashboard-finance-strip-salaries">
+          ${salaryCards.length
+            ? salaryCards.map((card, index) => renderDesktopSalaryTile(card, hideBalance, index)).join("")
+            : `<article class="dashboard-finance-empty"><i data-lucide="calendar-days" aria-hidden="true"></i><div><strong>Salário previsto</strong><small>Cadastre uma fonte de renda para acompanhar a previsão.</small></div></article>`}
+        </div>
+        <div class="dashboard-finance-divider" aria-hidden="true"></div>
+        <div class="dashboard-account-strip" aria-label="Contas bancárias cadastradas">
+          ${additionalAccounts.map((account) => renderDesktopAccountTile(account, hideBalance)).join("")}
+          <button class="dashboard-add-account" type="button" data-action="open-modal" data-modal="bankAccount">
+            <i data-lucide="plus" aria-hidden="true"></i>
+            <span>Adicionar conta</span>
+          </button>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderDesktopSalaryTile(card, hideBalance, index = 0) {
+    const popoverId = `salary-popover-${index}`;
+    const receivingAccount = card.bankAccountId ? bankAccountById(card.bankAccountId) : null;
+    const activeReceivingAccount = receivingAccount?.active !== false ? receivingAccount : null;
+    return `
+      <article class="dashboard-salary-tile ${card.paid ? "is-paid" : ""} ${activeReceivingAccount ? "has-bank-background" : ""}" tabindex="0" aria-describedby="${popoverId}" ${desktopSalaryTileStyleAttrs(card, activeReceivingAccount)}>
+        <div class="dashboard-finance-title"><i data-lucide="calendar-days" aria-hidden="true"></i><strong>Salário previsto</strong>${activeReceivingAccount ? `<span class="dashboard-salary-account-label">Conta salário: ${escapeHtml(bankAccountName(activeReceivingAccount))}</span>` : ""}</div>
+        ${renderSalaryFormula(card, hideBalance)}
+        <div class="dashboard-finance-foot"><span>${escapeHtml(card.title)}</span><em>${escapeHtml(card.status)}</em></div>
+        ${!hideBalance && card.kind === "factory" ? renderSalaryPredictionDetails(card, { popover: true, id: popoverId }) : ""}
+      </article>
+    `;
+  }
+
+  function desktopSalaryTileStyleAttrs(card, account = null) {
+    const salaryColor = sanitizeColor(card.color, "#567c9b");
+    const styles = [
+      `--salary-color:${salaryColor}`,
+      `--salary-color-rgb:${hexToRgbValues(salaryColor)}`
+    ];
+    if (account) {
+      const accountColor = bankAccountColor(account);
+      const asset = bankCardAsset(account);
+      styles.push(`--account-color:${accountColor}`);
+      styles.push(`--account-color-rgb:${hexToRgbValues(accountColor)}`);
+      styles.push(`--salary-bank-bg:url('./assets/banks/${asset.file}')`);
+    }
+    return `style="${styles.map(escapeAttr).join(";")}"`;
+  }
+
+  function renderDesktopAccountTile(account, hideBalance) {
+    const country = countryMeta[account.country] || countryMeta.japao;
+    const balance = bankAccountBalance(account, state.ui.selectedMonth);
+    const isPrimary = state.ui.primaryBankAccountId === account.id;
+    return `
+      <article class="dashboard-account-tile ${isPrimary ? "is-primary" : ""}" ${bankAccountStyleAttrs(account)}>
+        <span class="dashboard-account-mark" aria-hidden="true">${escapeHtml(country.short || "BK")}</span>
+        <div class="dashboard-account-copy">
+          <div class="dashboard-account-heading"><strong>${escapeHtml(bankAccountName(account))}</strong>${isPrimary ? `<span>Principal</span>` : ""}</div>
+          <small>${countryFlag(account.country)} ${escapeHtml(country.label)} · ${escapeHtml(account.currency)}</small>
+          <em>Saldo da conta</em>
+          <b>${hideBalance ? maskedMoney(account.currency) : formatMoneyWithPrimary(balance, account.currency)}</b>
+        </div>
+        ${renderVisibilityToggle("balance", hideBalance, "saldos das contas")}
+      </article>
+    `;
+  }
+
   function renderDashboardSalaryCards(cards, hideBalance) {
     if (!cards.length) return "";
     return `
@@ -3221,7 +3296,7 @@
     `;
   }
 
-  function renderSalaryPredictionDetails(card) {
+  function renderSalaryPredictionDetails(card, options = {}) {
     if (card.kind !== "factory") return "";
     const breakdown = card.breakdown;
     const grossRows = breakdown ? [
@@ -3233,13 +3308,15 @@
     ] : [["Teiji", 0, card.teiji], ["Zangyou", 0, card.zangyou]];
     const deductionRows = card.deductions?.entries || [];
     const net = card.deductions?.configured ? card.deductions.net : card.amount;
-    return `<details class="salary-breakdown salary-prediction-breakdown">
-      <summary>Detalhamento do salario previsto</summary>
+    const body = `
       ${breakdown ? `<small>${breakdown.actualDays ? "Escala com apontamentos" : "Previsao pela escala"} · Fechamento ${formatShortDate(breakdown.periodEnd)}</small>` : ""}
       <dl>${grossRows.map(([label, hours, value]) => `<div><dt>${label}${hours ? ` (${number(hours).toFixed(2)}h)` : ""}</dt><dd>${formatMoney(value, card.currency)}</dd></div>`).join("")}${number(card.bonus) > 0 ? `<div><dt>Bonus</dt><dd>${formatMoney(card.bonus, card.currency)}</dd></div>` : ""}<div class="salary-detail-total"><dt>Salario bruto</dt><dd>${formatMoney(card.amount, card.currency)}</dd></div></dl>
       ${deductionRows.length ? `<dl>${deductionRows.map((item) => `<div><dt>${escapeHtml(item.label)}</dt><dd>- ${formatMoney(item.amount, card.currency)}</dd></div>`).join("")}<div class="salary-detail-total"><dt>Total de descontos</dt><dd>- ${formatMoney(card.deductions.total, card.currency)}</dd></div></dl>` : `<p class="row-meta">Nenhum desconto salarial configurado.</p>`}
-      <div class="salary-detail-net"><span>Liquido previsto</span><strong>${formatMoney(net, card.currency)}</strong></div>
-    </details>`;
+      <div class="salary-detail-net"><span>Liquido previsto</span><strong>${formatMoney(net, card.currency)}</strong></div>`;
+    if (options.popover) {
+      return `<div class="salary-detail-popover salary-prediction-breakdown" id="${escapeAttr(options.id || "salary-detail-popover")}" role="tooltip"><strong class="salary-detail-popover-title">Detalhamento do salário previsto</strong>${body}</div>`;
+    }
+    return `<details class="salary-breakdown salary-prediction-breakdown"><summary>Detalhamento do salario previsto</summary>${body}</details>`;
   }
 
   function renderSalaryTotalConverted(total, currency, month = state.ui.selectedMonth) {
@@ -3283,6 +3360,7 @@
           paymentMonth,
           date,
           color: source.color,
+          bankAccountId: source.bankAccountId || "",
           paid,
           canConfirm: !paid && isDateReached(date),
           status: paid ? "Pago" : `Previsto ${formatShortDate(date)}`
@@ -3306,6 +3384,7 @@
           month,
           date: item.date,
           color: source.color,
+          bankAccountId: source.bankAccountId || "",
           paid: false,
           canConfirm: due,
           status: due ? "Confirmar" : `Previsto ${formatShortDate(item.date)}`
@@ -11718,7 +11797,7 @@
     if (aiAssistantLoadAttempted) return;
     aiAssistantLoadAttempted = true;
     const script = document.createElement("script");
-    script.src = "./assistant.js?v=208";
+    script.src = "./assistant.js?v=212";
     script.onload = mount;
     script.onerror = () => {
       aiAssistantLoadAttempted = false;

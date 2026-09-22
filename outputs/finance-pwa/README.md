@@ -127,6 +127,11 @@ O card Detalhamento Cripto mantém o histórico das compras manuais: data, valor
 pago, quantidade, preço unitário na compra, corretora original, custódia atual e
 uma sequência opcional de transferências entre corretoras ou carteiras.
 
+Em telas desktop amplas, o resumo de salário e as contas bancárias ficam em uma
+faixa única logo abaixo do seletor de mês. O detalhamento salarial abre como um
+painel flutuante por mouse ou teclado, sem duplicar o resumo nas colunas. O
+layout compacto original é preservado em tablets e celulares.
+
 O `wrangler.toml` configura os bindings `AI` e `BINANCE_DB`. Mantenha no
 Cloudflare Pages, em **Settings > Variables and Secrets**:
 

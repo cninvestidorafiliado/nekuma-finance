@@ -149,6 +149,11 @@
       zones.forEach(column => column.remove());
       targets = [zone];
     } else {
+      if (window.matchMedia('(min-width: 1180px)').matches) {
+        const duplicatedOverview = cards.get('overview-card');
+        if (duplicatedOverview) duplicatedOverview.remove();
+        cards.delete('overview-card');
+      }
       const zone = document.createElement('div');
       zone.className = 'dashboard-stable-columns dashboard-category-columns';
       shell.append(zone);
