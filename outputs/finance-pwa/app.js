@@ -2,6 +2,7 @@
   "use strict";
 
   const STORAGE_KEY = "ponte-financeira-state-v4";
+  const SCOPED_STORAGE_PREFIX = "nekuma-finance-state-v5";
   const REMOTE_HOUSEHOLD_KEY = "ponte-financeira-household-id";
   const DUE_ALERT_KEY = "nekuma-finance-due-alert-key";
   const SALARY_RECEIPT_ALERT_KEY = "nekuma-finance-salary-receipt-alert-key";
@@ -382,8 +383,9 @@
   });
   const hasExplicitAuthView = authView === "login" || authView === "signup" || authView === "reset";
   cleanupLegacyStorage();
-  let state = loadState();
   const remoteStore = createRemoteStore();
+  let activeStorageKey = remoteStore.enabled ? "" : STORAGE_KEY;
+  let state = remoteStore.enabled ? createInitialState() : loadState();
   const remoteSession = {
     status: remoteStore.enabled ? (hasExplicitAuthView ? "signedOut" : "loading") : "local",
     user: null,
@@ -404,7 +406,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=215")
+      navigator.serviceWorker.register("./service-worker.js?v=216")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -806,6 +808,9 @@
     if (!remoteStore.enabled) return;
     if (hasPendingLocalChanges()) await flushRemoteState();
     await remoteStore.client.auth.signOut();
+    if (activeStorageKey) localStorage.removeItem(activeStorageKey);
+    activeStorageKey = "";
+    state = createInitialState();
     remoteSession.status = "signedOut";
     remoteSession.user = null;
     remoteSession.householdId = "";
@@ -944,6 +949,7 @@
   }
 
   async function loadRemoteStateForHousehold(householdId, createIfEmpty) {
+    activateRemoteStateStorage(householdId);
     const generation = stateGeneration;
     const household = await fetchRemoteHousehold(householdId);
     if (!household) throw new Error("Familia nao encontrada para este usuario.");
@@ -970,7 +976,7 @@
     }
     state.settings.dataMode = "online";
     if (remoteSession.household?.name) state.settings.familyName = remoteSession.household.name;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    persistLocalState();
     remoteSession.lastSyncedAt = data?.updated_at || null;
     if (shouldRewriteRemoteState) await flushRemoteState();
     if ((!data?.state || !Object.keys(data.state).length) && createIfEmpty) await flushRemoteState();
@@ -1096,7 +1102,7 @@
       if (current.error) throw current.error;
       if (resetTime(current.data?.state) > resetTime(state)) {
         state = { ...normalizeState(current.data.state), ui: state.ui };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        persistLocalState();
         remoteSession.lastSyncedAt = current.data.updated_at;
         lastLocalChangeAt = 0;
         renderKeepingScroll();
@@ -1247,7 +1253,7 @@
       state = merged.state;
       state.settings.dataMode = "online";
       if (remoteSession.household?.name) state.settings.familyName = remoteSession.household.name;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      persistLocalState();
       remoteSession.lastSyncedAt = data.updated_at || new Date().toISOString();
       if (merged.changed) await flushRemoteState();
       await loadRemoteHouseholdMembers();
@@ -1268,9 +1274,24 @@
     remoteSession.household = { ...(remoteSession.household || {}), name };
   }
 
-  function loadState() {
+  function remoteStateStorageKey(householdId) {
+    const userId = remoteSession?.user?.id || "anonymous";
+    return `${SCOPED_STORAGE_PREFIX}:${userId}:${householdId || "personal"}`;
+  }
+
+  function activateRemoteStateStorage(householdId) {
+    if (!remoteStore.enabled || !remoteSession.user || !householdId) return;
+    const nextKey = remoteStateStorageKey(householdId);
+    if (activeStorageKey === nextKey) return;
+    activeStorageKey = nextKey;
+    state = loadState(nextKey);
+  }
+
+  function loadState(storageKey = activeStorageKey) {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY) || localStorage.getItem("ponte-financeira-state-v3");
+      if (!storageKey) return createInitialState();
+      const stored = localStorage.getItem(storageKey)
+        || (storageKey === STORAGE_KEY ? localStorage.getItem("ponte-financeira-state-v3") : "");
       if (!stored) return createInitialState();
       return normalizeState(JSON.parse(stored));
     } catch (error) {
@@ -1955,7 +1976,7 @@
 
   function saveState(options = {}) {
     lastLocalChangeAt = Date.now();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    persistLocalState();
     if (options.remoteNow) {
       flushRemoteState().catch((error) => {
         remoteSession.error = error.message || "Falha ao sincronizar.";
@@ -1967,7 +1988,8 @@
   }
 
   function persistLocalState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (!activeStorageKey) return;
+    localStorage.setItem(activeStorageKey, JSON.stringify(state));
   }
 
   function createInitialState() {
@@ -3207,7 +3229,9 @@
       <article class="dashboard-salary-tile ${card.paid ? "is-paid" : ""} ${activeReceivingAccount ? "has-bank-background" : ""}" tabindex="0" aria-describedby="${popoverId}" ${desktopSalaryTileStyleAttrs(card, activeReceivingAccount)}>
         <div class="dashboard-finance-title"><i data-lucide="calendar-days" aria-hidden="true"></i><strong>Salário previsto</strong>${activeReceivingAccount ? `<span class="dashboard-salary-account-label">Conta salário: ${escapeHtml(bankAccountName(activeReceivingAccount))}</span>` : ""}</div>
         ${renderSalaryFormula(card, hideBalance)}
-        <div class="dashboard-finance-foot"><span>${escapeHtml(card.title)}</span><em>${escapeHtml(card.status)}</em></div>
+        <div class="dashboard-finance-foot"><span>${escapeHtml(card.title)}</span>${card.needsConfig
+          ? `<button class="small-action" type="button" data-action="open-modal" data-modal="incomeSource" data-id="${escapeAttr(card.id)}">Configurar salário</button>`
+          : `<em>${escapeHtml(card.status)}</em>`}</div>
         ${!hideBalance && card.kind === "factory" ? renderSalaryPredictionDetails(card, { popover: true, id: popoverId }) : ""}
       </article>
     `;
@@ -3258,7 +3282,9 @@
             ${!hideBalance ? renderSalaryPredictionDetails(card) : ""}
             <div class="salary-card-footer">
               <small>${escapeHtml(card.title)}</small>
-              ${card.canConfirm ? `
+              ${card.needsConfig ? `
+                <button class="salary-confirm-button" type="button" data-action="open-modal" data-modal="incomeSource" data-id="${escapeAttr(card.id)}">Configurar salário</button>
+              ` : card.canConfirm ? `
                 <button class="salary-confirm-button" type="button" data-action="open-modal" data-modal="salaryReceipt" data-payment-id="${escapeAttr(card.ref)}">Recebi</button>
               ` : `<em>${escapeHtml(card.status)}</em>`}
             </div>
@@ -3341,7 +3367,7 @@
           estimate.bonus = paidBonusTotal;
           estimate.total += paidBonusTotal;
         }
-        if (!estimate.configured) return null;
+        const needsConfig = !estimate.configured;
         const paid = isFactorySalaryPaid(source.id, workMonth);
         const deductions = estimateSalaryDeductions(source, estimate.total, paymentMonth);
         const date = factorySalaryDueDate(source, paymentMonth);
@@ -3363,9 +3389,10 @@
           date,
           color: source.color,
           bankAccountId: source.bankAccountId || "",
+          needsConfig,
           paid,
-          canConfirm: !paid && isDateReached(date),
-          status: paid ? "Pago" : `Previsto ${formatShortDate(date)}`
+          canConfirm: !needsConfig && !paid && isDateReached(date),
+          status: needsConfig ? "Configure o salário" : (paid ? "Pago" : `Previsto ${formatShortDate(date)}`)
         };
       })
       .filter(Boolean);
@@ -10106,7 +10133,12 @@
     saveState();
     closeModal();
     render();
-    showToast(updated ? "Empresa atualizada." : "Empresa salva.");
+    const savedSource = userIncomeSources().find((source) => source.id === data.id)
+      || userIncomeSources().at(-1);
+    const missingSalary = isFactory && !hasFactorySalaryConfig(savedSource);
+    showToast(missingSalary
+      ? "Empresa e conta salvas. Configure o salário para calcular a previsão."
+      : (updated ? "Empresa atualizada." : "Empresa salva."));
   }
 
   function saveWorkIncome(form) {
@@ -10801,7 +10833,7 @@
       if (remoteSession.household?.name) state.settings.familyName = remoteSession.household.name;
     }
     lastLocalChangeAt = Date.now();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    persistLocalState();
     renderKeepingScroll();
     try {
       if (remoteStore.enabled && remoteSession.status === "ready") {
@@ -11797,14 +11829,14 @@
         updatedAt: new Date().toISOString(),
         status: "ok"
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      persistLocalState();
       renderKeepingScroll();
     } catch (error) {
       state.fxQuotes = {
         ...(state.fxQuotes || {}),
         status: "error"
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      persistLocalState();
       renderKeepingScroll();
       showToast("Nao consegui atualizar as cotacoes agora.");
     } finally {
