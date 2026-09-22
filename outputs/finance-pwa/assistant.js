@@ -43,6 +43,11 @@
       options = null;
       close();
       launcher.hidden = true;
+    },
+    ask(question) {
+      if (!options || sending) return;
+      open();
+      submitQuestion(question);
     }
   };
 

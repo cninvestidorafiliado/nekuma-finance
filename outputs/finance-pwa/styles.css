@@ -10077,6 +10077,467 @@ h1 {
 .crypto-origin-group .empty-state { margin: 8px 0 0; font-size: 0.8rem; }
 .manual-crypto-group > .panel-head { border: 0; }
 @container panel (max-width: 500px) { .crypto-origin-group > .panel-head > .chips { width: 100%; justify-content: flex-end; } }
+
+/* Painel Cripto */
+.main-view.tab-crypto .tab-card-columns {
+  display: block;
+  width: 100%;
+  column-count: 1;
+}
+
+.main-view.tab-crypto .tab-card-columns > .crypto-page-layout {
+  width: 100%;
+}
+
+.crypto-page-layout {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.crypto-page-layout > .content-panel,
+.crypto-page-layout > .crypto-discovery-grid {
+  width: 100%;
+  margin: 0;
+  box-sizing: border-box;
+  break-inside: avoid;
+}
+
+.crypto-total-card {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(380px, 1.28fr);
+  align-items: stretch;
+  gap: 28px;
+  min-height: 194px;
+  padding: 26px;
+  overflow: hidden;
+  color: #f5fff9;
+  border-color: #264d40;
+  background: #17372f;
+  box-shadow: 0 14px 30px rgb(18 48 39 / 14%);
+}
+
+.crypto-total-copy,
+.crypto-total-market {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.crypto-total-copy { display: grid; align-content: center; gap: 7px; }
+.crypto-total-title { display: flex; align-items: center; gap: 8px; color: #c8d9d1; font-size: 0.78rem; font-weight: 800; }
+.crypto-total-title .visibility-toggle { color: #d8e7df; background: transparent; border-color: transparent; }
+.crypto-total-btc { display: block; font-size: clamp(1.8rem, 3vw, 2.75rem); line-height: 1.05; overflow-wrap: anywhere; }
+.crypto-total-btc small { font-size: 0.76rem; color: #a9c2b6; }
+.crypto-total-copy > p { margin: 0; color: #d5e5dd; font-size: 0.84rem; font-weight: 750; }
+.crypto-daily-result { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 12px; margin-top: 6px; font-size: 0.72rem; }
+.crypto-daily-result > span { color: #a9bfb5; }
+.crypto-total-card .income { color: #72e1ab; }
+.crypto-total-card .expense { color: #ff9386; }
+
+.crypto-total-market {
+  display: grid;
+  grid-template-rows: auto minmax(96px, 1fr);
+  align-items: end;
+}
+
+.crypto-total-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.crypto-total-actions .chip { display: inline-flex; align-items: center; gap: 6px; color: #17372f; background: #dff3e7; }
+.crypto-total-actions .chip svg,
+.crypto-total-actions button svg { width: 14px; height: 14px; }
+.crypto-total-actions .small-action { color: #effaf4; border-color: rgb(255 255 255 / 24%); background: rgb(255 255 255 / 8%); }
+.crypto-total-sparkline { display: block; width: 100%; height: 112px; overflow: visible; }
+.crypto-total-sparkline polyline { stroke: #e5cf42; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.crypto-total-graph-empty { align-self: center; padding: 18px; color: #a9bfb5; border: 1px dashed rgb(255 255 255 / 20%); font-size: 0.76rem; text-align: center; }
+
+.crypto-holdings-card .panel-head { align-items: flex-start; }
+.crypto-discovery-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; min-width: 0; }
+.crypto-market-radar { display: flex; flex-direction: column; min-width: 0; }
+.crypto-market-radar .panel-head { align-items: flex-start; }
+.crypto-market-list { display: grid; margin-top: 10px; }
+.crypto-market-row { display: grid; grid-template-columns: 24px 34px minmax(0, 1fr) minmax(96px, auto); align-items: center; gap: 9px; min-width: 0; padding: 11px 0; border-bottom: 1px solid #e0e7e3; }
+.crypto-market-row:last-child { border-bottom: 0; }
+.crypto-market-rank { color: #8a9892; font-size: 0.68rem; font-weight: 850; text-align: center; }
+.crypto-market-row > img,
+.crypto-market-row > .crypto-token-icon { width: 30px; height: 30px; border-radius: 50%; }
+.crypto-market-row > div { min-width: 0; }
+.crypto-market-row > div > strong,
+.crypto-market-row > div > small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crypto-market-row > div > strong { font-size: 0.79rem; }
+.crypto-market-row > div > small { margin-top: 2px; color: #7c8a84; font-size: 0.64rem; }
+.crypto-market-price { text-align: right; }
+.crypto-market-price > span { display: block; margin-top: 3px; font-size: 0.7rem; font-weight: 850; }
+.crypto-market-empty { display: grid; justify-items: center; align-content: center; gap: 8px; min-height: 210px; padding: 20px; color: #76867f; text-align: center; }
+.crypto-market-empty svg { width: 30px; height: 30px; color: #bf8a1e; }
+.crypto-market-empty p { margin: 0; font-size: 0.76rem; }
+.crypto-market-disclaimer { margin: auto 0 0; padding-top: 12px; color: #85928c; border-top: 1px solid #edf1ef; font-size: 0.62rem; line-height: 1.45; }
+.crypto-management-card { padding-block: 16px; }
+.crypto-management-card .crypto-management { margin: 0; padding: 0; border: 0; }
+.crypto-management-card .crypto-origins.is-controls-only { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 12px; }
+.crypto-management-card .crypto-origins.is-controls-only .crypto-origin-group { padding: 14px; border-right: 1px solid #dfe7e2; border-bottom: 0; }
+.crypto-management-card .crypto-origins.is-controls-only .crypto-origin-group:last-child { border-right: 0; }
+.crypto-management-card .crypto-origins.is-controls-only .panel-head { height: 100%; margin: 0; align-content: space-between; }
+.crypto-management-card .crypto-origins.is-controls-only .web3-error { grid-column: 1 / -1; }
+
+/* Tabela da carteira cripto */
+.crypto-table-scroll {
+  width: 100%;
+  margin-top: 16px;
+  overflow-x: auto;
+  border: 1px solid #d8e2dc;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.crypto-portfolio-table {
+  width: 100%;
+  min-width: 1080px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.crypto-portfolio-table th,
+.crypto-portfolio-table td {
+  padding: 13px 12px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid #e2e9e5;
+}
+
+.crypto-portfolio-table th {
+  color: #6c7d76;
+  background: #f7f9f7;
+  font-size: 0.67rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.crypto-portfolio-table tbody tr:last-child td { border-bottom: 0; }
+.crypto-portfolio-table tbody tr:hover { background: #fbfcfa; }
+.crypto-portfolio-table th:nth-child(1) { width: 220px; }
+.crypto-portfolio-table th:nth-child(2) { width: 132px; }
+.crypto-portfolio-table th:nth-child(3),
+.crypto-portfolio-table th:nth-child(4) { width: 82px; }
+.crypto-portfolio-table th:nth-child(5) { width: 132px; }
+.crypto-portfolio-table th:nth-child(6) { width: 145px; }
+.crypto-portfolio-table th:nth-child(7) { width: 155px; }
+
+.crypto-portfolio-table td > strong,
+.crypto-portfolio-table td > small {
+  display: block;
+}
+
+.crypto-portfolio-table td > strong { font-size: 0.82rem; }
+.crypto-portfolio-table td > small { margin-top: 3px; color: #788880; font-size: 0.66rem; line-height: 1.35; }
+
+.crypto-table-asset {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.crypto-table-asset .crypto-token-icon { width: 36px; height: 36px; }
+.crypto-table-asset strong,
+.crypto-table-asset small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crypto-table-asset strong { font-size: 0.82rem; }
+.crypto-table-asset small { margin-top: 2px; color: #74857d; font-size: 0.66rem; }
+.crypto-table-asset .crypto-table-invested { display: block; margin-top: 5px; color: #3c5c50; font-size: 0.68rem; font-weight: 800; }
+
+.crypto-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.crypto-change svg { width: 14px; height: 14px; }
+.crypto-change.is-empty { color: #87958f; }
+
+.crypto-sparkline { display: block; width: 118px; height: 38px; overflow: visible; }
+.crypto-sparkline polyline { stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.crypto-sparkline.is-positive polyline { stroke: #24a36d; }
+.crypto-sparkline.is-negative polyline { stroke: #d45849; }
+.crypto-sparkline-empty { color: #87958f; font-size: 0.68rem; }
+
+.crypto-wallet-source {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  max-width: 100%;
+  padding: 4px 8px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: #edf2ef;
+  color: #29483d;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crypto-wallet-source.is-metamask { color: #8a3d22; background: #fff0e9; }
+.crypto-wallet-source.is-binance { color: #705500; background: #fff4c9; }
+
+.crypto-table-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 9px 1px 0;
+  color: #76867f;
+  font-size: 0.68rem;
+}
+
+.crypto-table-note svg { width: 14px; height: 14px; }
+
+.crypto-portfolio-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 20px;
+  border: 1px dashed #cbd8d1;
+  background: #f8faf8;
+}
+
+.crypto-portfolio-empty > svg { width: 30px; height: 30px; color: #c78512; }
+.crypto-portfolio-empty > div { min-width: 0; flex: 1; }
+.crypto-portfolio-empty strong { color: #254338; }
+.crypto-portfolio-empty p { margin: 4px 0 0; color: #718179; font-size: 0.76rem; }
+.crypto-portfolio-empty button { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; }
+.crypto-portfolio-empty button svg { width: 15px; height: 15px; }
+
+.crypto-management {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #cbd8d1;
+}
+
+.crypto-management > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #36564a;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+}
+
+.crypto-management > summary::-webkit-details-marker { display: none; }
+.crypto-management > summary::after { content: "+"; color: #83938c; font-size: 1rem; }
+.crypto-management[open] > summary::after { content: "−"; }
+.crypto-management > summary svg { width: 16px; height: 16px; }
+.crypto-management[open] .crypto-origins { margin-top: 12px; }
+
+.crypto-radar {
+  margin-top: 18px;
+  padding-top: 20px;
+  border-top: 1px solid #cbd8d1;
+}
+
+.crypto-radar-head,
+.crypto-radar-summary,
+.crypto-radar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.crypto-radar-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 0 0;
+  font-size: 1.05rem;
+}
+
+.crypto-radar-head h3 svg { width: 19px; height: 19px; color: #c78512; }
+
+.crypto-risk-select {
+  display: grid;
+  grid-template-columns: auto minmax(128px, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: #64776f;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.crypto-risk-select select {
+  min-height: 36px;
+  padding: 0 34px 0 12px;
+  border: 1px solid #cbd8d1;
+  border-radius: 7px;
+  background: #f7faf7;
+  color: #17372d;
+  font: inherit;
+}
+
+.crypto-radar-summary {
+  justify-content: flex-start;
+  margin-top: 18px;
+  padding: 16px;
+  background: #f6f8f5;
+  border-left: 4px solid #d6a33b;
+}
+
+.crypto-radar-summary > div:last-child { min-width: 0; }
+.crypto-radar-summary p { margin: 8px 0 4px; color: #304a41; line-height: 1.45; }
+.crypto-radar-summary small { color: #72827c; }
+.crypto-radar-summary .chip { display: inline-flex; align-items: center; gap: 5px; }
+.crypto-radar-summary .chip svg { width: 14px; height: 14px; }
+
+.crypto-radar-gauge {
+  --radar-color: #d6a33b;
+  width: 72px;
+  height: 72px;
+  flex: 0 0 72px;
+  display: grid;
+  place-content: center;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  border-radius: 50%;
+  color: #183a30;
+  background: radial-gradient(circle at center, #fff 57%, transparent 59%), conic-gradient(var(--radar-color) calc(var(--radar-score) * 1%), #dde4df 0);
+}
+
+.crypto-radar-gauge.is-low { --radar-color: #3fa878; }
+.crypto-radar-gauge.is-high { --radar-color: #d85d4b; }
+.crypto-radar-gauge strong { font-size: 1.25rem; }
+.crypto-radar-gauge span { font-size: 0.68rem; color: #72827c; }
+
+.crypto-radar-insights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.crypto-radar-insight {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid #d9e2dd;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.crypto-radar-insight > svg {
+  width: 30px;
+  height: 30px;
+  padding: 7px;
+  border-radius: 50%;
+  color: #536a61;
+  background: #edf2ef;
+}
+
+.crypto-radar-insight.is-positive > svg { color: #18845a; background: #e6f5ed; }
+.crypto-radar-insight.is-warning > svg { color: #9b6a0a; background: #fff2d7; }
+.crypto-radar-insight.is-danger > svg { color: #b44336; background: #fde9e5; }
+.crypto-radar-insight strong { display: block; font-size: 0.82rem; line-height: 1.3; }
+.crypto-radar-insight p { margin: 4px 0 0; color: #687a73; font-size: 0.74rem; line-height: 1.45; }
+
+.crypto-radar-actions {
+  align-items: flex-start;
+  margin-top: 12px;
+}
+
+.crypto-radar-actions p {
+  display: flex;
+  gap: 7px;
+  margin: 5px 0 0;
+  color: #718179;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.crypto-radar-actions p svg { width: 15px; height: 15px; flex: 0 0 15px; }
+.crypto-radar-actions button { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.crypto-radar-actions button svg { width: 15px; height: 15px; }
+
+.crypto-radar-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 18px;
+  background: #f6f8f5;
+  color: #62756d;
+}
+
+.crypto-radar-empty > svg { width: 28px; height: 28px; color: #c78512; }
+.crypto-radar-empty strong { color: #254338; }
+.crypto-radar-empty p { margin: 4px 0 0; font-size: 0.78rem; }
+
+@media (max-width: 900px) {
+  .crypto-total-card { grid-template-columns: 1fr; gap: 18px; }
+  .crypto-discovery-grid { grid-template-columns: 1fr; }
+  .crypto-management-card .crypto-origins.is-controls-only { grid-template-columns: 1fr; }
+  .crypto-management-card .crypto-origins.is-controls-only .crypto-origin-group { border-right: 0; border-bottom: 1px solid #dfe7e2; }
+  .crypto-management-card .crypto-origins.is-controls-only .crypto-origin-group:last-child { border-bottom: 0; }
+  .crypto-radar-insights { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .crypto-page-layout { gap: 10px; }
+  .crypto-total-card { min-height: 0; padding: 20px 16px; }
+  .crypto-total-btc { font-size: 1.85rem; }
+  .crypto-total-actions { justify-content: space-between; align-items: stretch; }
+  .crypto-total-actions .chip { min-width: 0; font-size: 0.64rem; }
+  .crypto-total-actions .small-action { flex: 0 0 auto; padding-inline: 10px; }
+  .crypto-total-sparkline { height: 88px; }
+  .crypto-market-row { grid-template-columns: 20px 30px minmax(0, 1fr) minmax(86px, auto); gap: 7px; }
+  .crypto-market-row > img,
+  .crypto-market-row > .crypto-token-icon { width: 28px; height: 28px; }
+  .crypto-table-scroll { overflow: visible; border: 0; background: transparent; }
+  .crypto-portfolio-table { display: block; min-width: 0; }
+  .crypto-portfolio-table thead { display: none; }
+  .crypto-portfolio-table tbody { display: grid; gap: 10px; }
+  .crypto-portfolio-table tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 12px;
+    border: 1px solid #d8e2dc;
+    border-radius: 7px;
+    background: #fff;
+  }
+  .crypto-portfolio-table td {
+    display: block;
+    min-width: 0;
+    padding: 9px 6px;
+    border-bottom: 1px solid #edf1ef;
+  }
+  .crypto-portfolio-table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 5px;
+    color: #87968f;
+    font-size: 0.6rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+  .crypto-portfolio-table td:first-child { grid-column: 1 / -1; padding-top: 2px; }
+  .crypto-portfolio-table td:first-child::before { display: none; }
+  .crypto-portfolio-table td:nth-last-child(-n + 2) { border-bottom: 0; }
+  .crypto-table-asset { grid-template-columns: 42px minmax(0, 1fr); }
+  .crypto-table-asset .crypto-token-icon { width: 40px; height: 40px; }
+  .crypto-sparkline { width: 100%; max-width: 135px; }
+  .crypto-portfolio-empty { align-items: flex-start; flex-wrap: wrap; }
+  .crypto-portfolio-empty button { width: 100%; justify-content: center; }
+  .crypto-radar-head { align-items: flex-end; }
+  .crypto-risk-select { grid-template-columns: 1fr; gap: 3px; }
+  .crypto-risk-select select { min-width: 122px; }
+  .crypto-radar-summary { align-items: flex-start; padding: 14px 12px; }
+  .crypto-radar-gauge { width: 60px; height: 60px; flex-basis: 60px; }
+  .crypto-radar-actions { align-items: stretch; flex-direction: column; }
+  .crypto-radar-actions button { justify-content: center; width: 100%; }
+}
 .metamask-group h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; }
 .metamask-group h3 svg { width: 20px; height: 20px; }
 .metamask-group .panel-head { flex-wrap: wrap; gap: 10px; }

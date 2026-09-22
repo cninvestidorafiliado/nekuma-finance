@@ -404,7 +404,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=200")
+      navigator.serviceWorker.register("./service-worker.js?v=204")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -516,6 +516,7 @@
     if (action === "delete-receipt") deleteItem("receipts", button.dataset.id, "Recibo removido.");
     if (action === "delete-work-override") deleteItem("workScheduleOverrides", button.dataset.id, "Folga extra removida.");
     if (action === "refresh-crypto") refreshCryptoQuotes(true);
+    if (action === "open-crypto-ai") openCryptoAiAnalysis();
     if (action === "refresh-fx") refreshFxQuotes(true);
     if (action === "refresh-cdi") refreshCdiRates(true);
     if (action === "refresh-paypal") refreshPaypalBalance(true);
@@ -644,11 +645,18 @@
   };
   setInterval(refreshCalendarDate, 60000);
   app.addEventListener("change", event => {
-    if (!event.target.matches('[data-metamask-currency]')) return;
-    state.ui.metamaskCurrency = sanitizeCurrency(event.target.value, "USD");
-    saveState();
-    renderKeepingScroll();
-    refreshCryptoQuotes(true);
+    if (event.target.matches('[data-metamask-currency]')) {
+      state.ui.metamaskCurrency = sanitizeCurrency(event.target.value, "USD");
+      saveState();
+      renderKeepingScroll();
+      refreshCryptoQuotes(true);
+      return;
+    }
+    if (event.target.matches('[data-crypto-risk-profile]')) {
+      state.ui.cryptoRiskProfile = sanitizeCryptoRiskProfile(event.target.value);
+      saveState();
+      renderKeepingScroll();
+    }
   });
   app.addEventListener("toggle", event => {
     if (!event.target.matches('.metamask-details')) return;
@@ -1301,6 +1309,7 @@
         hideBalance: Boolean(raw.ui?.hideBalance),
         hideCalendarDetails: Boolean(raw.ui?.hideCalendarDetails),
         hideCryptoDetails: Boolean(raw.ui?.hideCryptoDetails),
+        cryptoRiskProfile: sanitizeCryptoRiskProfile(raw.ui?.cryptoRiskProfile),
         hideRecentTransactions: raw.ui?.hideRecentTransactions === undefined ? true : Boolean(raw.ui.hideRecentTransactions)
       },
       transactions: Array.isArray(raw.transactions) ? raw.transactions : base.transactions,
@@ -1970,6 +1979,7 @@
         hideBalance: false,
         hideCalendarDetails: false,
         hideCryptoDetails: false,
+        cryptoRiskProfile: "moderate",
         hideRecentTransactions: true
       },
       transactions: [],
@@ -2155,7 +2165,7 @@
     }, state.ui.selectedMonth);
     setupStableTabColumns();
     refreshIcons();
-    window.NekumaBinance?.mount({ token: currentSupabaseAccessToken, money: formatMoney, convert, hidden: () => state.ui.hideCryptoDetails, icon: symbol => renderCryptoTokenIcon({ symbol, color: cryptoCatalog[symbol]?.color || '#71877e' }), icons: refreshIcons });
+    window.NekumaBinance?.mount({ token: currentSupabaseAccessToken, money: formatMoney, convert, hidden: () => state.ui.hideCryptoDetails, icon: symbol => renderCryptoTokenIcon({ symbol, color: cryptoCatalog[symbol]?.color || '#71877e' }), icons: refreshIcons, onUpdate: () => { renderKeepingScroll(); refreshCryptoQuotes(true); } });
     mountAiAssistant();
     setupDashboardAccountCarousel();
     setupBankAccountOrdering();
@@ -2232,6 +2242,7 @@
   function setupStableTabColumns() {
     const wrapper = app.querySelector('.tab-card-columns');
     if (!wrapper || !window.matchMedia('(min-width: 760px)').matches) return;
+    if (state.ui.activeTab === "crypto") return;
     const count = window.matchMedia('(min-width: 1180px)').matches ? 3 : 2;
     [...wrapper.children].forEach(group => {
       if (group.matches('.split-grid, .profile-support-grid')) group.replaceWith(...group.children);
@@ -4812,17 +4823,391 @@
 
   function renderCryptoTab() {
     return `
-      <section class="content-panel crypto-panel crypto-page">
-        <div class="panel-head">
-          <h2>Criptomoedas</h2>
-          <div class="chips">
-            ${renderVisibilityToggle("crypto", state.ui.hideCryptoDetails, "criptos compradas")}
-            <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
+      <div class="crypto-page-layout">
+        ${renderCryptoTotalCard()}
+        <section class="content-panel crypto-holdings-card">
+          <div class="panel-head">
+            <div><span class="mini-label">Portfólio consolidado</span><h2>Em carteira</h2><p class="row-meta">Posições manuais, MetaMask e Binance.</p></div>
+            <div class="chips">${renderVisibilityToggle("crypto", state.ui.hideCryptoDetails, "criptos compradas")}</div>
           </div>
+          ${renderCryptoPortfolioTable()}
+        </section>
+        <div class="crypto-discovery-grid">
+          ${renderCryptoMarketRadarCard("leaders")}
+          ${renderCryptoMarketRadarCard("memes")}
         </div>
-        ${renderCryptoPanel(false)}
+        <section class="content-panel crypto-management-card">
+          <details class="crypto-management">
+            <summary><i data-lucide="settings-2" aria-hidden="true"></i>Gerenciar carteiras e cadastros</summary>
+            ${renderCryptoPanel(false, true)}
+          </details>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderCryptoTotalCard() {
+    const rows = cryptoPortfolioRows();
+    const currency = primaryCurrency();
+    const total = rows.reduce((sumValue, item) => sumValue + number(item.value), 0);
+    const btcPrice = cryptoPrice("BTC", currency);
+    const totalBtc = btcPrice > 0 ? total / btcPrice : 0;
+    const dailyDelta = rows.reduce((sumValue, item) => {
+      const change = cryptoQuoteChange(item.symbol, "24h", currency);
+      const denominator = Number.isFinite(change) ? 1 + change / 100 : 0;
+      return denominator > 0 ? sumValue + item.value - item.value / denominator : sumValue;
+    }, 0);
+    const dailyPct = total - dailyDelta > 0 ? (dailyDelta / (total - dailyDelta)) * 100 : 0;
+    const graph = cryptoPortfolioSparkline(rows, currency);
+    const hidden = Boolean(state.ui.hideCryptoDetails);
+    return `
+      <section class="content-panel crypto-total-card">
+        <div class="crypto-total-copy">
+          <div class="crypto-total-title"><span>Valor total estimado</span>${renderVisibilityToggle("crypto", state.ui.hideCryptoDetails, "valor total da carteira")}</div>
+          <strong class="crypto-total-btc">${hidden ? "••••••••" : formatCryptoAmount(totalBtc)} <small>BTC</small></strong>
+          <p>${hidden ? "••••" : formatMoney(total, currency)}</p>
+          <div class="crypto-daily-result"><span>Ganhos e perdas de hoje</span><strong class="${dailyDelta >= 0 ? "income" : "expense"}">${hidden ? "••••" : `${formatSignedMoney(dailyDelta, currency)} (${formatPercent(dailyPct)})`}</strong></div>
+        </div>
+        <div class="crypto-total-market">
+          <div class="crypto-total-actions"><span class="chip blue"><i data-lucide="sparkles" aria-hidden="true"></i>Como está o mercado hoje?</span><button class="small-action ghost" type="button" data-action="refresh-crypto"><i data-lucide="refresh-cw" aria-hidden="true"></i>Atualizar</button></div>
+          ${graph.length > 1 ? renderSparklineValues(graph, "Evolução estimada da carteira nos últimos sete dias", "crypto-total-sparkline") : `<div class="crypto-total-graph-empty">O gráfico aparecerá após a atualização das cotações.</div>`}
+        </div>
       </section>
     `;
+  }
+
+  function cryptoPortfolioSparkline(rows, currency) {
+    const series = rows.map((item) => ({ item, values: state.cryptoQuotes?.prices?.[item.symbol]?.sparkline7d || [] })).filter((entry) => entry.values.length > 1);
+    if (!series.length) return [];
+    const size = Math.max(...series.map((entry) => entry.values.length));
+    const usdFactor = currency === "USD" ? 1 : convert(1, "USD", currency, latestRate(state.ui.selectedMonth));
+    return Array.from({ length: size }, (_, index) => series.reduce((total, entry) => {
+      const sourceIndex = Math.min(entry.values.length - 1, Math.round((index / Math.max(1, size - 1)) * (entry.values.length - 1)));
+      return total + number(entry.values[sourceIndex]) * number(entry.item.quantity) * usdFactor;
+    }, 0));
+  }
+
+  function renderCryptoMarketRadarCard(kind) {
+    const market = state.cryptoQuotes?.marketRadar || {};
+    const items = kind === "memes" ? market.memes || [] : market.leaders || [];
+    const title = kind === "memes" ? "Memecoins em alta" : "Radar cripto";
+    const subtitle = kind === "memes" ? "5 memecoins com melhor desempenho em 24h" : "5 criptos com melhor desempenho em 24h";
+    return `
+      <section class="content-panel crypto-market-radar is-${escapeAttr(kind)}">
+        <div class="panel-head"><div><span class="mini-label">Movimento de mercado</span><h2>${escapeHtml(title)}</h2><p class="row-meta">${escapeHtml(subtitle)}</p></div><span class="chip ${kind === "memes" ? "gold" : "green"}">${kind === "memes" ? "Meme" : "Top 5"}</span></div>
+        ${items.length ? `<div class="crypto-market-list">${items.map((item, index) => `
+          <div class="crypto-market-row">
+            <span class="crypto-market-rank">${index + 1}</span>
+            ${item.image ? `<img src="${escapeAttr(item.image)}" alt="" width="30" height="30" loading="lazy" referrerpolicy="no-referrer">` : renderCryptoTokenIcon({ symbol: item.symbol, color: cryptoCatalog[item.symbol]?.color || "#71877e" })}
+            <div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.symbol)}</small></div>
+            <div class="crypto-market-price"><strong>${formatDetailedCryptoPrice(convert(item.priceUsd, "USD", primaryCurrency(), latestRate(state.ui.selectedMonth)), primaryCurrency())}</strong><span class="${item.change24h >= 0 ? "income" : "expense"}">${formatPercent(item.change24h)}</span></div>
+          </div>
+        `).join("")}</div>` : `<div class="crypto-market-empty"><i data-lucide="radar" aria-hidden="true"></i><p>${state.cryptoQuotes?.status === "loading" ? "Atualizando o radar..." : "Atualize as cotações para carregar o radar."}</p></div>`}
+        <p class="crypto-market-disclaimer">Desempenho passado não garante valorização futura. Este radar não é recomendação de compra.</p>
+      </section>
+    `;
+  }
+
+  function renderCryptoPortfolioTable() {
+    const rows = cryptoPortfolioRows();
+    if (!rows.length) {
+      return `<div class="crypto-portfolio-empty"><i data-lucide="coins" aria-hidden="true"></i><div><strong>Nenhum ativo encontrado</strong><p>Conecte uma carteira ou cadastre uma cripto para montar sua visão detalhada.</p></div><button class="small-action" type="button" data-action="open-modal" data-modal="crypto"><i data-lucide="plus" aria-hidden="true"></i>Nova cripto</button></div>`;
+    }
+    return `
+      <div class="crypto-table-scroll" role="region" aria-label="Detalhamento da carteira cripto" tabindex="0">
+        <table class="crypto-portfolio-table">
+          <thead><tr><th>Ativo / investido</th><th>Preço atual</th><th>24h</th><th>7d</th><th>Rendimento</th><th>Gráfico 7 dias</th><th>Carteira</th></tr></thead>
+          <tbody>
+            ${rows.map((item) => {
+              const hidden = Boolean(state.ui.hideCryptoDetails);
+              const change24h = cryptoQuoteChange(item.symbol, "24h", item.currency);
+              const change7d = cryptoQuoteChange(item.symbol, "7d", item.currency);
+              const hasReturn = Number.isFinite(item.pnlPct);
+              return `
+                <tr>
+                  <td data-label="Ativo / investido"><div class="crypto-table-asset">${renderCryptoTokenIcon(item)}<div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.symbol)} · ${hidden ? "••••" : `${formatCryptoAmount(item.quantity)} ${escapeHtml(item.symbol)}`}</small><span class="crypto-table-invested">Investido: ${hidden ? "••••" : item.hasCost ? formatMoney(item.cost, item.currency) : "não informado"}</span></div></div></td>
+                  <td data-label="Preço atual"><strong>${formatDetailedCryptoPrice(item.price, item.currency)}</strong><small>${escapeHtml(item.currency)}</small></td>
+                  <td data-label="24h">${renderCryptoChange(change24h)}</td>
+                  <td data-label="7d">${renderCryptoChange(change7d)}</td>
+                  <td data-label="Rendimento">${hidden ? `<strong>••••</strong>` : hasReturn ? `<strong class="${item.pnl >= 0 ? "income" : "expense"}">${formatPercent(item.pnlPct)}</strong><small class="${item.pnl >= 0 ? "income" : "expense"}">${formatSignedMoney(item.pnl, item.currency)}</small>` : `<strong>—</strong><small>Custo necessário</small>`}</td>
+                  <td data-label="Gráfico 7 dias">${renderCryptoSparkline(item.symbol)}</td>
+                  <td data-label="Carteira"><span class="crypto-wallet-source is-${escapeAttr(item.sourceType)}">${escapeHtml(item.provider)}</span><small>${escapeHtml(item.sourceDetail || "Custódia informada")}</small></td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+      <p class="crypto-table-note"><i data-lucide="clock-3" aria-hidden="true"></i>${escapeHtml(cryptoStatusText().label)} · Variações de mercado não representam o rendimento desde a compra.</p>
+    `;
+  }
+
+  function cryptoPortfolioRows(currency = primaryCurrency()) {
+    const rows = [];
+    const manualGroups = new Map();
+    cryptoAssetRows(currency).forEach((item) => {
+      const provider = item.provider || "Não informado";
+      const key = `${item.symbol}|${normalizeLookupText(provider)}`;
+      const current = manualGroups.get(key) || { ...item, quantity: 0, cost: 0, value: 0, pnl: 0, hasCost: true, provider, sourceType: "manual", sourceDetail: "Cadastro manual" };
+      current.quantity += item.quantity;
+      current.cost += item.cost;
+      current.value += item.value;
+      current.pnl += item.pnl;
+      manualGroups.set(key, current);
+    });
+    manualGroups.forEach((item) => {
+      item.pnlPct = item.cost > 0 ? round((item.pnl / item.cost) * 100, 2) : null;
+      item.price = cryptoPrice(item.symbol, currency) || (item.quantity ? item.value / item.quantity : 0);
+      rows.push(item);
+    });
+
+    const normalizedWallet = normalizeWeb3Wallet(state.web3Wallet);
+    const wallets = normalizedWallet.wallets.length ? normalizedWallet.wallets : normalizedWallet.address ? [normalizedWallet] : [];
+    wallets.forEach((wallet) => {
+      const network = web3NetworkMeta(wallet.chainId);
+      [{ symbol: network.symbol, balance: wallet.balance }, ...(wallet.tokens || [])].forEach((token) => {
+        const symbol = normalizeCryptoSymbol(token.symbol === "USDC.e" ? "USDC" : token.symbol);
+        const quantity = number(token.balance);
+        const price = cryptoPrice(symbol, currency);
+        if (quantity <= 0) return;
+        const meta = cryptoCatalog[symbol] || { name: token.symbol || symbol, color: "#71877e" };
+        rows.push({
+          id: `metamask:${wallet.chainId}:${wallet.address}:${symbol}`,
+          symbol,
+          name: meta.name || symbol,
+          color: meta.color,
+          quantity,
+          cost: 0,
+          value: price * quantity,
+          price,
+          pnl: null,
+          pnlPct: null,
+          hasCost: false,
+          provider: "MetaMask",
+          sourceType: "metamask",
+          sourceDetail: `${network.name} · ${shortAddress(wallet.address)}`,
+          currency
+        });
+      });
+    });
+
+    const binance = window.NekumaBinance?.snapshot?.();
+    if (binance?.connected) {
+      (binance.tokens || []).forEach((token) => {
+        const symbol = normalizeCryptoSymbol(token.symbol);
+        const quantity = number(token.quantity);
+        const price = cryptoPrice(symbol, currency) || convert(number(token.priceUsdt), "USD", currency, latestRate(state.ui.selectedMonth));
+        if (quantity <= 0) return;
+        const meta = cryptoCatalog[symbol] || { name: symbol, color: "#f3ba2f" };
+        rows.push({ id: `binance:${symbol}`, symbol, name: meta.name || symbol, color: meta.color, quantity, cost: 0, value: price * quantity, price, pnl: null, pnlPct: null, hasCost: false, provider: "Binance", sourceType: "binance", sourceDetail: "Conta Spot", currency });
+      });
+    }
+    return rows.sort((a, b) => (b.value || 0) - (a.value || 0));
+  }
+
+  function cryptoQuoteChange(symbol, period, currency = primaryCurrency()) {
+    const quote = state.cryptoQuotes?.prices?.[normalizeCryptoSymbol(symbol)];
+    if (!quote) return null;
+    const values = period === "7d" ? quote.changes7d : quote.changes24h;
+    const value = values?.[currency] ?? (period === "7d" ? quote.change7d : quote.change24h);
+    return Number.isFinite(Number(value)) ? Number(value) : null;
+  }
+
+  function renderCryptoChange(value) {
+    if (!Number.isFinite(value)) return `<span class="crypto-change is-empty">—</span>`;
+    return `<span class="crypto-change ${value >= 0 ? "income" : "expense"}"><i data-lucide="${value >= 0 ? "trending-up" : "trending-down"}" aria-hidden="true"></i>${escapeHtml(formatPercent(value))}</span>`;
+  }
+
+  function renderCryptoSparkline(symbol) {
+    const values = state.cryptoQuotes?.prices?.[normalizeCryptoSymbol(symbol)]?.sparkline7d;
+    if (!Array.isArray(values) || values.length < 2) return `<span class="crypto-sparkline-empty">Sem histórico</span>`;
+    return renderSparklineValues(values, `Gráfico de ${symbol} nos últimos sete dias`);
+  }
+
+  function renderSparklineValues(values, label, className = "crypto-sparkline") {
+    const width = 118;
+    const height = 38;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    const points = values.map((value, index) => `${round((index / (values.length - 1)) * width, 1)},${round(height - ((value - min) / range) * (height - 4) - 2, 1)}`).join(" ");
+    const positive = values.at(-1) >= values[0];
+    return `<svg class="${escapeAttr(className)} ${positive ? "is-positive" : "is-negative"}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeAttr(label)}"><polyline points="${points}" fill="none" vector-effect="non-scaling-stroke" /></svg>`;
+  }
+
+  function formatDetailedCryptoPrice(value, currency) {
+    const amount = number(value);
+    if (!amount) return "Cotação indisponível";
+    const maximumFractionDigits = amount >= 100 ? (currency === "JPY" ? 0 : 2) : amount >= 1 ? 4 : 8;
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency, minimumFractionDigits: 0, maximumFractionDigits }).format(amount);
+  }
+
+  function renderCryptoRadar() {
+    const radar = cryptoRadarSnapshot();
+    const profile = sanitizeCryptoRiskProfile(state.ui.cryptoRiskProfile);
+    const profileLabel = { conservative: "Conservador", moderate: "Moderado", aggressive: "Arrojado" }[profile];
+    const riskMeta = {
+      low: { label: "Risco controlado", tone: "green", icon: "shield-check" },
+      medium: { label: "Atenção", tone: "gold", icon: "activity" },
+      high: { label: "Risco elevado", tone: "red", icon: "triangle-alert" }
+    }[radar.risk];
+    return `
+      <section class="crypto-radar" aria-labelledby="crypto-radar-title">
+        <div class="crypto-radar-head">
+          <div>
+            <span class="mini-label">Análise educativa da carteira</span>
+            <h3 id="crypto-radar-title"><i data-lucide="radar" aria-hidden="true"></i>Radar Cripto</h3>
+          </div>
+          <label class="crypto-risk-select">
+            <span>Perfil</span>
+            <select data-crypto-risk-profile aria-label="Perfil de risco do Radar Cripto">
+              <option value="conservative" ${profile === "conservative" ? "selected" : ""}>Conservador</option>
+              <option value="moderate" ${profile === "moderate" ? "selected" : ""}>Moderado</option>
+              <option value="aggressive" ${profile === "aggressive" ? "selected" : ""}>Arrojado</option>
+            </select>
+          </label>
+        </div>
+        ${radar.assetCount ? `
+          <div class="crypto-radar-summary">
+            <div class="crypto-radar-gauge is-${escapeAttr(radar.risk)}" style="--radar-score:${radar.score}">
+              <strong>${radar.score}</strong><span>/100</span>
+            </div>
+            <div>
+              <span class="chip ${riskMeta.tone}"><i data-lucide="${riskMeta.icon}" aria-hidden="true"></i>${riskMeta.label}</span>
+              <p>${escapeHtml(radar.summary)}</p>
+              <small>${radar.assetCount} ${radar.assetCount === 1 ? "ativo analisado" : "ativos analisados"} · perfil ${profileLabel.toLowerCase()}</small>
+            </div>
+          </div>
+          <div class="crypto-radar-insights">
+            ${radar.insights.map((item) => `
+              <article class="crypto-radar-insight is-${escapeAttr(item.tone)}">
+                <i data-lucide="${escapeAttr(item.icon)}" aria-hidden="true"></i>
+                <div><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.text)}</p></div>
+              </article>
+            `).join("")}
+          </div>
+          <div class="crypto-radar-actions">
+            <p><i data-lucide="info" aria-hidden="true"></i>Não é ordem de compra ou venda. Revise riscos, taxas e sua reserva antes de investir.</p>
+            <button class="small-action" type="button" data-action="open-crypto-ai"><i data-lucide="sparkles" aria-hidden="true"></i>Aprofundar com IA</button>
+          </div>
+        ` : `
+          <div class="crypto-radar-empty">
+            <i data-lucide="radar" aria-hidden="true"></i>
+            <div><strong>Cadastre ou conecte uma carteira</strong><p>O Radar precisa de ativos com saldo positivo para analisar concentração e exposição.</p></div>
+          </div>
+        `}
+      </section>
+    `;
+  }
+
+  function sanitizeCryptoRiskProfile(value) {
+    return ["conservative", "moderate", "aggressive"].includes(value) ? value : "moderate";
+  }
+
+  function cryptoRadarSnapshot() {
+    const currency = primaryCurrency();
+    const positions = new Map();
+    const unpricedSymbols = new Set();
+    const addPosition = (symbolValue, value, cost = 0, hasCost = false) => {
+      const symbol = normalizeCryptoSymbol(symbolValue === "USDC.e" ? "USDC" : symbolValue || "");
+      if (!symbol || number(value) <= 0) return;
+      const current = positions.get(symbol) || { symbol, value: 0, knownValue: 0, cost: 0, hasCost: false };
+      current.value += number(value);
+      current.cost += number(cost);
+      if (hasCost) current.knownValue += number(value);
+      current.hasCost = current.hasCost || Boolean(hasCost);
+      positions.set(symbol, current);
+    };
+    cryptoAssetRows(currency).forEach((item) => {
+      addPosition(item.symbol, item.value, item.cost, true);
+      if (!cryptoPrice(item.symbol, currency)) unpricedSymbols.add(item.symbol);
+    });
+    const walletCurrency = sanitizeCurrency(state.ui.metamaskCurrency || currency, currency);
+    const walletFx = walletCurrency === currency ? 1 : convert(1, walletCurrency, currency, latestRate(state.ui.selectedMonth));
+    const normalizedWallet = normalizeWeb3Wallet(state.web3Wallet);
+    const connectedWallets = normalizedWallet.wallets.length ? normalizedWallet.wallets : normalizedWallet.address ? [normalizedWallet] : [];
+    connectedWallets.forEach((wallet) => {
+      const nativeSymbol = web3NetworkMeta(wallet.chainId).symbol;
+      [{ symbol: nativeSymbol, balance: wallet.balance }, ...(wallet.tokens || [])].forEach((token) => {
+        const symbol = token.symbol === "USDC.e" ? "USDC" : token.symbol;
+        const price = cryptoPrice(symbol, walletCurrency);
+        if (number(token.balance) > 0 && price > 0) addPosition(symbol, number(token.balance) * price * walletFx);
+        else if (number(token.balance) > 0) unpricedSymbols.add(symbol);
+      });
+    });
+    const binance = window.NekumaBinance?.snapshot?.();
+    if (binance?.connected) {
+      (binance.tokens || []).forEach((token) => {
+        if (number(token.quantity) > 0 && number(token.priceUsdt) > 0) {
+          addPosition(token.symbol, convert(number(token.quantity) * number(token.priceUsdt), "USD", currency, latestRate(state.ui.selectedMonth)));
+        } else if (number(token.quantity) > 0) unpricedSymbols.add(token.symbol);
+      });
+    }
+    const rows = [...positions.values()].sort((a, b) => b.value - a.value);
+    const total = rows.reduce((sumValue, item) => sumValue + item.value, 0);
+    const allocations = rows.map((item) => ({ ...item, pct: total ? (item.value / total) * 100 : 0 }));
+    const dominant = allocations[0];
+    const stableSymbols = new Set(["USDT", "USDC", "DAI", "BUSD", "FDUSD", "TUSD"]);
+    const speculativeSymbols = new Set(["DOGE", "SHIB", "PEPE", "BONK", "FLOKI"]);
+    const stablePct = allocations.filter((item) => stableSymbols.has(item.symbol)).reduce((sumValue, item) => sumValue + item.pct, 0);
+    const speculativePct = allocations.filter((item) => speculativeSymbols.has(item.symbol)).reduce((sumValue, item) => sumValue + item.pct, 0);
+    const profile = sanitizeCryptoRiskProfile(state.ui.cryptoRiskProfile);
+    const concentrationLimit = { conservative: 30, moderate: 45, aggressive: 60 }[profile];
+    const diversificationTarget = { conservative: 4, moderate: 3, aggressive: 2 }[profile];
+    const knownCost = rows.filter((item) => item.hasCost);
+    const cost = knownCost.reduce((sumValue, item) => sumValue + item.cost, 0);
+    const valueWithCost = knownCost.reduce((sumValue, item) => sumValue + item.knownValue, 0);
+    const pnlPct = cost > 0 ? ((valueWithCost - cost) / cost) * 100 : null;
+    let score = 100;
+    if (dominant?.pct > concentrationLimit) score -= Math.min(45, Math.round((dominant.pct - concentrationLimit) * 1.3));
+    if (allocations.length < diversificationTarget) score -= (diversificationTarget - allocations.length) * 12;
+    if (speculativePct > 10) score -= Math.min(25, Math.round(speculativePct - 10));
+    if (pnlPct !== null && pnlPct < -25) score -= 12;
+    if (unpricedSymbols.size) score -= Math.min(12, unpricedSymbols.size * 4);
+    score = Math.max(15, Math.min(100, score));
+    const risk = score >= 75 ? "low" : score >= 50 ? "medium" : "high";
+    const insights = [];
+    if (dominant && dominant.pct > concentrationLimit) {
+      insights.push({ tone: "warning", icon: "pie-chart", title: "Concentração acima do perfil", text: `${dominant.symbol} representa ${formatPercent(dominant.pct)} da carteira. Seu perfil usa ${formatPercent(concentrationLimit)} como faixa de atenção para um único ativo.` });
+    } else if (dominant) {
+      insights.push({ tone: "positive", icon: "circle-check", title: "Concentração dentro da faixa", text: `O maior ativo é ${dominant.symbol}, com ${formatPercent(dominant.pct)} da carteira.` });
+    }
+    if (allocations.length < diversificationTarget) {
+      insights.push({ tone: "warning", icon: "layers-3", title: "Pouca diversificação", text: `Há ${allocations.length} ${allocations.length === 1 ? "ativo" : "ativos"}. Compare riscos antes de concentrar novos aportes na mesma moeda.` });
+    } else {
+      insights.push({ tone: "neutral", icon: "network", title: "Distribuição", text: `${allocations.length} ativos detectados; stablecoins representam ${formatPercent(stablePct)} do valor com cotação disponível.` });
+    }
+    if (unpricedSymbols.size) {
+      insights.push({ tone: "warning", icon: "circle-help", title: "Cotação incompleta", text: `${[...unpricedSymbols].slice(0, 4).join(", ")} ${unpricedSymbols.size === 1 ? "não possui" : "não possuem"} cotação válida e ${unpricedSymbols.size === 1 ? "ficou fora" : "ficaram fora"} da distribuição.` });
+    } else if (speculativePct > 10) {
+      insights.push({ tone: "danger", icon: "flame", title: "Exposição especulativa", text: `Ativos de alta especulação representam ${formatPercent(speculativePct)}. Avalie liquidez e perda máxima aceitável antes de aumentar essa posição.` });
+    } else if (pnlPct !== null) {
+      insights.push({ tone: pnlPct >= 0 ? "positive" : "warning", icon: pnlPct >= 0 ? "trending-up" : "trending-down", title: "Resultado dos ativos cadastrados", text: `${pnlPct >= 0 ? "Valorização" : "Desvalorização"} estimada de ${formatPercent(Math.abs(pnlPct))} sobre os ativos com custo informado.` });
+    } else {
+      insights.push({ tone: "neutral", icon: "receipt-text", title: "Custo não informado", text: "Saldos conectados não trazem o preço médio de compra. Cadastre o custo para estimar lucro ou prejuízo." });
+    }
+    return {
+      score,
+      risk,
+      assetCount: allocations.length,
+      summary: risk === "low" ? "A distribuição está coerente com o perfil selecionado, mas continua sujeita à volatilidade do mercado." : risk === "medium" ? "A carteira merece revisão em alguns pontos antes de novos aportes." : "A carteira está concentrada ou exposta além da faixa escolhida e pede uma revisão cuidadosa.",
+      insights: insights.slice(0, 3),
+      allocations,
+      stablePct,
+      speculativePct,
+      pnlPct,
+      unpricedCount: unpricedSymbols.size
+    };
+  }
+
+  function openCryptoAiAnalysis() {
+    const radar = cryptoRadarSnapshot();
+    if (!radar.assetCount) {
+      showToast("Cadastre ou conecte uma carteira antes de analisar.");
+      return;
+    }
+    const holdings = radar.allocations.slice(0, 8).map((item) => `${item.symbol} ${formatPercent(item.pct)}`).join(", ");
+    window.NekumaAI?.ask?.(`Analise educativamente minha carteira cripto considerando meu perfil ${sanitizeCryptoRiskProfile(state.ui.cryptoRiskProfile)}. Distribuição atual: ${holdings}. Explique concentração, riscos e prioridades de revisão sem dar ordem direta de compra ou venda.`);
   }
 
   function renderWeb3WalletCard() {
@@ -5485,11 +5870,11 @@
     return ["commitment", "debt", "card", "subscription", "vehicle"].includes(String(item.paymentRef).split(":")[0]);
   }
 
-  function renderCryptoPanel(compact = false) {
-    return `<div class="crypto-origins">${renderMetaMaskGroup(compact)}<div class="crypto-origin-group binance-group" data-binance-group></div><section class="crypto-origin-group manual-crypto-group" aria-label="Criptos manuais"><div class="panel-head"><h3><i data-lucide="coins" aria-hidden="true"></i>Criptos manuais</h3><button class="small-action" type="button" data-action="open-modal" data-modal="crypto"><i data-lucide="plus" aria-hidden="true"></i>Nova cripto</button></div>${renderManualCryptoPanel(compact)}</section></div>`;
+  function renderCryptoPanel(compact = false, controlsOnly = false) {
+    return `<div class="crypto-origins ${controlsOnly ? "is-controls-only" : ""}">${renderMetaMaskGroup(compact, controlsOnly)}<div class="crypto-origin-group binance-group" data-binance-group ${controlsOnly ? "data-controls-only" : ""}></div><section class="crypto-origin-group manual-crypto-group" aria-label="Criptos manuais"><div class="panel-head"><div><h3><i data-lucide="coins" aria-hidden="true"></i>Cadastro manual</h3>${controlsOnly ? `<span class="row-meta">Adicione ativos que não possuem conexão automática.</span>` : ""}</div><button class="small-action" type="button" data-action="open-modal" data-modal="crypto"><i data-lucide="plus" aria-hidden="true"></i>Nova cripto</button></div>${controlsOnly ? "" : renderManualCryptoPanel(compact)}</section></div>`;
   }
 
-  function renderMetaMaskGroup(compact = false) {
+  function renderMetaMaskGroup(compact = false, controlsOnly = false) {
     const wallet = normalizeWeb3Wallet(state.web3Wallet);
     const wallets = wallet.wallets.length ? wallet.wallets : wallet.address ? [wallet] : [];
     const busy = web3FetchInFlight;
@@ -5510,9 +5895,9 @@
         ${wallet.error ? `<p class="web3-error" role="status">${escapeHtml(wallet.error)}</p>` : ""}
         ${busy || wallet.error ? `<button class="small-action ghost" type="button" data-action="restart-web3">Reiniciar conexao</button>` : ""}
         ${mobile && window.location.protocol === "https:" ? `<a class="small-action ghost" href="${escapeAttr(metaMaskBrowserUrl)}"><i data-lucide="external-link" aria-hidden="true"></i>Abrir na MetaMask</a>` : ""}
-        ${wallets.length ? renderMetaMaskBalances(wallets) : ""}
-        ${wallets.length && !compact ? `<details class="metamask-details" ${state.ui.metamaskExpanded ? "open" : ""}><summary>Detalhamento da carteira MetaMask</summary><p class="row-meta">${escapeHtml(cryptoStatusText().label)} · Valores estimados. USDC.e utiliza a cotação de referência do USDC.</p>` : ""}
-        ${wallets.length && !compact ? wallets.map((item) => `
+        ${wallets.length && !controlsOnly ? renderMetaMaskBalances(wallets) : ""}
+        ${wallets.length && !compact && !controlsOnly ? `<details class="metamask-details" ${state.ui.metamaskExpanded ? "open" : ""}><summary>Detalhamento da carteira MetaMask</summary><p class="row-meta">${escapeHtml(cryptoStatusText().label)} · Valores estimados. USDC.e utiliza a cotação de referência do USDC.</p>` : ""}
+        ${wallets.length && !compact && !controlsOnly ? wallets.map((item) => `
           <div class="metamask-account">
             <div class="metamask-account-heading"><strong title="${escapeAttr(item.address)}">${escapeHtml(shortAddress(item.address))}</strong><span class="chip green">${escapeHtml(web3NetworkMeta(item.chainId).name)}</span></div>
             ${state.ui.hideCryptoDetails ? `<p class="row-meta">Saldos ocultos</p>` : `
@@ -5525,8 +5910,8 @@
             <small class="row-meta">Ultima consulta: ${item.updatedAt ? escapeHtml(new Date(item.updatedAt).toLocaleString("pt-BR")) : "Ainda nao consultada"}</small>
           </div>
         `).join("") : !wallets.length ? `<p class="empty-state">Nenhuma carteira MetaMask conectada.</p>` : ""}
-        ${wallets.length && !compact ? `<button class="small-action ghost" type="button" data-action="disconnect-web3">Remover conexoes do Nekuma</button>` : ""}
-        ${wallets.length && !compact ? `</details>` : ""}
+        ${wallets.length && !compact && !controlsOnly ? `<button class="small-action ghost" type="button" data-action="disconnect-web3">Remover conexoes do Nekuma</button>` : ""}
+        ${wallets.length && !compact && !controlsOnly ? `</details>` : ""}
       </div>
     `;
   }
@@ -10881,7 +11266,8 @@
 
   function scheduleCryptoRefresh(force) {
     clearTimeout(cryptoRefreshTimer);
-    if (!(state.cryptoAssets || []).length && !state.web3Wallet?.address && !(state.web3Wallet?.wallets || []).length) return;
+    const hasPortfolio = (state.cryptoAssets || []).length || state.web3Wallet?.address || (state.web3Wallet?.wallets || []).length || window.NekumaBinance?.snapshot?.()?.tokens?.length;
+    if (!hasPortfolio && state.ui.activeTab !== "crypto") return;
     cryptoRefreshTimer = setTimeout(() => scheduleCryptoRefresh(false), 60000);
     const updatedAt = state.cryptoQuotes?.updatedAt ? new Date(state.cryptoQuotes.updatedAt).getTime() : 0;
     const stale = !updatedAt || Date.now() - updatedAt >= CRYPTO_QUOTE_INTERVAL;
@@ -10973,10 +11359,14 @@
     const generation = stateGeneration;
     const wallet = normalizeWeb3Wallet(state.web3Wallet);
     const wallets = wallet.wallets.length ? wallet.wallets : wallet.address ? [wallet] : [];
-    const assets = [...(state.cryptoAssets || []), ...wallets.flatMap(item => [{ symbol: web3NetworkMeta(item.chainId).symbol }, ...(item.tokens || []).map(token => ({ symbol: token.symbol === "USDC.e" ? "USDC" : token.symbol }))])];
-    if (!assets.length) return;
-    const ids = Array.from(new Set(assets.map((item) => cryptoCatalog[item.symbol]?.id).filter(Boolean)));
-    if (!ids.length) return;
+    const binanceTokens = window.NekumaBinance?.snapshot?.()?.tokens || [];
+    const assets = [...(state.cryptoAssets || []), ...wallets.flatMap(item => [{ symbol: web3NetworkMeta(item.chainId).symbol }, ...(item.tokens || []).map(token => ({ symbol: token.symbol === "USDC.e" ? "USDC" : token.symbol }))]), ...binanceTokens];
+    const shouldFetchRadar = state.ui.activeTab === "crypto" || force;
+    const ids = Array.from(new Set([
+      ...(assets.length || shouldFetchRadar ? [cryptoCatalog.BTC.id] : []),
+      ...assets.map((item) => cryptoCatalog[normalizeCryptoSymbol(item.symbol)]?.id).filter(Boolean)
+    ]));
+    if (!ids.length && !shouldFetchRadar) return;
     const updatedAt = state.cryptoQuotes?.updatedAt ? new Date(state.cryptoQuotes.updatedAt).getTime() : 0;
     if (!force && updatedAt && Date.now() - updatedAt < CRYPTO_QUOTE_INTERVAL) return;
     if (!force && cryptoLastAttemptAt && Date.now() - cryptoLastAttemptAt < CRYPTO_RETRY_INTERVAL) return;
@@ -10991,33 +11381,61 @@
     renderKeepingScroll();
 
     try {
-      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=jpy,brl,usd,eur&include_24hr_change=true`;
-      const response = await fetch(url, { cache: "no-store" });
-      if (!response.ok) throw new Error("Falha ao buscar cotacoes");
-      const data = await response.json();
+      const portfolioRequest = ids.length
+        ? fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids.join(",")}&sparkline=true&price_change_percentage=24h,7d&precision=full`, { cache: "no-store" })
+            .then(async (response) => {
+              if (!response.ok) throw new Error("Falha ao buscar cotacoes");
+              const result = await response.json();
+              if (!Array.isArray(result)) throw new Error("Resposta de cotacao invalida");
+              return result;
+            })
+        : Promise.resolve([]);
+      const radarRequest = shouldFetchRadar ? fetchCryptoMarketRadar() : Promise.resolve(state.cryptoQuotes?.marketRadar || null);
+      const [portfolioResult, radarResult] = await Promise.allSettled([portfolioRequest, radarRequest]);
+      const data = portfolioResult.status === "fulfilled" ? portfolioResult.value : [];
+      const marketRadar = radarResult.status === "fulfilled" && radarResult.value ? radarResult.value : state.cryptoQuotes?.marketRadar || null;
       if (generation !== stateGeneration) return;
       const prices = { ...(state.cryptoQuotes?.prices || {}) };
       let receivedQuotes = 0;
 
       Object.entries(cryptoCatalog).forEach(([symbol, meta]) => {
-        const quote = data[meta.id];
-        if (!quote || !Number.isFinite(Number(quote.usd)) || Number(quote.usd) <= 0) return;
+        const quote = data.find((item) => item.id === meta.id);
+        const usd = Number(quote?.current_price || 0);
+        if (!quote || !Number.isFinite(usd) || usd <= 0) return;
         receivedQuotes += 1;
+        const previous = prices[symbol] || {};
+        const usdBrl = Number(state.fxQuotes?.usdBrl || 0);
+        const usdJpy = Number(state.fxQuotes?.usdJpy || 0);
+        const usdEur = Number(state.fxQuotes?.usdEur || 0);
+        const change24h = Number.isFinite(Number(quote.price_change_percentage_24h_in_currency))
+          ? Number(quote.price_change_percentage_24h_in_currency)
+          : Number.isFinite(Number(quote.price_change_percentage_24h)) ? Number(quote.price_change_percentage_24h) : null;
+        const change7d = Number.isFinite(Number(quote.price_change_percentage_7d_in_currency)) ? Number(quote.price_change_percentage_7d_in_currency) : null;
+        const rawSparkline = Array.isArray(quote.sparkline_in_7d?.price)
+          ? quote.sparkline_in_7d.price.map(Number).filter(Number.isFinite)
+          : [];
+        const sparklineStep = Math.max(1, Math.ceil(rawSparkline.length / 48));
+        const sparkline7d = rawSparkline.filter((_, index) => index % sparklineStep === 0);
+        if (rawSparkline.length && sparkline7d.at(-1) !== rawSparkline.at(-1)) sparkline7d.push(rawSparkline.at(-1));
         prices[symbol] = {
-          JPY: Number(quote.jpy || 0),
-          BRL: Number(quote.brl || 0),
-          USD: Number(quote.usd || 0),
-          EUR: Number(quote.eur || 0),
-          change24h: Number.isFinite(quote.usd_24h_change) ? quote.usd_24h_change : null,
-          changes24h: Object.fromEntries(["JPY", "BRL", "USD", "EUR"].map(currency => [currency, Number.isFinite(quote[currency.toLowerCase() + "_24h_change"]) ? quote[currency.toLowerCase() + "_24h_change"] : null]))
+          JPY: usdJpy > 0 ? usd * usdJpy : Number(previous.JPY || 0),
+          BRL: usdBrl > 0 ? usd * usdBrl : Number(previous.BRL || 0),
+          USD: usd,
+          EUR: usdEur > 0 ? usd * usdEur : Number(previous.EUR || 0),
+          change24h,
+          change7d,
+          changes24h: Object.fromEntries(["JPY", "BRL", "USD", "EUR"].map(currency => [currency, change24h])),
+          changes7d: Object.fromEntries(["JPY", "BRL", "USD", "EUR"].map(currency => [currency, change7d])),
+          sparkline7d
         };
       });
 
-      if (!receivedQuotes) throw new Error("Nenhuma cotacao valida recebida");
+      if (ids.length && !receivedQuotes && !marketRadar) throw new Error("Nenhuma cotacao valida recebida");
       state.cryptoQuotes = {
         prices,
+        marketRadar,
         updatedAt: new Date().toISOString(),
-        status: "ok"
+        status: receivedQuotes || marketRadar ? "ok" : "error"
       };
       saveState();
       renderKeepingScroll();
@@ -11186,7 +11604,7 @@
     if (aiAssistantLoadAttempted) return;
     aiAssistantLoadAttempted = true;
     const script = document.createElement("script");
-    script.src = "./assistant.js?v=200";
+    script.src = "./assistant.js?v=204";
     script.onload = mount;
     script.onerror = () => {
       aiAssistantLoadAttempted = false;
@@ -11300,6 +11718,20 @@
         suggestedMonthlyContribution: round(reserve.monthlyContribution, 2),
         estimatedMonthsToGoal: reserve.monthsToGoal
       },
+      cryptoPortfolio: (() => {
+        const radar = cryptoRadarSnapshot();
+        return {
+          riskProfile: sanitizeCryptoRiskProfile(state.ui.cryptoRiskProfile),
+          educationalScore: radar.score,
+          riskLevel: radar.risk,
+          assetCount: radar.assetCount,
+          stablecoinPercent: round(radar.stablePct, 2),
+          speculativePercent: round(radar.speculativePct, 2),
+          unpricedAssetCount: radar.unpricedCount,
+          estimatedPnlPercent: radar.pnlPct === null ? null : round(radar.pnlPct, 2),
+          allocation: radar.allocations.slice(0, 12).map((item) => ({ symbol: item.symbol, percent: round(item.pct, 2) }))
+        };
+      })(),
       nubankBoxes: (state.nubankBoxes || []).slice(0, 10).map((box) => {
         const projection = nubankBoxProjection(box);
         return {
@@ -13306,6 +13738,30 @@
     if (!list.querySelector(".salary-progression-row")) {
       list.insertAdjacentHTML("beforeend", renderSalaryProgressionRow({}));
     }
+  }
+
+  async function fetchCryptoMarketRadar() {
+    const base = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=24h";
+    const [marketResponse, memeResponse] = await Promise.all([
+      fetch(base, { cache: "no-store" }),
+      fetch(`${base}&category=meme-token`, { cache: "no-store" })
+    ]);
+    if (!marketResponse.ok || !memeResponse.ok) throw new Error("Falha ao buscar o radar de mercado");
+    const [market, memes] = await Promise.all([marketResponse.json(), memeResponse.json()]);
+    const normalize = (items) => (Array.isArray(items) ? items : [])
+      .filter((item) => Number.isFinite(Number(item.price_change_percentage_24h)))
+      .sort((a, b) => Number(b.price_change_percentage_24h) - Number(a.price_change_percentage_24h))
+      .slice(0, 5)
+      .map((item) => ({
+        id: String(item.id || ""),
+        symbol: String(item.symbol || "").toUpperCase(),
+        name: String(item.name || item.symbol || "Cripto"),
+        image: String(item.image || ""),
+        priceUsd: number(item.current_price),
+        change24h: number(item.price_change_percentage_24h),
+        marketCapRank: number(item.market_cap_rank)
+      }));
+    return { leaders: normalize(market), memes: normalize(memes), updatedAt: new Date().toISOString() };
   }
 
   function collectSalaryProgressions(form) {

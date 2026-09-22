@@ -12,9 +12,10 @@
   const money = value => options.money(options.convert(value, 'USD', currency), currency);
   function paint() {
     document.querySelectorAll('[data-binance-group]').forEach(element => {
+      const controlsOnly = element.hasAttribute('data-controls-only');
       element.innerHTML = `<div class="panel-head"><div><h3><img class="crypto-provider-logo" src="./assets/crypto/binance.png" alt="" width="28" height="28">Binance</h3><span class="row-meta">Spot · Somente leitura</span></div><div class="chips"><span class="metamask-currency-control"><select data-binance-currency aria-label="Moeda da carteira Binance">${['USD', 'BRL', 'EUR', 'JPY'].map(item => `<option ${item === currency ? 'selected' : ''}>${item}</option>`).join('')}</select><i data-lucide="chevron-down" aria-hidden="true"></i></span><button class="small-action" data-binance-action="${data.connected ? 'refresh' : 'connect'}" ${busy ? 'disabled' : ''}>${busy ? 'Conectando...' : data.connected ? 'Atualizar' : 'Conectar Binance'}</button></div></div>
         ${data.error ? `<p class="web3-error" role="status">${escape(data.error)}</p>` : ''}
-        ${data.connected ? `<div class="metamask-token-list">${(data.tokens || []).map(token => `<div class="metamask-token-row">${options.icon(token.symbol)}<div class="metamask-token-market"><strong>${escape(token.symbol)}</strong><small>${token.priceUsdt == null ? 'Cotacao indisponivel' : escape(money(token.priceUsdt))} ${Number.isFinite(token.change24h) ? `<span class="${token.change24h >= 0 ? 'income' : 'expense'}">${escape(token.change24h.toFixed(2))}% · 24h</span>` : ''}</small></div><div class="metamask-token-position"><strong>${options.hidden() ? '••••' : token.priceUsdt == null ? '—' : escape(money(Number(token.quantity) * token.priceUsdt))}</strong><small>${options.hidden() ? '••••' : escape(token.quantity)} ${escape(token.symbol)}</small></div></div>`).join('') || '<p class="row-meta">Nenhum saldo positivo na conta Spot.</p>'}</div><details data-binance-details ${expanded ? 'open' : ''}><summary>Detalhamento da carteira Binance</summary><p class="row-meta">${escape(data.updatedAt ? new Date(data.updatedAt).toLocaleString('pt-BR') : '')}${data.stale ? ' · Ultimo saldo valido' : ''}</p><p class="row-meta">Referencia USDT aproximada em USD. Variacao de mercado em 24h; lucro desde a compra nao calculado.</p>${data.priceWarning ? `<p class="row-meta">${escape(data.priceWarning)}</p>` : ''}<button class="small-action ghost" data-binance-action="disconnect">Remover conexao Binance</button></details>` : ''}`;
+        ${data.connected && !controlsOnly ? `<div class="metamask-token-list">${(data.tokens || []).map(token => `<div class="metamask-token-row">${options.icon(token.symbol)}<div class="metamask-token-market"><strong>${escape(token.symbol)}</strong><small>${token.priceUsdt == null ? 'Cotacao indisponivel' : escape(money(token.priceUsdt))} ${Number.isFinite(token.change24h) ? `<span class="${token.change24h >= 0 ? 'income' : 'expense'}">${escape(token.change24h.toFixed(2))}% · 24h</span>` : ''}</small></div><div class="metamask-token-position"><strong>${options.hidden() ? '••••' : token.priceUsdt == null ? '—' : escape(money(Number(token.quantity) * token.priceUsdt))}</strong><small>${options.hidden() ? '••••' : escape(token.quantity)} ${escape(token.symbol)}</small></div></div>`).join('') || '<p class="row-meta">Nenhum saldo positivo na conta Spot.</p>'}</div><details data-binance-details ${expanded ? 'open' : ''}><summary>Detalhamento da carteira Binance</summary><p class="row-meta">${escape(data.updatedAt ? new Date(data.updatedAt).toLocaleString('pt-BR') : '')}${data.stale ? ' · Ultimo saldo valido' : ''}</p><p class="row-meta">Referencia USDT aproximada em USD. Variacao de mercado em 24h; lucro desde a compra nao calculado.</p>${data.priceWarning ? `<p class="row-meta">${escape(data.priceWarning)}</p>` : ''}<button class="small-action ghost" data-binance-action="disconnect">Remover conexao Binance</button></details>` : ''}`;
     });
     options.icons();
   }
@@ -43,6 +44,7 @@
       }
       if (generation !== epoch) return;
       data = result;
+      options.onUpdate?.();
       return true;
     } catch (error) {
       if (generation === epoch) data = { ...data, error: error.message, stale: data.connected };
@@ -84,6 +86,7 @@
   document.addEventListener('visibilitychange', () => { if (options && !document.hidden) request(); });
   window.NekumaBinance = {
     mount(config) { options = config; identity().then(() => { paint(); if (document.querySelector('[data-binance-group]')) request(); }); },
+    snapshot() { return { connected: Boolean(data.connected), tokens: (data.tokens || []).map(token => ({ ...token })), updatedAt: data.updatedAt || '' }; },
     async reset() { if (!data.connected) return true; return Boolean(await request('DELETE')); },
     clear() { epoch++; owner = ''; busy = false; data = { connected: false, tokens: [] }; }
   };

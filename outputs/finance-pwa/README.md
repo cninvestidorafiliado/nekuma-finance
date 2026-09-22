@@ -108,6 +108,19 @@ contas abertas, saldos, gastos, reserva e cenarios de economia. Somente analises
 interpretativas livres chamam o Qwen e consomem a franquia diaria. Antes dessa
 chamada, o servidor calcula os fatos financeiros; o modelo apenas os interpreta.
 
+A aba Cripto inclui o Radar Cripto, com perfil de risco, nota educativa,
+concentracao, diversificacao, exposicao especulativa e aprofundamento opcional
+pela IA. O Radar usa somente saldos e cotacoes disponiveis no app; nao executa
+operacoes nem emite ordem direta de compra ou venda.
+
+A visao detalhada da carteira consolida os ativos manuais, MetaMask e Binance.
+O topo converte o valor total estimado para BTC. Para cada posicao, mostra valor
+investido quando informado, preco atual, variacoes de 24 horas e 7 dias,
+rendimento desde a compra, grafico de sete dias e a carteira ou instituicao de
+custodia. Dois paineis adicionais mostram as cinco maiores altas de 24 horas
+entre ativos relevantes e entre memecoins. Os dados de mercado usam o endpoint
+`coins/markets` da CoinGecko e sao apenas informativos, sem recomendacao de compra.
+
 O `wrangler.toml` configura os bindings `AI` e `BINANCE_DB`. Mantenha no
 Cloudflare Pages, em **Settings > Variables and Secrets**:
 
