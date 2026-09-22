@@ -13,8 +13,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
     await page.goto('http://127.0.0.1:4174/app.html');
     const results = await page.evaluate(() => {
       const t = window.testSalary;
-      const source = { id: 'test-factory', name: 'Fabrica teste', type: 'factory', currency: 'JPY', salaryCalculationMode: 'contract', salaryHourlyRate: 1600, salaryTeijiHours: 9, salaryFixedOvertimeHours: 2, salaryOvertimeRate: 25, salaryNightRate: 25, salaryHolidayRate: 35, salaryRestRate: 25, salaryOvertimeThreshold: 60, salaryOvertimeHighRate: 50, salaryClosingDay: 31, salaryNightStart: '22:00', salaryNightEnd: '05:00', cycleStartDate: '2026-08-01' };
+      const source = { id: 'test-factory', name: 'Fabrica teste', type: 'factory', currency: 'JPY', bankAccountId: 'salary-bank', salaryCalculationMode: 'contract', salaryHourlyRate: 1600, salaryTeijiHours: 9, salaryFixedOvertimeHours: 2, salaryOvertimeRate: 25, salaryNightRate: 25, salaryHolidayRate: 35, salaryRestRate: 25, salaryOvertimeThreshold: 60, salaryOvertimeHighRate: 50, salaryClosingDay: 31, salaryNightStart: '22:00', salaryNightEnd: '05:00', cycleStartDate: '2026-08-01' };
       const state = t.createInitialState();
+      state.bankAccounts = [{ id: 'salary-bank', bankName: 'Yucho', nickname: 'Correio', country: 'japao', currency: 'JPY', active: true }];
       state.incomeSources = [source];
       t.setState(t.normalizeState(state));
       const planned = { ...source, cycleStartDate: '2026-08-30', cycleStartPhase: 'night', hirukinStart: '09:00', hirukinEnd: '21:00', yakinStart: '21:00', yakinEnd: '09:00', salaryNightBreaks: '00:00-00:45, 05:00-05:25' };

@@ -10792,6 +10792,79 @@ html.auth-mode { background: #f3f7f4; }
   .dashboard-finance-empty small { display: block; }
   .dashboard-finance-empty small { margin-top: 4px; color: #77887f; font-size: .66rem; }
 }
+@media (max-width: 759px) {
+  .content-panel.overview-card.balance-section-card { display: none; }
+  .dashboard-finance-strip {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    padding: 12px;
+    border-bottom: 1px solid #c9d5d0;
+    background: rgba(247, 250, 246, .82);
+  }
+  .dashboard-finance-strip-salaries { display: grid; gap: 10px; min-width: 0; }
+  .dashboard-finance-divider { width: 100%; height: 1px; background: #c8d4ce; }
+  .dashboard-salary-tile,
+  .dashboard-account-tile,
+  .dashboard-finance-empty,
+  .dashboard-add-account { min-width: 0; border: 1px solid #d9e3dd; border-radius: 7px; background: rgba(255, 255, 255, .92); }
+  .dashboard-salary-tile {
+    position: relative;
+    display: grid;
+    align-content: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 188px;
+    padding: 18px;
+    isolation: isolate;
+    overflow: visible;
+    outline: none;
+  }
+  .dashboard-salary-tile.has-bank-background { border-top: 3px solid var(--account-color); background: linear-gradient(135deg, rgba(var(--account-color-rgb), .1), rgba(255, 255, 255, .94) 62%); }
+  .dashboard-salary-tile.has-bank-background::before { content: ""; position: absolute; z-index: 0; inset: 0; border-radius: inherit; background: var(--salary-bank-bg) center / cover no-repeat; opacity: .11; pointer-events: none; }
+  .dashboard-salary-tile > .dashboard-finance-title,
+  .dashboard-salary-tile > .salary-formula,
+  .dashboard-salary-tile > .salary-total-converted,
+  .dashboard-salary-tile > .dashboard-finance-foot { position: relative; z-index: 1; }
+  .dashboard-finance-title { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: #173d32; }
+  .dashboard-finance-title svg { width: 18px; height: 18px; }
+  .dashboard-finance-title strong { font-size: .96rem; }
+  .dashboard-salary-account-label { margin-left: auto; padding: 4px 7px; border-radius: 999px; color: #1f674d; background: rgba(222, 244, 230, .9); font-size: .62rem; font-weight: 850; }
+  .dashboard-salary-tile .salary-formula { margin-top: 4px; }
+  .dashboard-salary-tile .salary-formula em { font-size: .65rem; }
+  .dashboard-salary-tile .salary-formula strong { font-size: 1rem; }
+  .dashboard-salary-tile .salary-formula .is-total strong { font-size: 1.28rem; }
+  .dashboard-salary-tile .salary-total-converted { margin: 0; font-size: .72rem; }
+  .dashboard-finance-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #526a5f; font-size: .72rem; }
+  .dashboard-finance-foot span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dashboard-finance-foot em { flex: 0 0 auto; color: #27805e; font-style: normal; font-weight: 850; }
+  .dashboard-account-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; min-width: 0; }
+  .dashboard-account-tile { position: relative; aspect-ratio: 1; display: grid; grid-template-columns: 36px minmax(0, 1fr) 30px; grid-template-rows: auto 1fr; align-items: start; gap: 8px; padding: 12px; border-top: 3px solid var(--account-color); }
+  .dashboard-account-tile.is-primary { background: linear-gradient(135deg, rgba(var(--account-color-rgb), .1), rgba(255, 255, 255, .92) 48%); }
+  .dashboard-account-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 6px; color: #fff; background: var(--account-color); font-size: .62rem; font-weight: 900; }
+  .dashboard-account-copy { grid-column: 1 / -1; min-width: 0; }
+  .dashboard-account-heading { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .dashboard-account-heading strong { overflow: hidden; color: #173d32; font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }
+  .dashboard-account-heading span { flex: 0 0 auto; padding: 2px 4px; border-radius: 999px; color: #1b624a; background: #dff4e6; font-size: .44rem; font-weight: 850; text-transform: uppercase; }
+  .dashboard-account-copy small,
+  .dashboard-account-copy em,
+  .dashboard-account-copy b { display: block; }
+  .dashboard-account-copy small { margin-top: 3px; color: #65786f; font-size: .58rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dashboard-account-copy em { margin-top: 10px; color: #829088; font-size: .5rem; font-style: normal; font-weight: 800; text-transform: uppercase; }
+  .dashboard-account-copy b { margin-top: 3px; color: #176b4d; font-size: .88rem; line-height: 1.12; overflow-wrap: anywhere; }
+  .dashboard-account-tile .visibility-toggle { grid-column: 3; grid-row: 1; width: 30px; min-width: 30px; height: 30px; padding: 6px; }
+  .dashboard-add-account { aspect-ratio: 1; display: grid; place-items: center; align-content: center; gap: 8px; border-style: dashed; color: #355f50; }
+  .dashboard-add-account svg { width: 21px; height: 21px; }
+  .dashboard-add-account span { font-size: .72rem; font-weight: 800; }
+  .dashboard-finance-empty { display: flex; align-items: center; gap: 10px; padding: 16px; color: #536b60; }
+  .dashboard-finance-empty strong,
+  .dashboard-finance-empty small { display: block; }
+  .dashboard-finance-empty small { margin-top: 4px; color: #77887f; font-size: .68rem; }
+  .salary-detail-popover { display: none; }
+}
+.modal-required-account { display: grid; justify-items: center; gap: 12px; padding: 28px 18px; text-align: center; }
+.modal-required-account > svg { width: 32px; height: 32px; color: #1f7455; }
+.modal-required-account p { max-width: 420px; margin: 0; color: #62756c; line-height: 1.5; }
 .card-mini-carousel:has(.nekuma-card-face) { padding: 0; width: min(100%, 290px); margin-inline: auto; }
 .card-mini.nekuma-card-face { aspect-ratio: 1.586; min-height: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto 1fr auto; grid-template-areas: "label issuer" "number number" "name wave"; padding: 20px; gap: 12px; border: 0; border-radius: 8px; background: var(--card-color); color: var(--card-ink); box-shadow: none; isolation: isolate; }
 .nekuma-card-face::before { background: linear-gradient(115deg, rgba(255,255,255,.09) 0 26%, transparent 26% 65%, rgba(255,255,255,.05) 65%); }

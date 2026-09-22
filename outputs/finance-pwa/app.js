@@ -406,7 +406,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=216")
+      navigator.serviceWorker.register("./service-worker.js?v=217")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -8726,6 +8726,21 @@
   }
 
   function renderIncomeSourceModal(item = null) {
+    const accounts = activeBankAccounts();
+    if (!accounts.length && !item) {
+      return `
+        <div class="modal-head">
+          <h2>Conta de recebimento</h2>
+          <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+        </div>
+        <div class="empty-state modal-required-account">
+          <i data-lucide="landmark" aria-hidden="true"></i>
+          <strong>Cadastre primeiro a conta que recebera o salario</strong>
+          <p>A empresa precisa ficar vinculada a uma conta bancaria para que o salario previsto apareca no card correto.</p>
+          <button class="primary-button" type="button" data-action="open-modal" data-modal="bankAccount">Cadastrar conta</button>
+        </div>
+      `;
+    }
     const nextColor = item?.color || sourceColors[userIncomeSources().length % sourceColors.length];
     const sourceType = normalizedSourceType(item?.type);
     const customType = item?.customType || (sourceType === "other" && item?.type && !incomeSourceTypeMeta[item.type] ? item.type : "");
@@ -8770,6 +8785,12 @@
             </select>
           </div>
         </div>
+        <div class="field">
+          <label for="sourceBankAccountId">Conta para receber</label>
+          <select id="sourceBankAccountId" name="bankAccountId" required>
+            ${bankAccountSelectOptions("global", item?.bankAccountId || "", accounts.length ? "Escolha a conta" : "Cadastre uma conta primeiro")}
+          </select>
+        </div>
         <div class="factory-source-fields ${sourceType === "factory" ? "" : "is-hidden"}">
           <div class="form-section-title">
             <strong>Escala da fabrica</strong>
@@ -8782,12 +8803,6 @@
           <div class="field">
             <label for="salaryPayDay">Dia do pagamento</label>
             <input id="salaryPayDay" name="salaryPayDay" inputmode="numeric" placeholder="Ex: 25" value="${escapeAttr(item?.salaryPayDay || "")}" />
-          </div>
-          <div class="field">
-            <label for="sourceBankAccountId">Conta para receber salario</label>
-            <select id="sourceBankAccountId" name="bankAccountId">
-              ${bankAccountSelectOptions("global", item?.bankAccountId || "", activeBankAccounts().length ? "Escolha a conta" : "Cadastre uma conta primeiro")}
-            </select>
           </div>
           ${renderSimpleSalaryFields(item)}
           <div class="two-cols">
@@ -10033,6 +10048,11 @@
 
   function saveIncomeSource(form) {
     const data = formData(form);
+    const sourceType = normalizedSourceType(data.type);
+    if (!data.bankAccountId || !bankAccountById(data.bankAccountId)) {
+      showToast("Cadastre e selecione a conta que recebera esta renda.");
+      return;
+    }
     const isContract = data.salaryCalculationMode === 'contract';
     const fixedNight = data.salaryNightMethod === 'fixed';
     const nightHour = number(data.salaryNightHoursWhole);
@@ -10055,7 +10075,6 @@
       showToast("Confira os intervalos: HH:MM-HH:MM, separados por virgula.");
       return;
     }
-    const sourceType = normalizedSourceType(data.type);
     const isFactory = sourceType === "factory";
     const banNaming = isFactory ? String(data.banNaming || "colors") : "";
     const author = currentUserAuthor();
@@ -10107,7 +10126,7 @@
       salaryNightEnd: isFactory ? String(data.salaryNightEnd || "05:00") : "",
       salarySundayAllDay: isFactory ? data.salarySundayAllDay !== "no" : false,
       salaryPayDay: isFactory && number(data.salaryPayDay) ? clamp(Math.round(number(data.salaryPayDay)), 1, 31) : 0,
-      bankAccountId: isFactory ? data.bankAccountId || "" : "",
+      bankAccountId: data.bankAccountId || "",
       color: data.color || sourceColors[userIncomeSources().length % sourceColors.length],
       currency: data.currency || "JPY",
       payRule: String(data.payRule || "").trim(),
