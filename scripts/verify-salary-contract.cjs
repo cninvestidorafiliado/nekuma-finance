@@ -13,7 +13,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
     await page.goto('http://127.0.0.1:4174/app.html');
     const results = await page.evaluate(() => {
       const t = window.testSalary;
-      const source = { id: 'test-factory', name: 'Fabrica teste', type: 'factory', currency: 'JPY', bankAccountId: 'salary-bank', salaryCalculationMode: 'contract', salaryHourlyRate: 1600, salaryTeijiHours: 9, salaryFixedOvertimeHours: 2, salaryOvertimeRate: 25, salaryNightRate: 25, salaryHolidayRate: 35, salaryRestRate: 25, salaryOvertimeThreshold: 60, salaryOvertimeHighRate: 50, salaryClosingDay: 31, salaryNightStart: '22:00', salaryNightEnd: '05:00', cycleStartDate: '2026-08-01' };
+      const source = { id: 'test-factory', name: 'Fabrica teste', type: 'factory', currency: 'JPY', bankAccountId: 'salary-bank', salaryCalculationMode: 'contract', salaryHourlyRate: 1600, salaryTeijiHours: 9, salaryFixedOvertimeHours: 2, salaryOvertimeRate: 25, salaryNightRate: 25, salaryHolidayRate: 35, salaryRestRate: 25, salaryOvertimeThreshold: 60, salaryOvertimeHighRate: 50, salaryClosingDay: 31, salaryNightStart: '22:00', salaryNightEnd: '05:00', cycleStartDate: '2026-08-01', salaryDeductionsEnabled: true, salaryStandardRemuneration: 260000, salaryHealthRate: 5.065, salaryPensionRate: 9.15, salaryEmploymentRate: .5, salaryChildSupportRate: .115, salaryIncomeTaxFixed: 10240, salaryHousingDeduction: 56200, salaryParkingDeduction: 3300 };
       const state = t.createInitialState();
       state.bankAccounts = [{ id: 'salary-bank', bankName: 'Yucho', nickname: 'Correio', country: 'japao', currency: 'JPY', active: true }];
       state.incomeSources = [source];
@@ -91,6 +91,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
     assert.equal(results.mixed, 43200);
     assert.equal(results.tierExtra, 4400);
     assert.equal(results.truncated, 0);
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.evaluate(() => window.testSalary.render());
+    const mobileSalary = page.locator('.dashboard-salary-tile');
+    assert.equal(await mobileSalary.locator('.dashboard-salary-mobile-details').isVisible(), true);
+    assert.equal(await mobileSalary.locator('.salary-formula strong').evaluateAll(nodes => nodes.every(node => node.scrollWidth <= node.clientWidth + 1)), true);
+    await mobileSalary.locator('.dashboard-salary-mobile-details summary').click();
+    assert.match(await mobileSalary.locator('.dashboard-salary-mobile-details').innerText(), /Total de descontos/);
+    await mobileSalary.screenshot({ path: 'work/mobile-salary-details-v219.png' });
     await page.evaluate(() => {
       const t = window.testSalary;
       t.openModal('incomeSource', t.getState().incomeSources[0].id);

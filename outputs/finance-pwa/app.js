@@ -6,7 +6,7 @@
   const REMOTE_HOUSEHOLD_KEY = "ponte-financeira-household-id";
   const DUE_ALERT_KEY = "nekuma-finance-due-alert-key";
   const SALARY_RECEIPT_ALERT_KEY = "nekuma-finance-salary-receipt-alert-key";
-  const APP_NEWS_READ_KEY = "nekuma-finance-news-read";
+  const APP_NEWS_READ_KEY = "nekuma-finance-news-read-v2";
   const RESTORE_SCROLL_KEY = "nekuma-finance-restore-scroll";
   const LEGACY_STORAGE_KEYS = ["ponte-financeira-state-v1", "ponte-financeira-state-v2"];
   const PRIMARY_CURRENCY = "JPY";
@@ -297,50 +297,8 @@
     medium: "Media prioridade",
     low: "Baixa prioridade"
   };
-  const appNews = [
-    {
-      id: "nekuma-add-button-style-v121",
-      date: "2026-09-08",
-      title: "Adicionar no estilo Nekuma",
-      body: "O botao central manteve o + grande, mas agora usa verde escuro, lima e dourado para combinar com o app."
-    },
-    {
-      id: "bank-accounts-v87",
-      date: "2026-08-30",
-      title: "Contas bancarias por pais",
-      body: "Agora o app permite cadastrar contas bancarias no Brasil e no Japao, vincular recebimentos e pagamentos, e usar o saldo real das contas no card principal."
-    },
-    {
-      id: "financial-goals-v86",
-      date: "2026-08-30",
-      title: "Metas financeiras com aporte manual",
-      body: "O card de metas agora permite criar objetivos por moeda/pais, adicionar aportes manuais e acompanhar quanto precisa guardar por mes."
-    },
-    {
-      id: "salary-progression-calc-v83",
-      date: "2026-08-23",
-      title: "Calculo da progressao salarial corrigido",
-      body: "O salario estimado agora resolve o valor hora por dia trabalhado. Se houver aumento no meio ou no inicio de um mes futuro, o calculo acompanha automaticamente o mes selecionado."
-    },
-    {
-      id: "work-data-personal-v82",
-      date: "2026-08-23",
-      title: "Dados de trabalho agora sao pessoais",
-      body: "Empresa, ban, calendario de turnos, folgas extras, valor hora e previsao salarial ficam ligados ao usuario logado. Contas, cartoes, moradia, cripto e demais dados financeiros continuam sincronizados com a familia."
-    },
-    {
-      id: "salary-progression-v82",
-      date: "2026-08-23",
-      title: "Progressao salarial",
-      body: "No cadastro da empresa do tipo fabrica, voce pode adicionar datas futuras de aumento do valor hora. O salario estimado passa a usar o valor correto para cada dia do mes."
-    },
-    {
-      id: "annual-subscriptions-v81",
-      date: "2026-08-17",
-      title: "Subscricoes mensais e anuais",
-      body: "Assinaturas agora podem ser mensais ou anuais. Planos anuais aparecem em todos os meses, mas so entram como cobranca no mes de vencimento."
-    }
-  ];
+  // v217 is the notification baseline. Only later product updates belong here.
+  const appNews = [];
 
   const app = document.getElementById("app");
   const appGreeting = document.getElementById("app-greeting");
@@ -406,7 +364,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=217")
+      navigator.serviceWorker.register("./service-worker.js?v=219")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -2905,7 +2863,7 @@
             <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
           </div>
           <div class="app-news-list">
-            ${appNews.map((item) => {
+            ${appNews.length ? appNews.map((item) => {
               const read = readIds.includes(item.id);
               return `
                 <article class="app-news-row ${read ? "is-read" : "is-unread"}">
@@ -2920,11 +2878,17 @@
                   <button class="small-action ${read ? "ghost" : ""}" type="button" data-action="mark-app-news-read" data-news-id="${escapeAttr(item.id)}">${read ? "Lido" : "Marcar lido"}</button>
                 </article>
               `;
-            }).join("")}
+            }).join("") : `
+              <div class="empty-state app-news-empty">
+                <i data-lucide="bell-off" aria-hidden="true"></i>
+                <strong>Nenhuma nova atualizacao</strong>
+                <p>As notificacoes do aplicativo comecam a partir deste novo marco.</p>
+              </div>
+            `}
           </div>
           <div class="form-actions">
             <button class="secondary-button" type="button" data-action="close-modal">Fechar</button>
-            <button class="primary-button" type="button" data-action="mark-all-app-news-read">Marcar tudo como lido</button>
+            ${appNews.length ? `<button class="primary-button" type="button" data-action="mark-all-app-news-read">Marcar tudo como lido</button>` : ""}
           </div>
         </div>
       </div>
@@ -3233,6 +3197,7 @@
           ? `<button class="small-action" type="button" data-action="open-modal" data-modal="incomeSource" data-id="${escapeAttr(card.id)}">Configurar salário</button>`
           : `<em>${escapeHtml(card.status)}</em>`}</div>
         ${!hideBalance && card.kind === "factory" ? renderSalaryPredictionDetails(card, { popover: true, id: popoverId }) : ""}
+        ${!hideBalance && card.kind === "factory" ? renderSalaryPredictionDetails(card, { mobile: true }) : ""}
       </article>
     `;
   }
@@ -3344,7 +3309,7 @@
     if (options.popover) {
       return `<div class="salary-detail-popover salary-prediction-breakdown" id="${escapeAttr(options.id || "salary-detail-popover")}" role="tooltip"><strong class="salary-detail-popover-title">Detalhamento do salário previsto</strong>${body}</div>`;
     }
-    return `<details class="salary-breakdown salary-prediction-breakdown"><summary>Detalhamento do salario previsto</summary>${body}</details>`;
+    return `<details class="salary-breakdown salary-prediction-breakdown ${options.mobile ? "dashboard-salary-mobile-details" : ""}"><summary>${options.mobile ? "Detalhamento do pagamento" : "Detalhamento do salario previsto"}</summary>${body}</details>`;
   }
 
   function renderSalaryTotalConverted(total, currency, month = state.ui.selectedMonth) {

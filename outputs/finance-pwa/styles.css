@@ -10703,6 +10703,7 @@ html.auth-mode { background: #f3f7f4; }
 .dashboard-group-reports { background: rgba(93, 105, 105, .055); }
 .dashboard-group-heading { margin: 0 0 4px; padding: 4px 2px 12px; font-size: 16px; font-weight: 850; font-family: Manrope, Inter, ui-sans-serif, system-ui, sans-serif; text-align: center; color: #173d32; }
 .dashboard-finance-strip { display: none; }
+.dashboard-salary-mobile-details { display: none; }
 @media (min-width: 1180px) {
   .dashboard-finance-strip {
     position: relative;
@@ -10830,10 +10831,12 @@ html.auth-mode { background: #f3f7f4; }
   .dashboard-finance-title svg { width: 18px; height: 18px; }
   .dashboard-finance-title strong { font-size: .96rem; }
   .dashboard-salary-account-label { margin-left: auto; padding: 4px 7px; border-radius: 999px; color: #1f674d; background: rgba(222, 244, 230, .9); font-size: .62rem; font-weight: 850; }
-  .dashboard-salary-tile .salary-formula { margin-top: 4px; }
-  .dashboard-salary-tile .salary-formula em { font-size: .65rem; }
-  .dashboard-salary-tile .salary-formula strong { font-size: 1rem; }
-  .dashboard-salary-tile .salary-formula .is-total strong { font-size: 1.28rem; }
+  .dashboard-salary-tile .salary-formula { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 8px; margin-top: 4px; overflow: visible; }
+  .dashboard-salary-tile .salary-formula > div { min-width: 0; }
+  .dashboard-salary-tile .salary-formula em { min-height: 1.7em; font-size: .62rem; line-height: .92; }
+  .dashboard-salary-tile .salary-formula strong,
+  .dashboard-salary-tile .salary-formula .is-total strong { font-size: clamp(.78rem, 3.45vw, .94rem); line-height: 1.08; overflow: visible; text-overflow: clip; white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: 0; }
+  .dashboard-salary-tile .salary-formula b { display: none; }
   .dashboard-salary-tile .salary-total-converted { margin: 0; font-size: .72rem; }
   .dashboard-finance-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #526a5f; font-size: .72rem; }
   .dashboard-finance-foot span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -10861,6 +10864,15 @@ html.auth-mode { background: #f3f7f4; }
   .dashboard-finance-empty small { display: block; }
   .dashboard-finance-empty small { margin-top: 4px; color: #77887f; font-size: .68rem; }
   .salary-detail-popover { display: none; }
+  .dashboard-salary-mobile-details { position: relative; z-index: 1; display: block; margin-top: 2px; padding-top: 8px; border-top: 1px solid rgba(18, 49, 79, .14); color: #173d32; }
+  .dashboard-salary-mobile-details summary { display: flex; align-items: center; justify-content: space-between; min-height: 34px; padding: 4px 0; color: #1f654d; font-size: .74rem; font-weight: 850; list-style: none; }
+  .dashboard-salary-mobile-details summary::-webkit-details-marker { display: none; }
+  .dashboard-salary-mobile-details summary::after { content: "+"; font-size: 1rem; line-height: 1; }
+  .dashboard-salary-mobile-details[open] summary::after { content: "−"; }
+  .dashboard-salary-mobile-details dl { margin: 8px 0; }
+  .dashboard-salary-mobile-details dl > div { flex-wrap: nowrap; font-size: .7rem; }
+  .dashboard-salary-mobile-details dt { min-width: 0; }
+  .dashboard-salary-mobile-details dd { flex: 0 0 auto; white-space: nowrap; }
 }
 .modal-required-account { display: grid; justify-items: center; gap: 12px; padding: 28px 18px; text-align: center; }
 .modal-required-account > svg { width: 32px; height: 32px; color: #1f7455; }

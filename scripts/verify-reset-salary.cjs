@@ -17,7 +17,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || "playwright");
   await page.route("**/app.js*", (route) => {
     const source = fs.readFileSync(path.resolve("outputs/finance-pwa/app.js"), "utf8");
     const hooks = `window.resetSalaryTest = {
-      createInitialState, normalizeState, activateRemoteStateStorage, dashboardSalaryCards, renderIncomeSourceModal, render,
+      createInitialState, normalizeState, activateRemoteStateStorage, dashboardSalaryCards, renderIncomeSourceModal,
+      unreadAppNews, showAppNewsModal, render,
       remoteStore, remoteSession, getState: () => state, setState: (value) => { state = value; }
     };`;
     return route.fulfill({
@@ -63,6 +64,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || "playwright");
     return {
       resetStayedEmpty,
       companyRequiresAccount,
+      unreadNews: test.unreadAppNews().length,
       salaryCardCount: cards.length,
       salaryNeedsConfig: cards[0]?.needsConfig,
       salaryAccountId: cards[0]?.bankAccountId,
@@ -73,11 +75,17 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || "playwright");
   assert.deepEqual(result, {
     resetStayedEmpty: true,
     companyRequiresAccount: true,
+    unreadNews: 0,
     salaryCardCount: 1,
     salaryNeedsConfig: true,
     salaryAccountId: "salary-bank",
     salaryStatus: "Configure o salário"
   });
+  await page.evaluate(() => window.resetSalaryTest.showAppNewsModal());
+  assert.equal(await page.locator(".app-news-row").count(), 0);
+  assert.equal(await page.getByText("Nenhuma nova atualizacao", { exact: true }).count(), 1);
+  assert.equal(await page.locator("#app-news-badge").isHidden(), true);
+  await page.locator(".app-news-modal [data-action='close-modal']").first().click();
   for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(() => window.resetSalaryTest.render());
@@ -91,7 +99,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || "playwright");
       assert.equal(await page.locator(".overview-mini-card:visible").count(), 0);
     }
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    await page.screenshot({ path: path.resolve(`work/reset-salary-v217-${width}.png`), fullPage: true });
+    await page.screenshot({ path: path.resolve(`work/reset-salary-v218-${width}.png`), fullPage: true });
   }
   assert.deepEqual(errors, []);
   console.log("Reset and salary regression checks:", result);
