@@ -404,7 +404,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=212")
+      navigator.serviceWorker.register("./service-worker.js?v=215")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -3047,11 +3047,13 @@
             ${state.ui.hideCalendarDetails ? renderHiddenDetails("Eventos ocultos", "Clique no olho para mostrar o calendario financeiro.") : renderFinancialCalendar(8, "upcoming")}
           </article>
 
+          <article class="content-panel balance-projection-panel">
+            ${renderBalanceProjectionPanel()}
+          </article>
+
           <article class="content-panel family-pie-panel">
             ${renderFamilyFinancePiePanel(summary)}
           </article>
-
-          ${window.NekumaDashboard?.expenses(countryExpenseModels(), formatMonthLabel(state.ui.selectedMonth)) || ''}
 
           <article class="content-panel recent-transactions-panel">
             <div class="panel-head">
@@ -5896,9 +5898,9 @@
     const rows = housingCardMonthRows(card, month);
     const totalCurrency = primaryCurrency();
     const totalOpen = rows
-      .filter((item) => !item.paid && item.paymentMethod !== "company")
+      .filter((item) => !item.obligationPaid && item.paymentMethod !== "company")
       .reduce((total, item) => total + convert(item.amount, item.currency, totalCurrency, latestRate(month)), 0);
-    const paidCount = rows.filter((item) => item.paid).length;
+    const paidCount = rows.filter((item) => item.obligationPaid).length;
     return `
       <div class="housing-card">
         <div class="housing-card-head">
@@ -5922,17 +5924,25 @@
               : item.paymentMethod === "bank" && item.bankAccountId
                 ? bankAccountName(bankAccountById(item.bankAccountId))
                 : housingPaymentMethodLabel(item.paymentMethod);
+            const cardPurchasePending = item.paymentMethod === "card" && item.paid && !item.obligationPaid;
+            const statusLabel = item.obligationPaid
+              ? "Pago"
+              : cardPurchasePending
+                ? "A pagar no cartao"
+                : item.paymentMethod === "company"
+                  ? "No salario"
+                  : "Pagar";
             return `
-              <div class="housing-item ${item.paid ? "is-paid" : ""}">
-                <span class="row-icon ${item.paid ? "green" : "blue"}">${escapeHtml(item.icon)}</span>
+              <div class="housing-item ${item.obligationPaid ? "is-paid" : ""}">
+                <span class="row-icon ${item.obligationPaid ? "green" : cardPurchasePending ? "gold" : "blue"}">${escapeHtml(item.icon)}</span>
                 <div class="row-main">
                   <p class="row-title">${escapeHtml(item.label)}</p>
-                  <p class="row-meta">${item.paymentMethod === "company" ? (item.paid ? "descontado no salario" : "desconto no proximo salario") : `vence ${formatShortDate(item.date)}`} - ${escapeHtml(cardLabel)}</p>
+                  <p class="row-meta">${cardPurchasePending ? "fatura em aberto" : item.paymentMethod === "company" ? (item.paid ? "descontado no salario" : "desconto no proximo salario") : `vence ${formatShortDate(item.date)}`} - ${escapeHtml(cardLabel)}</p>
                 </div>
-                <div class="row-amount ${item.paid ? "income" : "expense"}">
+                <div class="row-amount ${item.obligationPaid ? "income" : "expense"}">
                   ${formatMoneyWithPrimary(item.amount, item.currency, month)}
                   <div class="row-actions">
-                    <button class="small-action ${item.paid ? "ghost" : ""}" type="button" data-action="pay-housing-item" data-id="${card.id}" data-item-key="${item.key}" ${item.paid || item.paymentMethod === "company" ? "disabled" : ""}>${item.paid ? "Pago" : item.paymentMethod === "company" ? "No salario" : "Pagar"}</button>
+                    <button class="small-action ${item.obligationPaid || cardPurchasePending ? "ghost" : ""}" type="button" data-action="pay-housing-item" data-id="${card.id}" data-item-key="${item.key}" ${item.paid || item.paymentMethod === "company" ? "disabled" : ""}>${statusLabel}</button>
                   </div>
                 </div>
               </div>
@@ -6733,7 +6743,10 @@
           const iconStyle = item.color ? `style="background:${escapeAttr(item.color)}"` : "";
           const author = authorLabel(item);
           const noteText = normalizeLookupText(item.note || "");
-          const paidNote = noteText.startsWith("pago") || noteText.includes("pago no app");
+          const explicitStatus = String(item.status || "").trim();
+          const paidNote = item.statusTone === "green" || (!explicitStatus && (noteText.startsWith("pago") || noteText.includes("pago no app")));
+          const statusLabel = explicitStatus || (paidNote ? "Pago" : "");
+          const statusTone = item.statusTone || (paidNote ? "green" : "blue");
           const account = bankAccountById(item.bankAccountId);
           const methodLabel = transactionMethodLabel(item);
           const accountMeta = [
@@ -6747,9 +6760,10 @@
             <div class="list-row ${paidNote ? "is-paid" : ""}">
               <span class="row-icon ${meta.tone}" ${iconStyle}>${item.icon || meta.icon}</span>
               <div class="row-main">
-                <p class="row-title">${escapeHtml(item.title)}${paidNote ? ` <span class="chip green inline-chip">Pago</span>` : ""}</p>
+                <p class="row-title">${escapeHtml(item.title)}</p>
+                ${statusLabel ? `<p class="transaction-status-line"><span class="chip ${escapeAttr(statusTone)} inline-chip">${escapeHtml(statusLabel)}</span></p>` : ""}
                 ${author ? `<p class="row-meta author-meta">Adicionado por ${escapeHtml(author)}</p>` : ""}
-                ${paidNote ? `<p class="row-meta paid-note">${escapeHtml(item.note)}</p>` : ""}
+                ${item.note ? `<p class="row-meta ${paidNote ? "paid-note" : ""}">${escapeHtml(item.note)}</p>` : ""}
                 <p class="row-meta">${escapeHtml(accountMeta)}</p>
               </div>
               <div class="row-amount ${isIncome ? "income" : "expense"}">
@@ -10848,6 +10862,8 @@
     if (balancePie) drawBalancePieChart(balancePie);
     const trend = document.getElementById("trend-chart");
     if (trend) drawTrendChart(trend);
+    const projection = document.getElementById("balance-projection-chart");
+    if (projection) drawBalanceProjectionChart(projection);
     const category = document.getElementById("category-chart");
     if (category) drawCategoryChart(category);
     const country = document.getElementById("country-chart");
@@ -11249,6 +11265,96 @@
     provider.on("chainChanged", (chainId) => {
       // Keep the previous snapshot visible until the new network has been read.
       refreshWeb3Wallet();
+    });
+  }
+
+  function drawBalanceProjectionChart(canvas) {
+    const ctx = prepCanvas(canvas);
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const model = balanceProjectionModel();
+    const points = [{ label: "Hoje", balance: model.openingBalance, month: state.ui.selectedMonth }, ...model.months];
+    const values = points.map((item) => item.balance);
+    const minValue = Math.min(0, ...values);
+    const maxValue = Math.max(1, ...values);
+    const range = Math.max(1, maxValue - minValue);
+    const padding = { top: 22, right: 16, bottom: 36, left: 16 };
+    const chartW = width - padding.left - padding.right;
+    const chartH = height - padding.top - padding.bottom;
+    const stepX = points.length > 1 ? chartW / (points.length - 1) : chartW;
+    const yFor = (value) => padding.top + ((maxValue - value) / range) * chartH;
+    const lineColor = model.endingBalance >= model.openingBalance ? "#2f9a68" : "#d95d4e";
+
+    ctx.clearRect(0, 0, width, height);
+    drawGrid(ctx, padding, chartW, chartH, width);
+
+    const zeroY = yFor(0);
+    if (zeroY >= padding.top && zeroY <= padding.top + chartH) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(217, 93, 78, 0.45)";
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(padding.left, zeroY);
+      ctx.lineTo(width - padding.right, zeroY);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    const plotted = points.map((item, index) => ({
+      ...item,
+      x: padding.left + stepX * index,
+      y: yFor(item.balance)
+    }));
+
+    ctx.beginPath();
+    plotted.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.lineTo(plotted[plotted.length - 1].x, padding.top + chartH);
+    ctx.lineTo(plotted[0].x, padding.top + chartH);
+    ctx.closePath();
+    ctx.fillStyle = model.endingBalance >= model.openingBalance ? "rgba(66, 166, 122, 0.12)" : "rgba(217, 93, 78, 0.1)";
+    ctx.fill();
+
+    ctx.beginPath();
+    plotted.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.stroke();
+
+    plotted.forEach((point) => {
+      ctx.beginPath();
+      ctx.fillStyle = "#fffaf4";
+      ctx.arc(point.x, point.y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.fillStyle = lineColor;
+      ctx.arc(point.x, point.y, 2.7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#766f62";
+      ctx.font = "700 10px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText(point.label, point.x, height - 12);
+    });
+
+    bindCanvasTooltip(canvas, (event) => {
+      const pointer = canvasPointerPoint(canvas, event);
+      const hit = plotted.find((point) => Math.hypot(pointer.x - point.x, pointer.y - point.y) <= 16);
+      if (!hit) return null;
+      const detail = hit.salary == null
+        ? [formatMoneyWithPrimary(hit.balance, model.currency)]
+        : [
+            `Saldo ${formatMoneyWithPrimary(hit.balance, model.currency)}`,
+            `Salario ${formatMoneyWithPrimary(hit.salary, model.currency)}`,
+            `Gastos ${formatMoneyWithPrimary(hit.outflow, model.currency)}`
+          ];
+      return { title: hit.label, lines: detail, color: lineColor };
     });
   }
 
@@ -12345,6 +12451,71 @@
       .sort((a, b) => b.date.localeCompare(a.date));
   }
 
+  function projectedSalaryForMonth(month, currency = primaryCurrency()) {
+    const rate = latestRate(month);
+    const salaryCards = dashboardSalaryCards(month);
+    const cardsTotal = salaryCards.reduce((total, card) => {
+      return total + convert(number(card.netAmount ?? card.amount), card.currency, currency, rate);
+    }, 0);
+    const summary = summarizeMonth(month, "global");
+    const recordedIncome = convert(summary.projectedInflow, summary.currency, currency, rate);
+    return Math.max(0, cardsTotal, recordedIncome);
+  }
+
+  function balanceProjectionModel(startMonth = state.ui.selectedMonth, count = 6) {
+    const currency = primaryCurrency();
+    const openingBalance = bankAccountsTotal(currency, startMonth);
+    let runningBalance = openingBalance;
+    const months = Array.from({ length: count }, (_, index) => addMonths(startMonth, index + 1)).map((month) => {
+      const summary = summarizeMonth(month, "global");
+      const salary = projectedSalaryForMonth(month, currency);
+      const outflow = convert(summary.projectedOutflow, summary.currency, currency, latestRate(month));
+      runningBalance += salary - outflow;
+      return {
+        month,
+        label: shortMonthLabel(month),
+        salary,
+        outflow,
+        net: salary - outflow,
+        balance: runningBalance
+      };
+    });
+    const salaryAverage = months.length ? months.reduce((total, item) => total + item.salary, 0) / months.length : 0;
+    const outflowAverage = months.length ? months.reduce((total, item) => total + item.outflow, 0) / months.length : 0;
+    const minimumBalance = months.length ? Math.min(openingBalance, ...months.map((item) => item.balance)) : openingBalance;
+    return {
+      currency,
+      openingBalance,
+      months,
+      salaryAverage,
+      outflowAverage,
+      minimumBalance,
+      endingBalance: months.at(-1)?.balance ?? openingBalance
+    };
+  }
+
+  function renderBalanceProjectionPanel() {
+    const model = balanceProjectionModel();
+    return `
+      <div class="panel-head">
+        <div>
+          <h2>Projecoes de saldo</h2>
+          <p class="row-meta">Salario previsto menos gastos mensais dos proximos 6 meses.</p>
+        </div>
+        <span class="chip blue">6 meses</span>
+      </div>
+      <div class="balance-projection-chart-wrap">
+        <canvas id="balance-projection-chart" aria-label="Projecao do saldo para os proximos seis meses"></canvas>
+      </div>
+      <div class="balance-projection-stats">
+        <div><span>Menor saldo previsto</span><strong class="${model.minimumBalance < 0 ? "expense" : "income"}">${formatMoneyWithPrimary(model.minimumBalance, model.currency)}</strong></div>
+        <div><span>Salario medio</span><strong>${formatMoneyWithPrimary(model.salaryAverage, model.currency)}</strong></div>
+        <div><span>Gastos medios</span><strong>${formatMoneyWithPrimary(model.outflowAverage, model.currency)}</strong></div>
+      </div>
+      <p class="projection-disclaimer">Estimativa baseada nos saldos atuais e nos lancamentos recorrentes cadastrados.</p>
+    `;
+  }
+
   function monthPlannedWorkIncomes(month) {
     return userWorkIncomes()
       .filter((item) => item.paid === false)
@@ -12511,12 +12682,19 @@
       .filter((item) => item.active !== false)
       .filter((item) => number(item.amount) > 0)
       .filter((item) => item.recurring || item.startMonth === month)
-      .map((item) => ({
-        ...item,
-        icon: item.icon || housingItemTemplates.find((template) => template.key === item.key)?.icon || "M",
-        date: housingItemDateForMonth(item, month),
-        paid: isHousingItemPaid(card.id, item.key, month)
-      }));
+      .map((item) => {
+        const paid = isHousingItemPaid(card.id, item.key, month);
+        const obligationPaid = item.paymentMethod === "card"
+          ? Boolean(paid && item.cardId && isCardBillPaid(item.cardId, month))
+          : paid;
+        return {
+          ...item,
+          icon: item.icon || housingItemTemplates.find((template) => template.key === item.key)?.icon || "M",
+          date: housingItemDateForMonth(item, month),
+          paid,
+          obligationPaid
+        };
+      });
   }
 
   function housingItemByKey(card, key) {
@@ -14355,17 +14533,22 @@
   }
 
   function cardPurchaseExpenseEntries(month, country) {
-    const detailed = cardPurchaseRows(month, country).map((item) => ({
-      ...item,
-      generated: true,
-      type: "expense",
-      amount: number(item.amount),
-      currency: item.currency,
-      date: item.purchaseDate || dateInMonth(month, 1),
-      paymentMethod: "card",
-      note: `Pago no cartao ${item.cardName || ""}`.trim(),
-      icon: "C"
-    }));
+    const detailed = cardPurchaseRows(month, country).map((item) => {
+      const invoicePaid = Boolean(item.cardId && isCardBillPaid(item.cardId, month));
+      return {
+        ...item,
+        generated: true,
+        type: "expense",
+        amount: number(item.amount),
+        currency: item.currency,
+        date: item.purchaseDate || dateInMonth(month, 1),
+        paymentMethod: "card",
+        status: invoicePaid ? "Fatura paga" : "Fatura em aberto",
+        statusTone: invoicePaid ? "green" : "gold",
+        note: `${invoicePaid ? "Pago na" : "A pagar na"} fatura ${item.cardName || ""}`.trim(),
+        icon: "C"
+      };
+    });
     const manual = (state.creditCards || [])
       .filter((card) => country === "global" || card.country === country)
       .filter((card) => isCardBillPaid(card.id, month))
