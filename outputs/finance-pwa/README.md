@@ -123,6 +123,10 @@ CoinGecko; o card Novas prioriza projetos recentes presentes nas tendencias, e
 nao representa a lista cronologica completa do servico. Os dados sao apenas
 informativos, sem recomendacao de compra.
 
+O card Detalhamento Cripto mantém o histórico das compras manuais: data, valor
+pago, quantidade, preço unitário na compra, corretora original, custódia atual e
+uma sequência opcional de transferências entre corretoras ou carteiras.
+
 O `wrangler.toml` configura os bindings `AI` e `BINANCE_DB`. Mantenha no
 Cloudflare Pages, em **Settings > Variables and Secrets**:
 

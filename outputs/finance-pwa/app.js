@@ -404,7 +404,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=207")
+      navigator.serviceWorker.register("./service-worker.js?v=208")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -535,6 +535,8 @@
     if (action === "remove-salary-progression-step") removeSalaryProgressionRow(button);
     if (action === "add-salary-bonus-step") addSalaryBonusRow();
     if (action === "remove-salary-bonus-step") removeSalaryBonusRow(button);
+    if (action === "add-crypto-custody-transfer") addCryptoCustodyTransferRow();
+    if (action === "remove-crypto-custody-transfer") button.closest(".crypto-custody-form-row")?.remove();
     if (action === "add-housing-other") addHousingOtherRow(button);
     if (action === "remove-housing-other") button.closest(".housing-form-row")?.remove();
     if (action === "dismiss-salary-receipt") closeModal();
@@ -1645,6 +1647,22 @@
       .slice(0, 16) || "BTC";
   }
 
+  function normalizeCryptoCustodyTransfers(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map((item, index) => ({
+      id: String(item?.id || `custody-${index + 1}`),
+      date: String(item?.date || "").slice(0, 10),
+      fromProvider: String(item?.fromProvider || "").trim(),
+      toProvider: String(item?.toProvider || "").trim(),
+      quantity: cryptoQuantityText(item?.quantity || "")
+    })).filter((item) => item.date || item.fromProvider || item.toProvider || cryptoQuantityNumber(item.quantity) > 0);
+  }
+
+  function cryptoCurrentProvider(item) {
+    const transfers = normalizeCryptoCustodyTransfers(item?.custodyTransfers);
+    return transfers.at(-1)?.toProvider || String(item?.provider || item?.note || "Banco/corretora nao informado").trim();
+  }
+
   function normalizeCryptoAssets(items, fallback = [], quotes = state?.cryptoQuotes, fallbackCurrency = primaryCurrency()) {
     if (!Array.isArray(items)) return fallback;
     return items.map((item) => ({
@@ -1654,6 +1672,7 @@
       quantity: normalizeCryptoQuantityText(item, quotes),
       costAmount: number(item.costAmount),
       costCurrency: sanitizeCurrency(item.costCurrency, fallbackCurrency),
+      custodyTransfers: normalizeCryptoCustodyTransfers(item.custodyTransfers),
       updatedAt: item.updatedAt || item.savedAt || ""
     }));
   }
@@ -4844,7 +4863,54 @@
             ${renderCryptoPanel(false, true)}
           </details>
         </section>
+        ${renderCryptoTransactionDetails()}
       </div>
+    `;
+  }
+
+  function renderCryptoTransactionDetails() {
+    const assets = [...(state.cryptoAssets || [])].sort((a, b) => String(b.purchaseDate || "").localeCompare(String(a.purchaseDate || "")));
+    return `
+      <section class="content-panel crypto-transactions-card">
+        <div class="panel-head">
+          <div><span class="mini-label">Histórico de compras e custódia</span><h2>Detalhamento Cripto</h2><p class="row-meta">Registros informados pelo usuário. Conexões de carteira não fornecem automaticamente o preço original de compra.</p></div>
+          <span class="chip blue">${assets.length} ${assets.length === 1 ? "compra" : "compras"}</span>
+        </div>
+        ${assets.length ? `
+          <div class="crypto-transaction-list">
+            ${assets.map((item) => {
+              const symbol = normalizeCryptoSymbol(item.symbol);
+              const meta = cryptoCatalog[symbol] || { name: symbol, color: "#71877e" };
+              const quantity = cryptoQuantityNumber(item.quantity);
+              const cost = number(item.costAmount);
+              const currency = sanitizeCurrency(item.costCurrency, primaryCurrency());
+              const unitPrice = quantity > 0 ? cost / quantity : 0;
+              const transfers = normalizeCryptoCustodyTransfers(item.custodyTransfers);
+              const purchaseProvider = String(item.provider || item.note || "Não informado").trim();
+              const currentProvider = cryptoCurrentProvider(item);
+              return `
+                <article class="crypto-transaction-item">
+                  <div class="crypto-transaction-heading">
+                    <div class="crypto-transaction-asset">${renderCryptoTokenIcon({ symbol, color: meta.color })}<div><strong>${escapeHtml(item.customName || meta.name || symbol)}</strong><small>${escapeHtml(symbol)} · compra em ${escapeHtml(formatShortDate(item.purchaseDate))}</small></div></div>
+                    <button class="small-action ghost" type="button" data-action="open-modal" data-modal="crypto" data-id="${escapeAttr(item.id)}"><i data-lucide="pencil" aria-hidden="true"></i>Editar</button>
+                  </div>
+                  <div class="crypto-transaction-metrics">
+                    <div><span>Valor pago</span><strong>${formatMoney(cost, currency)}</strong></div>
+                    <div><span>Quantidade comprada</span><strong>${escapeHtml(formatCryptoAmount(quantity))} ${escapeHtml(symbol)}</strong></div>
+                    <div><span>Preço na compra</span><strong>${formatDetailedCryptoPrice(unitPrice, currency)}</strong></div>
+                    <div><span>Corretora da compra</span><strong>${escapeHtml(purchaseProvider)}</strong></div>
+                    <div><span>Custódia atual</span><strong>${escapeHtml(currentProvider)}</strong></div>
+                  </div>
+                  <div class="crypto-custody-history">
+                    <span class="crypto-custody-label"><i data-lucide="route" aria-hidden="true"></i>Transferências de custódia</span>
+                    ${transfers.length ? `<div class="crypto-custody-timeline">${transfers.map((transfer) => `<div><time>${escapeHtml(formatShortDate(transfer.date))}</time><span>${escapeHtml(transfer.fromProvider || purchaseProvider)} <i data-lucide="arrow-right" aria-hidden="true"></i> ${escapeHtml(transfer.toProvider || "Destino não informado")}</span><strong>${cryptoQuantityNumber(transfer.quantity) > 0 ? `${escapeHtml(formatCryptoAmount(transfer.quantity))} ${escapeHtml(symbol)}` : "Quantidade não informada"}</strong></div>`).join("")}</div>` : `<p>Sem transferência de custódia registrada.</p>`}
+                  </div>
+                </article>
+              `;
+            }).join("")}
+          </div>
+        ` : `<div class="crypto-transaction-empty"><i data-lucide="notebook-tabs" aria-hidden="true"></i><div><strong>Nenhuma compra cadastrada</strong><p>Use “Nova cripto” para registrar uma compra e formar o histórico.</p></div></div>`}
+      </section>
     `;
   }
 
@@ -8221,9 +8287,18 @@
           </div>
         </div>
         <div class="field">
-          <label for="cryptoProvider">Banco ou corretora</label>
+          <label for="cryptoProvider">Corretora da compra / custódia inicial</label>
           <input id="cryptoProvider" name="provider" value="${escapeAttr(item?.provider || item?.note || "")}" placeholder="Ex: Nubank, Binance, Mercado Bitcoin" />
         </div>
+        <section class="crypto-custody-editor">
+          <div class="panel-head compact">
+            <div><h3>Transferências de custódia</h3><p class="row-meta">Opcional. Registre cada movimentação entre corretoras ou carteiras.</p></div>
+            <button class="small-action" type="button" data-action="add-crypto-custody-transfer"><i data-lucide="plus" aria-hidden="true"></i>Transferência</button>
+          </div>
+          <div class="crypto-custody-form-list" data-crypto-custody-list>
+            ${normalizeCryptoCustodyTransfers(item?.custodyTransfers).map(renderCryptoCustodyTransferRow).join("")}
+          </div>
+        </section>
         <div class="field">
           <label for="cryptoNote">Observacao</label>
           <textarea id="cryptoNote" name="note" placeholder="Observacao opcional">${escapeHtml(item?.note || "")}</textarea>
@@ -8234,6 +8309,37 @@
         </div>
       </form>
     `;
+  }
+
+  function renderCryptoCustodyTransferRow(transfer = {}) {
+    return `
+      <div class="crypto-custody-form-row">
+        <input type="hidden" name="custodyTransferId" value="${escapeAttr(transfer.id || uid("ct"))}">
+        <div class="field"><label>Data</label><input name="custodyTransferDate" type="date" value="${escapeAttr(transfer.date || "")}"></div>
+        <div class="field"><label>Origem</label><input name="custodyTransferFrom" value="${escapeAttr(transfer.fromProvider || "")}" placeholder="Ex: Nubank"></div>
+        <div class="field"><label>Destino</label><input name="custodyTransferTo" value="${escapeAttr(transfer.toProvider || "")}" placeholder="Ex: MetaMask"></div>
+        <div class="field"><label>Quantidade</label><input name="custodyTransferQuantity" type="text" inputmode="decimal" value="${escapeAttr(formatCryptoInputValue(transfer.quantity || ""))}" placeholder="0.00"></div>
+        <button class="icon-button" type="button" data-action="remove-crypto-custody-transfer" aria-label="Remover transferência" title="Remover"><i data-lucide="trash-2" aria-hidden="true"></i></button>
+      </div>
+    `;
+  }
+
+  function addCryptoCustodyTransferRow() {
+    const list = modalRoot.querySelector("[data-crypto-custody-list]");
+    if (!list) return;
+    list.insertAdjacentHTML("beforeend", renderCryptoCustodyTransferRow({ date: localDateKey() }));
+    list.lastElementChild?.querySelector("[name='custodyTransferFrom']")?.focus();
+    refreshIcons();
+  }
+
+  function collectCryptoCustodyTransfers(form) {
+    return normalizeCryptoCustodyTransfers([...form.querySelectorAll(".crypto-custody-form-row")].map((row) => ({
+      id: row.querySelector("[name='custodyTransferId']")?.value || uid("ct"),
+      date: row.querySelector("[name='custodyTransferDate']")?.value || "",
+      fromProvider: row.querySelector("[name='custodyTransferFrom']")?.value || "",
+      toProvider: row.querySelector("[name='custodyTransferTo']")?.value || "",
+      quantity: row.querySelector("[name='custodyTransferQuantity']")?.value || ""
+    })));
   }
 
   function renderWeb3WalletModal() {
@@ -9676,6 +9782,7 @@
       costCurrency: data.costCurrency,
       purchaseDate: data.purchaseDate || dateInMonth(state.ui.selectedMonth, new Date().getDate()),
       provider: data.provider.trim(),
+      custodyTransfers: collectCryptoCustodyTransfers(form),
       note: data.note.trim(),
       updatedAt: new Date().toISOString()
     });
@@ -11611,7 +11718,7 @@
     if (aiAssistantLoadAttempted) return;
     aiAssistantLoadAttempted = true;
     const script = document.createElement("script");
-    script.src = "./assistant.js?v=207";
+    script.src = "./assistant.js?v=208";
     script.onload = mount;
     script.onerror = () => {
       aiAssistantLoadAttempted = false;
@@ -11901,7 +12008,9 @@
         value,
         pnl,
         pnlPct,
-        provider: item.provider || item.note || "Banco/corretora nao informado",
+        provider: cryptoCurrentProvider(item),
+        purchaseProvider: item.provider || item.note || "Banco/corretora nao informado",
+        custodyTransfers: normalizeCryptoCustodyTransfers(item.custodyTransfers),
         purchaseDate: item.purchaseDate || dateInMonth(state.ui.selectedMonth, 1),
         currency
       };
