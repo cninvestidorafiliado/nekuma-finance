@@ -404,7 +404,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=204")
+      navigator.serviceWorker.register("./service-worker.js?v=205")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -4890,8 +4890,8 @@
   function renderCryptoMarketRadarCard(kind) {
     const market = state.cryptoQuotes?.marketRadar || {};
     const items = kind === "memes" ? market.memes || [] : market.leaders || [];
-    const title = kind === "memes" ? "Memecoins em alta" : "Radar cripto";
-    const subtitle = kind === "memes" ? "5 memecoins com melhor desempenho em 24h" : "5 criptos com melhor desempenho em 24h";
+    const title = kind === "memes" ? "Memecoins em alta" : "Principais do mercado";
+    const subtitle = kind === "memes" ? "5 memecoins com melhor desempenho em 24h" : "5 maiores criptos por capitalização de mercado";
     return `
       <section class="content-panel crypto-market-radar is-${escapeAttr(kind)}">
         <div class="panel-head"><div><span class="mini-label">Movimento de mercado</span><h2>${escapeHtml(title)}</h2><p class="row-meta">${escapeHtml(subtitle)}</p></div><span class="chip ${kind === "memes" ? "gold" : "green"}">${kind === "memes" ? "Meme" : "Top 5"}</span></div>
@@ -11604,7 +11604,7 @@
     if (aiAssistantLoadAttempted) return;
     aiAssistantLoadAttempted = true;
     const script = document.createElement("script");
-    script.src = "./assistant.js?v=204";
+    script.src = "./assistant.js?v=205";
     script.onload = mount;
     script.onerror = () => {
       aiAssistantLoadAttempted = false;
@@ -13741,16 +13741,16 @@
   }
 
   async function fetchCryptoMarketRadar() {
-    const base = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=24h";
+    const base = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&page=1&sparkline=false&price_change_percentage=24h";
     const [marketResponse, memeResponse] = await Promise.all([
-      fetch(base, { cache: "no-store" }),
-      fetch(`${base}&category=meme-token`, { cache: "no-store" })
+      fetch(`${base}&per_page=25`, { cache: "no-store" }),
+      fetch(`${base}&per_page=100&category=meme-token`, { cache: "no-store" })
     ]);
     if (!marketResponse.ok || !memeResponse.ok) throw new Error("Falha ao buscar o radar de mercado");
     const [market, memes] = await Promise.all([marketResponse.json(), memeResponse.json()]);
-    const normalize = (items) => (Array.isArray(items) ? items : [])
+    const normalize = (items, sortByChange = true) => (Array.isArray(items) ? items : [])
       .filter((item) => Number.isFinite(Number(item.price_change_percentage_24h)))
-      .sort((a, b) => Number(b.price_change_percentage_24h) - Number(a.price_change_percentage_24h))
+      .sort(sortByChange ? (a, b) => Number(b.price_change_percentage_24h) - Number(a.price_change_percentage_24h) : (a, b) => number(a.market_cap_rank) - number(b.market_cap_rank))
       .slice(0, 5)
       .map((item) => ({
         id: String(item.id || ""),
@@ -13761,7 +13761,9 @@
         change24h: number(item.price_change_percentage_24h),
         marketCapRank: number(item.market_cap_rank)
       }));
-    return { leaders: normalize(market), memes: normalize(memes), updatedAt: new Date().toISOString() };
+    const stablecoins = new Set(["USDT", "USDC", "USDS", "DAI", "FDUSD", "USDE", "PYUSD", "TUSD", "BUSD"]);
+    const leaders = (Array.isArray(market) ? market : []).filter((item) => !stablecoins.has(String(item.symbol || "").toUpperCase()));
+    return { leaders: normalize(leaders, false), memes: normalize(memes), updatedAt: new Date().toISOString() };
   }
 
   function collectSalaryProgressions(form) {
