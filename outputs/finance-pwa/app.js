@@ -140,6 +140,22 @@
     child: "Filho",
     other: "Outros"
   };
+  const controlTemplateMeta = {
+    streaming: { label: "Assinaturas e streaming", icon: "radio" },
+    mei: { label: "Clientes e cobrancas MEI", icon: "briefcase-business" },
+    services: { label: "Servicos e atendimentos", icon: "handshake" },
+    sales: { label: "Vendas e encomendas", icon: "shopping-bag" },
+    custom: { label: "Controle personalizado", icon: "table-properties" }
+  };
+  const controlFieldTypeMeta = {
+    text: "Texto",
+    phone: "Telefone",
+    number: "Numero",
+    money: "Dinheiro",
+    date: "Data",
+    select: "Opcoes",
+    checkbox: "Sim ou nao"
+  };
   const quickExpenseCategories = [
     "Supermercado",
     "Kombini",
@@ -298,7 +314,12 @@
     low: "Baixa prioridade"
   };
   // v217 is the notification baseline. Only later product updates belong here.
-  const appNews = [];
+  const appNews = [{
+    id: "business-controls-v220",
+    date: "2026-09-24",
+    title: "Negocios e Controles",
+    body: "Crie tabelas para streaming, MEI, servicos, vendas ou qualquer finalidade, com registros, vencimentos, alertas e recebimentos vinculados ao financeiro."
+  }];
 
   const app = document.getElementById("app");
   const appGreeting = document.getElementById("app-greeting");
@@ -364,7 +385,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=219")
+      navigator.serviceWorker.register("./service-worker.js?v=220")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -472,6 +493,8 @@
     if (action === "delete-work-income") deleteItem("workIncomes", button.dataset.id, "Recebimento removido.");
     if (action === "delete-family-member") deleteItem("familyMembers", button.dataset.id, "Pessoa removida.");
     if (action === "delete-family-business") deleteItem("familyBusinesses", button.dataset.id, "Negocio removido.");
+    if (action === "delete-business-record") deleteBusinessRecord(button.dataset.businessId, button.dataset.recordId);
+    if (action === "mark-business-record-paid") markBusinessRecordPaid(button.dataset.businessId, button.dataset.recordId);
     if (action === "delete-shopping-list") deleteItem("shoppingLists", button.dataset.id, "Lista removida.");
     if (action === "delete-receipt") deleteItem("receipts", button.dataset.id, "Recibo removido.");
     if (action === "delete-work-override") deleteItem("workScheduleOverrides", button.dataset.id, "Folga extra removida.");
@@ -495,6 +518,8 @@
     if (action === "remove-salary-progression-step") removeSalaryProgressionRow(button);
     if (action === "add-salary-bonus-step") addSalaryBonusRow();
     if (action === "remove-salary-bonus-step") removeSalaryBonusRow(button);
+    if (action === "add-control-field") addControlFieldRow();
+    if (action === "remove-control-field") removeControlFieldRow(button);
     if (action === "add-crypto-custody-transfer") addCryptoCustodyTransferRow();
     if (action === "remove-crypto-custody-transfer") button.closest(".crypto-custody-form-row")?.remove();
     if (action === "add-housing-other") addHousingOtherRow(button);
@@ -537,6 +562,7 @@
     if (formType === "quick-expense") saveQuickExpense(form);
     if (formType === "family-member") saveFamilyMember(form);
     if (formType === "family-business") saveFamilyBusiness(form);
+    if (formType === "business-record") saveBusinessRecord(form);
     if (formType === "shopping-list") saveShoppingList(form);
     if (formType === "receipt") saveReceipt(form);
     if (formType === "salary-receipt") saveSalaryReceipt(form);
@@ -556,6 +582,7 @@
   document.addEventListener("change", (event) => {
     if (event.target.id === "import-file") importData(event.target.files[0]);
     if (event.target.id === "sourceType") updateIncomeSourceDynamicFields();
+    if (event.target.id === "businessTemplate") applyControlTemplateFields(event.target.value);
     if (event.target.id === "shiftSystem") updateIncomeSourceDynamicFields();
     if (event.target.id === "salaryCalculationMode") updateIncomeSourceDynamicFields();
     if (["salaryNightMethod", "salarySaturdayLegal", "salarySundayLegal", "salarySaturdayLegalRate", "salarySundayLegalRate", "salaryDeductionsEnabled"].includes(event.target.id)) updateIncomeSourceDynamicFields();
@@ -1396,15 +1423,98 @@
   function normalizeFamilyBusinesses(items, fallback = []) {
     if (!Array.isArray(items)) return fallback;
     return items
-      .map((item) => ({
-        ...item,
-        id: item.id || uid("fb"),
-        name: String(item.name || "").trim(),
-        businessType: String(item.businessType || "").trim(),
-        currency: sanitizeCurrency(item.currency, primaryCurrency()),
-        active: item.active !== false
-      }))
+      .map((item) => {
+        const template = controlTemplateMeta[item.template] ? item.template : "custom";
+        const fields = normalizeControlFields(item.fields, template);
+        return {
+          ...item,
+          id: item.id || uid("fb"),
+          name: String(item.name || "").trim(),
+          businessType: String(item.businessType || controlTemplateMeta[template].label).trim(),
+          template,
+          description: String(item.description || "").trim(),
+          currency: sanitizeCurrency(item.currency, primaryCurrency()),
+          bankAccountId: String(item.bankAccountId || ""),
+          reminderDays: clamp(Math.round(number(item.reminderDays) || 3), 0, 30),
+          financialTracking: item.financialTracking !== false,
+          fields,
+          records: normalizeControlRecords(item.records, fields),
+          active: item.active !== false
+        };
+      })
       .filter((item) => item.name);
+  }
+
+  function controlTemplateFields(template = "custom") {
+    const sharedStatus = { id: "status", label: "Situacao", type: "select", options: ["Ativo", "Pago", "Pausado", "Cancelado"] };
+    const templates = {
+      streaming: [
+        { id: "customer", label: "Cliente", type: "text", required: true },
+        { id: "plan", label: "Plano", type: "text" },
+        { id: "purchaseDate", label: "Data da compra", type: "date" },
+        { id: "dueDate", label: "Vencimento", type: "date", required: true },
+        { id: "amount", label: "Valor", type: "money" },
+        { id: "frequency", label: "Frequencia", type: "select", options: ["Mensal", "Trimestral", "Semestral", "Anual"] },
+        sharedStatus,
+        { id: "phone", label: "Telefone", type: "phone" }
+      ],
+      mei: [
+        { id: "customer", label: "Cliente", type: "text", required: true },
+        { id: "description", label: "Servico ou produto", type: "text" },
+        { id: "issueDate", label: "Data da venda", type: "date" },
+        { id: "dueDate", label: "Vencimento", type: "date" },
+        { id: "amount", label: "Valor", type: "money" },
+        sharedStatus,
+        { id: "phone", label: "Telefone", type: "phone" }
+      ],
+      services: [
+        { id: "customer", label: "Cliente", type: "text", required: true },
+        { id: "service", label: "Servico", type: "text" },
+        { id: "serviceDate", label: "Data do servico", type: "date" },
+        { id: "dueDate", label: "Vencimento", type: "date" },
+        { id: "amount", label: "Valor", type: "money" },
+        sharedStatus,
+        { id: "phone", label: "Telefone", type: "phone" }
+      ],
+      sales: [
+        { id: "customer", label: "Cliente", type: "text", required: true },
+        { id: "product", label: "Produto", type: "text" },
+        { id: "saleDate", label: "Data da venda", type: "date" },
+        { id: "deliveryDate", label: "Entrega", type: "date" },
+        { id: "amount", label: "Valor", type: "money" },
+        sharedStatus
+      ],
+      custom: [
+        { id: "name", label: "Nome", type: "text", required: true },
+        { id: "dueDate", label: "Vencimento", type: "date" },
+        { id: "amount", label: "Valor", type: "money" },
+        sharedStatus
+      ]
+    };
+    return (templates[template] || templates.custom).map((field) => ({ ...field, options: [...(field.options || [])] }));
+  }
+
+  function normalizeControlFields(fields, template = "custom") {
+    const source = Array.isArray(fields) && fields.length ? fields : controlTemplateFields(template);
+    return source.map((field, index) => ({
+      id: String(field.id || `field-${index + 1}`).replace(/[^a-zA-Z0-9_-]/g, "-") || `field-${index + 1}`,
+      label: String(field.label || `Campo ${index + 1}`).trim(),
+      type: controlFieldTypeMeta[field.type] ? field.type : "text",
+      options: Array.isArray(field.options) ? field.options.map(String).map((value) => value.trim()).filter(Boolean) : String(field.options || "").split(",").map((value) => value.trim()).filter(Boolean),
+      required: Boolean(field.required)
+    })).filter((field) => field.label).slice(0, 16);
+  }
+
+  function normalizeControlRecords(records, fields = []) {
+    if (!Array.isArray(records)) return [];
+    const allowed = new Set(fields.map((field) => field.id));
+    return records.map((record) => ({
+      ...record,
+      id: record.id || uid("row"),
+      values: Object.fromEntries(Object.entries(record.values || {}).filter(([key]) => allowed.has(key)).map(([key, value]) => [key, String(value ?? "")])),
+      createdAt: record.createdAt || new Date().toISOString(),
+      updatedAt: record.updatedAt || record.createdAt || new Date().toISOString()
+    }));
   }
 
   function normalizeShoppingLists(items, fallback = []) {
@@ -2826,7 +2936,7 @@
       <div class="modal-backdrop">
         <div class="modal due-alert-modal" role="dialog" aria-modal="true" aria-label="Alertas de vencimento">
           <div class="modal-head">
-            <h2>Contas proximas do vencimento</h2>
+            <h2>Vencimentos proximos</h2>
             <button class="close-button" type="button" data-action="dismiss-due-alert" aria-label="Fechar">x</button>
           </div>
           <div class="due-alert-list">
@@ -2937,13 +3047,26 @@
     const maxDate = new Date(today);
     maxDate.setDate(today.getDate() + days);
     const months = Array.from(new Set([currentMonth(), addMonths(currentMonth(), 1)]));
-    return months
+    const financialAlerts = months
       .flatMap((month) => financialCalendarItems(month, "global"))
       .filter((item) => item.kind !== "income" && !item.paid && Number(item.amount || 0) > 0)
       .filter((item) => {
         const due = parseLocalDate(item.date);
         return due >= today && due <= maxDate;
-      })
+      });
+    const businessAlerts = businessDueRecords(days).map(({ business, record, date, amount }) => ({
+      id: `${business.id}:${record.id}`,
+      type: "business-record",
+      kind: "receivable",
+      date,
+      title: businessRecordName(business, record),
+      meta: `${business.name} - cliente a vencer`,
+      category: "Negocio",
+      amount,
+      currency: business.currency,
+      paid: false
+    }));
+    return [...financialAlerts, ...businessAlerts]
       .sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title))
       .slice(0, 5);
   }
@@ -5597,27 +5720,74 @@
 
   function renderBusinessShoppingPanel() {
     const businesses = (state.familyBusinesses || []).filter((item) => item.active !== false);
-    const lists = (state.shoppingLists || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 3);
-    const receipts = (state.receipts || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 3);
+    const dueRecords = businessDueRecords(30);
+    const receivable = dueRecords.reduce((sum, item) => sum + convert(number(item.amount), item.business.currency, primaryCurrency(), latestRate()), 0);
     return `
       <div class="panel-head">
         <div>
-          <h2>Compras e negocios</h2>
-          <p class="row-meta">Listas, recibos e pequenos negocios familiares.</p>
+          <h2>Negocios e Controles</h2>
+          <p class="row-meta">Clientes, vencimentos e tabelas personalizadas.</p>
         </div>
-        <button class="small-action" type="button" data-action="open-modal" data-modal="shoppingList">Lista</button>
+        <button class="small-action" type="button" data-action="open-modal" data-modal="familyBusiness">Novo controle</button>
       </div>
-      <div class="pro-action-row">
-        <button class="small-action" type="button" data-action="open-modal" data-modal="receipt">Recibo</button>
-        <button class="small-action ghost" type="button" data-action="open-modal" data-modal="familyBusiness">Negocio</button>
+      <div class="business-control-summary">
+        <div><span>Controles</span><strong>${businesses.length}</strong></div>
+        <div><span>Vencimentos</span><strong>${dueRecords.length}</strong></div>
+        <div><span>A receber</span><strong>${formatMoney(receivable, primaryCurrency())}</strong></div>
       </div>
-      <div class="mini-ledger">
-        ${businesses.slice(0, 2).map((item) => `<div><span>${escapeHtml(item.name)}</span><strong>${escapeHtml(item.businessType || "Negocio")}</strong></div>`).join("")}
-        ${lists.map((item) => `<div><span>${escapeHtml(item.marketName || item.title)}</span><strong>${formatMoneyWithPrimary(item.amount, item.currency)}</strong></div>`).join("")}
-        ${receipts.map((item) => `<div><span>${escapeHtml(item.merchant)}</span><strong>${formatMoneyWithPrimary(item.amount, item.currency)}</strong></div>`).join("")}
-        ${!businesses.length && !lists.length && !receipts.length ? `<p class="empty-state">Adicione listas, recibos ou um pequeno negocio da familia.</p>` : ""}
+      <div class="business-control-list">
+        ${businesses.map((item) => {
+          const meta = controlTemplateMeta[item.template] || controlTemplateMeta.custom;
+          const due = businessDueRecords(30, item.id).length;
+          return `<button class="business-control-card" type="button" data-action="open-modal" data-modal="businessControl" data-id="${escapeAttr(item.id)}">
+            <i data-lucide="${meta.icon}" aria-hidden="true"></i>
+            <span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(meta.label)} · ${(item.records || []).length} registros</small></span>
+            ${due ? `<em>${due} ${due === 1 ? "vencimento" : "vencimentos"}</em>` : `<em class="is-clear">Em dia</em>`}
+          </button>`;
+        }).join("")}
+        ${!businesses.length ? `<div class="business-control-empty"><i data-lucide="table-properties" aria-hidden="true"></i><strong>Crie um controle para o seu proposito</strong><p>Comece com streaming, MEI, servicos, vendas ou monte uma tabela livre.</p><button class="primary-button" type="button" data-action="open-modal" data-modal="familyBusiness">Criar primeiro controle</button></div>` : ""}
       </div>
     `;
+  }
+
+  function businessField(business, matcher) {
+    return (business?.fields || []).find((field) => matcher(field, normalizeLookupText(field.label))) || null;
+  }
+
+  function businessRecordName(business, record) {
+    const field = businessField(business, (item, label) => item.id === "customer" || item.id === "name" || /cliente|nome/.test(label)) || business?.fields?.[0];
+    return String(record?.values?.[field?.id] || "Registro");
+  }
+
+  function businessRecordDueDate(business, record) {
+    const field = businessField(business, (item, label) => item.id === "dueDate" || item.type === "date" && /venc/.test(label));
+    return String(record?.values?.[field?.id] || "").slice(0, 10);
+  }
+
+  function businessRecordAmount(business, record) {
+    const field = businessField(business, (item, label) => item.id === "amount" || item.type === "money" || /valor/.test(label));
+    return number(record?.values?.[field?.id]);
+  }
+
+  function businessRecordStatus(business, record) {
+    const field = businessField(business, (item, label) => item.id === "status" || /situacao|status/.test(label));
+    return normalizeLookupText(record?.values?.[field?.id] || "Ativo");
+  }
+
+  function businessDueRecords(days = 30, businessId = "") {
+    const today = startOfDay(new Date());
+    const minDate = new Date(today);
+    minDate.setDate(today.getDate() - 30);
+    return (state.familyBusinesses || []).filter((business) => business.active !== false && (!businessId || business.id === businessId)).flatMap((business) => {
+      const maxDate = new Date(today);
+      maxDate.setDate(today.getDate() + Math.max(days, number(business.reminderDays)));
+      return (business.records || []).map((record) => ({ business, record, date: businessRecordDueDate(business, record), amount: businessRecordAmount(business, record) }))
+        .filter((item) => item.date && !/pago|cancelado/.test(businessRecordStatus(business, item.record)))
+        .filter((item) => {
+          const due = parseLocalDate(item.date);
+          return due >= minDate && due <= maxDate;
+        });
+    }).sort((a, b) => a.date.localeCompare(b.date));
   }
 
   function expenseCategory(item) {
@@ -6825,6 +6995,8 @@
       quickExpense: renderQuickExpenseModal,
       familyMember: renderFamilyMemberModal,
       familyBusiness: renderFamilyBusinessModal,
+      businessControl: renderBusinessControlModal,
+      businessRecord: renderBusinessRecordModal,
       shoppingList: renderShoppingListModal,
       receipt: renderReceiptModal,
       workOverride: renderWorkOverrideModal,
@@ -6833,7 +7005,11 @@
       monthlyPayment: renderMonthlyPaymentModal,
       subscription: renderSubscriptionModal
     };
-    const modalData = type === "monthlyPayment" || type === "goalContribution" || type === "salaryReceipt" || type === "nubankBoxContribution" ? id : editableItem(type, id);
+    const modalData = type === "businessRecord"
+      ? businessRecordTarget(id)
+      : type === "monthlyPayment" || type === "goalContribution" || type === "salaryReceipt" || type === "nubankBoxContribution"
+        ? id
+        : editableItem(type, id);
     const content = map[type] ? map[type](modalData) : "";
     modalRoot.innerHTML = `
       <div class="modal-backdrop">
@@ -7509,33 +7685,113 @@
 
   function renderFamilyBusinessModal(item = null) {
     const currency = item?.currency || primaryCurrency();
+    const template = item?.template || "streaming";
+    const fields = normalizeControlFields(item?.fields, template);
     return `
       <div class="modal-head">
-        <h2>${item ? "Editar negocio" : "Negocio familiar"}</h2>
+        <div><h2>${item ? "Editar controle" : "Novo negocio ou controle"}</h2><p class="row-meta">Crie uma tabela para clientes, vendas, servicos ou qualquer outro proposito.</p></div>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="family-business">
         ${editHidden(item)}
         <div class="two-cols">
           <div class="field">
-            <label for="businessName">Nome</label>
-            <input id="businessName" name="name" required placeholder="Ex: Marmitas, vendas, servicos" value="${escapeAttr(item?.name || "")}" />
+            <label for="businessName">Nome do controle</label>
+            <input id="businessName" name="name" required placeholder="Ex: Clientes do streaming" value="${escapeAttr(item?.name || "")}" />
           </div>
           <div class="field">
-            <label for="businessType">Tipo</label>
-            <input id="businessType" name="businessType" placeholder="Ex: Comida, revenda, servico" value="${escapeAttr(item?.businessType || "")}" />
+            <label for="businessTemplate">Modelo inicial</label>
+            <select id="businessTemplate" name="template">${Object.entries(controlTemplateMeta).map(([value, meta]) => `<option value="${value}" ${selectedAttr(value, template)}>${escapeHtml(meta.label)}</option>`).join("")}</select>
           </div>
         </div>
-        <div class="field">
-          <label for="businessCurrency">Moeda principal</label>
-          <select id="businessCurrency" name="currency">${currencyOptions(currency)}</select>
+        <div class="field"><label for="businessDescription">Proposito</label><textarea id="businessDescription" name="description" placeholder="Ex: Controlar clientes, pagamentos e renovacoes">${escapeHtml(item?.description || "")}</textarea></div>
+        <div class="three-cols">
+          <div class="field"><label for="businessCurrency">Moeda principal</label><select id="businessCurrency" name="currency">${currencyOptions(currency)}</select></div>
+          <div class="field"><label for="businessBankAccount">Conta que recebe</label><select id="businessBankAccount" name="bankAccountId">${bankAccountSelectOptions("global", item?.bankAccountId || "", "Sem conta vinculada")}</select></div>
+          <div class="field"><label for="businessReminderDays">Avisar antes</label><select id="businessReminderDays" name="reminderDays"><option value="0" ${selectedAttr("0", String(item?.reminderDays ?? 3))}>No dia</option><option value="1" ${selectedAttr("1", String(item?.reminderDays ?? 3))}>1 dia</option><option value="3" ${selectedAttr("3", String(item?.reminderDays ?? 3))}>3 dias</option><option value="7" ${selectedAttr("7", String(item?.reminderDays ?? 3))}>7 dias</option><option value="15" ${selectedAttr("15", String(item?.reminderDays ?? 3))}>15 dias</option></select></div>
         </div>
+        <label class="check-row"><input type="checkbox" name="financialTracking" ${item?.financialTracking !== false ? "checked" : ""} /><span>Registrar recebimentos deste controle no financeiro</span></label>
+        <section class="control-field-builder">
+          <div class="form-section-title control-field-builder-head"><div><strong>Colunas da tabela</strong><span>Personalize os campos que aparecerao em cada registro.</span></div><button class="small-action" type="button" data-action="add-control-field"><i data-lucide="plus" aria-hidden="true"></i> Campo</button></div>
+          <div class="control-field-list" data-control-field-list>${fields.map(renderControlFieldRow).join("")}</div>
+        </section>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
-          <button class="primary-button" type="submit">Salvar negocio</button>
+          <button class="primary-button" type="submit">${item ? "Salvar alteracoes" : "Criar controle"}</button>
         </div>
       </form>
     `;
+  }
+
+  function renderControlFieldRow(field = {}) {
+    const normalized = normalizeControlFields([field])[0] || { id: uid("field"), label: "", type: "text", options: [], required: false };
+    return `<div class="control-field-row">
+      <input type="hidden" name="controlFieldId" value="${escapeAttr(normalized.id)}" />
+      <div class="field"><label>Nome da coluna</label><input name="controlFieldLabel" required placeholder="Ex: Cliente" value="${escapeAttr(normalized.label)}" /></div>
+      <div class="field"><label>Tipo</label><select name="controlFieldType">${Object.entries(controlFieldTypeMeta).map(([value, label]) => `<option value="${value}" ${selectedAttr(value, normalized.type)}>${escapeHtml(label)}</option>`).join("")}</select></div>
+      <div class="field"><label>Opcoes</label><input name="controlFieldOptions" placeholder="Ativo, Pago, Vencido" value="${escapeAttr(normalized.options.join(", "))}" /></div>
+      <label class="control-field-required"><input type="checkbox" name="controlFieldRequired" ${normalized.required ? "checked" : ""} />Obrigatorio</label>
+      <button class="icon-button control-field-remove" type="button" data-action="remove-control-field" aria-label="Remover coluna"><i data-lucide="trash-2" aria-hidden="true"></i></button>
+    </div>`;
+  }
+
+  function renderBusinessControlModal(business = null) {
+    if (!business) return `<div class="empty-state">Controle nao encontrado.</div>`;
+    const records = business.records || [];
+    const due = businessDueRecords(30, business.id);
+    const total = records.reduce((sum, record) => sum + businessRecordAmount(business, record), 0);
+    return `
+      <div class="modal-head">
+        <div><h2>${escapeHtml(business.name)}</h2><p class="row-meta">${escapeHtml(business.description || controlTemplateMeta[business.template]?.label || "Controle personalizado")}</p></div>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <div class="business-control-toolbar">
+        <div><span>Registros</span><strong>${records.length}</strong></div><div><span>Vencimentos</span><strong>${due.length}</strong></div><div><span>Valor cadastrado</span><strong>${formatMoneyWithPrimary(total, business.currency)}</strong></div>
+      </div>
+      <div class="business-control-actions"><button class="primary-button" type="button" data-action="open-modal" data-modal="businessRecord" data-id="${escapeAttr(business.id)}"><i data-lucide="plus" aria-hidden="true"></i>Novo registro</button><button class="secondary-button" type="button" data-action="open-modal" data-modal="familyBusiness" data-id="${escapeAttr(business.id)}">Editar estrutura</button></div>
+      <div class="business-table-wrap">
+        ${records.length ? `<table class="business-table"><thead><tr>${business.fields.map((field) => `<th>${escapeHtml(field.label)}</th>`).join("")}<th>Acoes</th></tr></thead><tbody>${records.map((record) => `<tr>${business.fields.map((field) => `<td>${formatBusinessRecordValue(field, record.values[field.id], business.currency)}</td>`).join("")}<td><div class="business-row-actions"><button class="small-action ghost" type="button" data-action="open-modal" data-modal="businessRecord" data-id="${escapeAttr(`${business.id}::${record.id}`)}">Editar</button>${businessRecordAmount(business, record) > 0 && !/pago|cancelado/.test(businessRecordStatus(business, record)) ? `<button class="small-action" type="button" data-action="mark-business-record-paid" data-business-id="${escapeAttr(business.id)}" data-record-id="${escapeAttr(record.id)}">Receber</button>` : ""}<button class="icon-button" type="button" data-action="delete-business-record" data-business-id="${escapeAttr(business.id)}" data-record-id="${escapeAttr(record.id)}" aria-label="Excluir registro"><i data-lucide="trash-2" aria-hidden="true"></i></button></div></td></tr>`).join("")}</tbody></table>` : `<div class="business-control-empty compact"><i data-lucide="rows-3" aria-hidden="true"></i><strong>Nenhum registro ainda</strong><p>Adicione o primeiro cliente, venda ou item desta tabela.</p></div>`}
+      </div>
+      <div class="form-actions"><button class="danger-button" type="button" data-action="delete-family-business" data-id="${escapeAttr(business.id)}">Excluir controle</button><button class="secondary-button" type="button" data-action="close-modal">Fechar</button></div>
+    `;
+  }
+
+  function businessRecordTarget(reference = "") {
+    const [businessId, recordId = ""] = String(reference || "").split("::");
+    const business = findItem("familyBusinesses", businessId);
+    return { business, record: business?.records?.find((item) => item.id === recordId) || null };
+  }
+
+  function renderBusinessRecordModal(target = {}) {
+    const business = target.business;
+    const record = target.record;
+    if (!business) return `<div class="empty-state">Controle nao encontrado.</div>`;
+    return `
+      <div class="modal-head"><div><h2>${record ? "Editar registro" : "Novo registro"}</h2><p class="row-meta">${escapeHtml(business.name)}</p></div><button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button></div>
+      <form class="form-grid" data-form="business-record">
+        <input type="hidden" name="businessId" value="${escapeAttr(business.id)}" /><input type="hidden" name="recordId" value="${escapeAttr(record?.id || "")}" />
+        <div class="business-record-fields">${business.fields.map((field) => renderBusinessRecordField(field, record?.values?.[field.id], business.currency)).join("")}</div>
+        <div class="form-actions"><button class="secondary-button" type="button" data-action="open-modal" data-modal="businessControl" data-id="${escapeAttr(business.id)}">Voltar</button><button class="primary-button" type="submit">Salvar registro</button></div>
+      </form>
+    `;
+  }
+
+  function renderBusinessRecordField(field, value = "", currency = primaryCurrency()) {
+    const name = `field_${field.id}`;
+    const required = field.required ? "required" : "";
+    if (field.type === "select") return `<div class="field"><label>${escapeHtml(field.label)}</label><select name="${escapeAttr(name)}" ${required}><option value="">Selecione</option>${field.options.map((option) => `<option value="${escapeAttr(option)}" ${selectedAttr(option, value)}>${escapeHtml(option)}</option>`).join("")}</select></div>`;
+    if (field.type === "checkbox") return `<label class="check-row business-record-check"><input type="checkbox" name="${escapeAttr(name)}" ${String(value) === "on" || String(value) === "true" ? "checked" : ""} /><span>${escapeHtml(field.label)}</span></label>`;
+    const type = field.type === "date" ? "date" : field.type === "number" || field.type === "money" ? "number" : field.type === "phone" ? "tel" : "text";
+    const step = field.type === "money" ? `step="0.01" min="0"` : field.type === "number" ? `step="any"` : "";
+    return `<div class="field"><label>${escapeHtml(field.label)}${field.type === "money" ? ` (${escapeHtml(currency)})` : ""}</label><input type="${type}" name="${escapeAttr(name)}" value="${escapeAttr(value)}" ${step} ${required} /></div>`;
+  }
+
+  function formatBusinessRecordValue(field, value, currency) {
+    if (value == null || value === "") return `<span class="business-empty-value">-</span>`;
+    if (field.type === "money") return escapeHtml(formatMoney(number(value), currency));
+    if (field.type === "date") return escapeHtml(formatShortDate(String(value)));
+    if (field.type === "checkbox") return String(value) === "on" || String(value) === "true" ? "Sim" : "Nao";
+    return escapeHtml(String(value));
   }
 
   function renderShoppingListModal(item = null) {
@@ -9370,16 +9626,147 @@
 
   function saveFamilyBusiness(form) {
     const data = formData(form);
+    const existing = findItem("familyBusinesses", data.id);
+    const template = controlTemplateMeta[data.template] ? data.template : "custom";
+    const fields = collectControlFields(form);
+    if (!fields.length) {
+      showToast("Adicione pelo menos uma coluna ao controle.");
+      return;
+    }
     const updated = upsertItem("familyBusinesses", data.id, {
       name: String(data.name || "").trim(),
-      businessType: String(data.businessType || "").trim(),
+      businessType: controlTemplateMeta[template].label,
+      template,
+      description: String(data.description || "").trim(),
       currency: sanitizeCurrency(data.currency, primaryCurrency()),
+      bankAccountId: String(data.bankAccountId || ""),
+      reminderDays: clamp(Math.round(number(data.reminderDays) || 0), 0, 30),
+      financialTracking: data.financialTracking === "on",
+      fields,
+      records: existing?.records || [],
       active: true
     }, true);
     saveState();
-    closeModal();
     render();
-    showToast(updated ? "Negocio atualizado." : "Negocio salvo.");
+    const saved = findItem("familyBusinesses", data.id) || state.familyBusinesses[0];
+    openModal("businessControl", saved?.id || "");
+    showToast(updated ? "Controle atualizado." : "Controle criado.");
+  }
+
+  function collectControlFields(form) {
+    const used = new Set();
+    return normalizeControlFields(Array.from(form.querySelectorAll(".control-field-row")).map((row, index) => {
+      let id = String(row.querySelector("[name='controlFieldId']")?.value || `field-${index + 1}`).replace(/[^a-zA-Z0-9_-]/g, "-");
+      while (used.has(id)) id = `${id}-${index + 1}`;
+      used.add(id);
+      return {
+        id,
+        label: row.querySelector("[name='controlFieldLabel']")?.value || "",
+        type: row.querySelector("[name='controlFieldType']")?.value || "text",
+        options: row.querySelector("[name='controlFieldOptions']")?.value || "",
+        required: Boolean(row.querySelector("[name='controlFieldRequired']")?.checked)
+      };
+    }));
+  }
+
+  function addControlFieldRow() {
+    const list = modalRoot.querySelector("[data-control-field-list]");
+    if (!list) return;
+    list.insertAdjacentHTML("beforeend", renderControlFieldRow({ id: uid("field"), label: "Novo campo", type: "text" }));
+    refreshIcons();
+    list.lastElementChild?.querySelector("[name='controlFieldLabel']")?.select();
+  }
+
+  function removeControlFieldRow(button) {
+    const list = button.closest("[data-control-field-list]");
+    if (!list || list.children.length <= 1) {
+      showToast("O controle precisa ter pelo menos uma coluna.");
+      return;
+    }
+    button.closest(".control-field-row")?.remove();
+  }
+
+  function applyControlTemplateFields(template) {
+    const list = modalRoot.querySelector("[data-control-field-list]");
+    if (!list) return;
+    list.innerHTML = controlTemplateFields(template).map(renderControlFieldRow).join("");
+    refreshIcons();
+  }
+
+  function saveBusinessRecord(form) {
+    const data = formData(form);
+    const business = findItem("familyBusinesses", data.businessId);
+    if (!business) return;
+    const values = Object.fromEntries(business.fields.map((field) => [field.id, field.type === "checkbox" ? (form.elements[`field_${field.id}`]?.checked ? "true" : "false") : String(data[`field_${field.id}`] || "").trim()]));
+    const now = new Date().toISOString();
+    const index = (business.records || []).findIndex((record) => record.id === data.recordId);
+    const record = { id: data.recordId || uid("row"), values, createdAt: index >= 0 ? business.records[index].createdAt : now, updatedAt: now };
+    business.records = index >= 0 ? business.records.map((item, itemIndex) => itemIndex === index ? record : item) : [record, ...(business.records || [])];
+    business.updatedAt = now;
+    saveState({ remoteNow: true });
+    render();
+    openModal("businessControl", business.id);
+    showToast(index >= 0 ? "Registro atualizado." : "Registro adicionado.");
+  }
+
+  function deleteBusinessRecord(businessId, recordId) {
+    const business = findItem("familyBusinesses", businessId);
+    const record = business?.records?.find((item) => item.id === recordId);
+    if (!business || !record || !window.confirm("Excluir este registro?")) return;
+    business.records = business.records.filter((item) => item.id !== recordId);
+    business.updatedAt = new Date().toISOString();
+    saveState({ remoteNow: true });
+    render();
+    openModal("businessControl", business.id);
+    showToast("Registro excluido.");
+  }
+
+  function markBusinessRecordPaid(businessId, recordId) {
+    const business = findItem("familyBusinesses", businessId);
+    const record = business?.records?.find((item) => item.id === recordId);
+    if (!business || !record) return;
+    const amount = businessRecordAmount(business, record);
+    const dueDate = businessRecordDueDate(business, record) || localDateKey();
+    const paymentKey = `${business.id}:${record.id}:${dueDate}`;
+    if (business.financialTracking && amount > 0 && !(state.transactions || []).some((item) => item.businessRecordPaymentKey === paymentKey)) {
+      upsertItem("transactions", "", {
+        date: localDateKey(),
+        country: business.currency === "BRL" ? "brasil" : "japao",
+        type: "income",
+        title: `${business.name} - ${businessRecordName(business, record)}`,
+        category: "Negocio",
+        amount,
+        currency: business.currency,
+        bankAccountId: business.bankAccountId || "",
+        businessId: business.id,
+        businessRecordId: record.id,
+        businessRecordPaymentKey: paymentKey,
+        note: `Recebimento do controle ${business.name}`
+      }, true);
+    }
+    const frequencyField = businessField(business, (field, label) => field.id === "frequency" || /frequencia/.test(label));
+    const dueField = businessField(business, (field, label) => field.id === "dueDate" || field.type === "date" && /venc/.test(label));
+    const statusField = businessField(business, (field, label) => field.id === "status" || /situacao|status/.test(label));
+    const months = { mensal: 1, trimestral: 3, semestral: 6, anual: 12 }[normalizeLookupText(record.values[frequencyField?.id])] || 0;
+    if (months && dueField) record.values[dueField.id] = addMonthsToDate(dueDate, months);
+    if (statusField) record.values[statusField.id] = months ? "Ativo" : "Pago";
+    record.lastPaidAt = localDateKey();
+    record.updatedAt = new Date().toISOString();
+    business.updatedAt = record.updatedAt;
+    saveState({ remoteNow: true });
+    render();
+    openModal("businessControl", business.id);
+    showToast(months ? "Recebimento registrado e vencimento renovado." : "Recebimento registrado.");
+  }
+
+  function addMonthsToDate(dateValue, months) {
+    const date = parseLocalDate(dateValue);
+    const originalDay = date.getDate();
+    date.setDate(1);
+    date.setMonth(date.getMonth() + months);
+    const last = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    date.setDate(Math.min(originalDay, last));
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
 
   function saveShoppingList(form) {
@@ -15564,6 +15951,7 @@
       incomeSource: "incomeSources",
       familyMember: "familyMembers",
       familyBusiness: "familyBusinesses",
+      businessControl: "familyBusinesses",
       shoppingList: "shoppingLists",
       receipt: "receipts",
       workOverride: "workScheduleOverrides",
