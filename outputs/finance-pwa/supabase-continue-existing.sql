@@ -372,7 +372,62 @@ grant execute on function public.ensure_default_household(text) to authenticated
 grant execute on function public.join_household_by_code(text) to authenticated;
 grant execute on function public.list_household_members(uuid) to authenticated;
 grant execute on function public.save_app_state(uuid, jsonb) to authenticated;
-grant select, insert, update, delete on public.app_states to authenticated;
+
+-- Keep Data API access explicit for new projects, branches and database resets.
+-- Anonymous visitors must never receive access to financial records.
+revoke all on table
+  public.households,
+  public.household_members,
+  public.transactions,
+  public.transfers,
+  public.commitments,
+  public.commitment_payments,
+  public.debts,
+  public.investments,
+  public.credit_cards,
+  public.crypto_assets,
+  public.vehicles,
+  public.vehicle_maintenance,
+  public.income_sources,
+  public.work_incomes,
+  public.app_states
+from anon;
+
+grant select, update on table public.households to authenticated;
+grant select on table public.household_members to authenticated;
+grant select, insert, update, delete on table
+  public.transactions,
+  public.transfers,
+  public.commitments,
+  public.commitment_payments,
+  public.debts,
+  public.investments,
+  public.credit_cards,
+  public.crypto_assets,
+  public.vehicles,
+  public.vehicle_maintenance,
+  public.income_sources,
+  public.work_incomes,
+  public.app_states
+to authenticated;
+
+grant select, insert, update, delete on table
+  public.households,
+  public.household_members,
+  public.transactions,
+  public.transfers,
+  public.commitments,
+  public.commitment_payments,
+  public.debts,
+  public.investments,
+  public.credit_cards,
+  public.crypto_assets,
+  public.vehicles,
+  public.vehicle_maintenance,
+  public.income_sources,
+  public.work_incomes,
+  public.app_states
+to service_role;
 
 drop policy if exists "members can read households" on public.households;
 create policy "members can read households"
