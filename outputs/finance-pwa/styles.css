@@ -4278,6 +4278,100 @@ canvas {
 .family-quick-expenses .mini-ledger small { color: var(--muted); font-size: .61rem; font-weight: 750; }
 .family-quick-expenses .mini-ledger > div > strong { font-size: .78rem; text-align: right; }
 
+.family-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.family-summary-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(49, 44, 81, 0.08);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.family-summary-card span,
+.family-member-total span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.family-summary-card strong {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 950;
+  overflow-wrap: anywhere;
+}
+
+.family-member-spending-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.family-member-spending-card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--member-accent) 24%, transparent);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--member-accent) 10%, white), rgba(255, 255, 255, 0.62));
+}
+
+.family-member-avatar {
+  display: grid;
+  grid-row: span 2;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: var(--member-accent);
+  font-size: 0.68rem;
+  font-weight: 950;
+}
+
+.family-member-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.family-member-copy strong,
+.family-member-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.family-member-copy strong { color: var(--ink); font-size: 0.76rem; }
+.family-member-copy small { color: var(--muted); font-size: 0.62rem; font-weight: 750; }
+
+.family-member-total {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 3px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(49, 44, 81, 0.08);
+}
+
+.family-member-total strong {
+  color: var(--member-accent);
+  font-size: 0.9rem;
+  font-weight: 950;
+  overflow-wrap: anywhere;
+}
+
 .patrimony-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -4624,6 +4718,69 @@ canvas {
   gap: 8px;
 }
 
+.housing-responsibility-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, auto);
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(18, 138, 99, 0.2);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(18, 138, 99, 0.1), rgba(255, 255, 255, 0.62));
+}
+
+.housing-responsibility-card > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.housing-responsibility-card > div:first-child span {
+  color: #28715a;
+  font-size: 0.65rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.housing-responsibility-card > div:first-child strong {
+  color: var(--ink);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.housing-responsibility-card > div:first-child small {
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 800;
+}
+
+.housing-payer-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.housing-payer-breakdown > span {
+  display: grid;
+  gap: 1px;
+  min-width: 92px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: #28715a;
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 0.65rem;
+  font-weight: 900;
+  text-align: right;
+}
+
+.housing-payer-breakdown b {
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .housing-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -4664,6 +4821,17 @@ canvas {
   opacity: 0.72;
 }
 
+.housing-item.is-other-payer {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.housing-item-payer {
+  margin: 3px 0 0;
+  color: #28715a;
+  font-size: 0.65rem;
+  font-weight: 900;
+}
+
 .housing-form-list {
   display: grid;
   gap: 10px;
@@ -4698,6 +4866,11 @@ canvas {
 .vehicle-list {
   display: grid;
   gap: 10px;
+}
+
+.housing-payer-field select {
+  border-color: rgba(18, 138, 99, 0.25);
+  background-color: rgba(240, 255, 248, 0.72);
 }
 
 .vehicle-card {

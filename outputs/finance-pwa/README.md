@@ -36,6 +36,8 @@ Esse servidor local e a senha basica sao apenas para teste no computador. Para f
 - Dados salvos no navegador via `localStorage` quando o Supabase estiver desligado.
 - Modo Supabase ativo com login real e sincronizacao por familia.
 - Codigo de familia para convidar outro usuario e compartilhar os mesmos dados.
+- Card familiar com total mensal e gastos separados por membro conectado.
+- Moradia compartilhada com chefe da familia, pagador padrao e divisao de cada conta por responsavel.
 - Cards de cotacao USD/BRL, USD/JPY e BTC/USD com atualizacao automatica.
 - Botao principal `+` com central de cadastros para empresas, pagamentos, veiculo, cartoes, criptos, contas e investimentos.
 

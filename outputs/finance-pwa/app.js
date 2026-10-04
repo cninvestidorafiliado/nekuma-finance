@@ -167,8 +167,12 @@
     categoryBudgets: "cb"
   };
   const familyRoleMeta = {
+    husband: "Marido",
+    wife: "Esposa",
     father: "Pai",
     mother: "Mae",
+    brother: "Irmao",
+    sister: "Irma",
     child: "Filho",
     other: "Outros"
   };
@@ -345,102 +349,12 @@
     medium: "Media prioridade",
     low: "Baixa prioridade"
   };
-  // v217 is the notification baseline. Only later product updates belong here.
+  // Novo ponto zero das notificacoes. Atualizacoes futuras entram depois desta mensagem.
   const appNews = [{
-    id: "bank-logo-catalog-v252",
+    id: "welcome-to-nekuma-finance-v254",
     date: "2026-10-04",
-    title: "Catalogo de logos bancarias",
-    body: "As logos adicionadas a pasta agora sao reconhecidas pelo nome do banco e carregadas com atualizacao de cache."
-  }, {
-    id: "simple-recent-transactions-v251",
-    date: "2026-10-04",
-    title: "Ultimos lancamentos simplificados",
-    body: "O card inicial agora mostra apenas estabelecimento, data e valor. Edicao, categoria, pagamento e conta continuam completos no Extrato."
-  }, {
-    id: "compact-account-cards-v250",
-    date: "2026-10-04",
-    title: "Mini cards bancarios compactos",
-    body: "Os cards de contas ficaram pela metade da altura e estao preparados para exibir as logos oficiais dos bancos."
-  }, {
-    id: "desktop-header-wealth-v249",
-    date: "2026-10-04",
-    title: "Header e patrimonio reorganizados",
-    body: "O desktop ganhou conversor compacto e botao Sair no header. Os cards de patrimonio agora ocupam as duas colunas sem espacos vazios."
-  }, {
-    id: "account-mini-cards-v248",
-    date: "2026-10-04",
-    title: "Contas em mini cards",
-    body: "As contas do dashboard agora aparecem em mini cards coloridos com identidade do banco, nome escolhido e saldo na moeda da conta."
-  }, {
-    id: "mobile-complete-menu-v247",
-    date: "2026-10-04",
-    title: "Menu completo no celular",
-    body: "A barra mobile agora concentra Inicio, adicionar e Menu. Todas as paginas do app ficam disponiveis em um painel organizado."
-  }, {
-    id: "receipt-mobile-family-v246",
-    date: "2026-10-04",
-    title: "Scan organizado no celular",
-    body: "O formulario do recibo agora se adapta ao mobile e os gastos confirmados aparecem no card Familia no mes correspondente."
-  }, {
-    id: "japanese-receipt-labels-v245",
-    date: "2026-10-04",
-    title: "Recibos japoneses e data local",
-    body: "O scan reconhece os marcadores de total, valor recebido, troco e data japonesa, incluindo ano, mes e dia e numeros de largura cheia."
-  }, {
-    id: "receipt-parser-v244",
-    date: "2026-10-04",
-    title: "Leitura de recibos mais robusta",
-    body: "O scan agora aceita respostas estruturadas ou textuais da IA e interpreta com seguranca loja, total, data, moeda e forma de pagamento."
-  }, {
-    id: "receipt-financial-integration-v243",
-    date: "2026-10-04",
-    title: "Scan integrado aos gastos da familia",
-    body: "Recibos confirmados agora geram um unico gasto familiar e alimentam lancamentos, saldos, orcamentos, graficos, extrato e projecoes sem duplicidade."
-  }, {
-    id: "automatic-financial-insights-v242",
-    date: "2026-10-04",
-    title: "Sugestoes e divergencias automaticas",
-    body: "A Central de conciliacao agora explica e prioriza salarios divergentes, possiveis duplicidades, recibos sem vinculo e correspondencias de pagamento."
-  }, {
-    id: "salary-bank-reconciliation-v241",
-    date: "2026-10-04",
-    title: "Salario integrado a conta bancaria",
-    body: "A confirmacao agora registra o liquido recebido na conta obrigatoria e compara previsto e realizado para indicar conciliacao ou divergencia."
-  }, {
-    id: "projection-salary-v240",
-    date: "2026-10-04",
-    title: "Salario correto nas projecoes",
-    body: "O detalhamento mensal agora usa somente o salario liquido previsto de cada mes, sem confundir transferencias ou outras entradas com remuneracao."
-  }, {
-    id: "receipt-scan-v239",
-    date: "2026-10-04",
-    title: "Scan inteligente de recibos",
-    body: "Fotografe um recibo, revise loja, total, pagamento e categoria e vincule a uma compra existente, conta ou cartao sem duplicar despesas."
-  }, {
-    id: "projections-simulations-v238",
-    date: "2026-10-04",
-    title: "Projecoes e simulacoes",
-    body: "Compare o saldo dos proximos 12 meses com compras parceladas, novas despesas, mudancas de renda, reducoes de gastos e aportes sem alterar seus dados reais."
-  }, {
-    id: "cards-installments-invoices-v237",
-    date: "2026-10-04",
-    title: "Cartoes, parcelas e faturas",
-    body: "A nova Central de cartoes detalha fatura atual, limite disponivel, parcelas futuras, historico, composicao dos gastos e pagamentos parciais sem duplicar despesas."
-  }, {
-    id: "financial-reconciliation-v235",
-    date: "2026-10-04",
-    title: "Status e conciliacao financeira",
-    body: "Calendario, pagamentos e ultimos lancamentos agora compartilham uma unica regra de status. A nova Central de conciliacao no Extrato mostra pendencias, sugestoes, divergencias e pagamentos conciliados."
-  }, {
-    id: "crypto-average-v234",
-    date: "2026-10-04",
-    title: "Preco medio das criptos",
-    body: "A carteira agora calcula o preco medio ponderado, separa resultado realizado e nao realizado e registra compras, vendas, recebimentos, taxas e transferencias de custodia."
-  }, {
-    id: "business-controls-v220",
-    date: "2026-09-24",
-    title: "Negocios e Controles",
-    body: "Crie tabelas para streaming, MEI, servicos, vendas ou qualquer finalidade, com registros, vencimentos, alertas e recebimentos vinculados ao financeiro."
+    title: "Seja bem-vindo ao Nekuma Finance",
+    body: "Organize as financas da sua familia em um unico lugar."
   }];
 
   const app = document.getElementById("app");
@@ -513,7 +427,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=252")
+      navigator.serviceWorker.register("./service-worker.js?v=254")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -857,6 +771,8 @@
     if (event.target.id === "commitmentType") updateCommitmentProviderField();
     if (event.target.id === "debtType") updateDebtTypeFields();
     if (event.target.id === "monthlyPaymentMethod") updateMonthlyPaymentFields();
+    if (event.target.id === "housingDefaultPayerId") updateHousingDefaultPayerLabels(event.target);
+    if (event.target.closest(".housing-form-row") && event.target.id.endsWith("PayerId")) updateHousingPayerAccount(event.target);
     if (event.target.closest(".housing-form-row") && event.target.id.endsWith("PaymentMethod")) updateHousingPaymentFields();
     if (event.target.id === "cardPaymentMethod") updateCreditCardPaymentFields();
     if (event.target.id === "bankAccountCountry") updateBankAccountCountryFields();
@@ -2166,14 +2082,19 @@
     if (!Array.isArray(items)) return [];
     return items.map((item) => {
       const currency = sanitizeCurrency(item.currency, fallbackCurrency);
+      const defaultPayerId = String(item.defaultPayerId || item.payerId || "").trim();
       return {
         ...item,
         id: item.id || uid("hc"),
         name: String(item.name || "Moradia").trim(),
         country: countryMeta[item.country] ? item.country : "japao",
         currency,
+        defaultPayerId,
         active: item.active !== false,
-        items: normalizeHousingItems(item.items, currency)
+        items: normalizeHousingItems(item.items, currency).map((service) => ({
+          ...service,
+          payerId: String(service.payerId || defaultPayerId || "").trim()
+        }))
       };
     });
   }
@@ -2194,6 +2115,7 @@
       cardId: item.cardId || "",
       bankAccountId: item.bankAccountId || "",
       companyId: item.companyId || "",
+      payerId: String(item.payerId || item.paidBy || "").trim(),
       recurring: item.recurring == null ? ["rent", "parking"].includes(template?.key) : item.recurring === true,
       startMonth: item.startMonth || String(item.createdAt || "").slice(0, 7) || currentMonth()
     });
@@ -2458,6 +2380,7 @@
     return {
       settings: {
         familyName: "Familia",
+        familyLeaderId: "",
         baseCurrency: PRIMARY_CURRENCY,
         secondaryCurrency: DEFAULT_SECONDARY_CURRENCY,
         defaultRate: 0.0352,
@@ -5021,6 +4944,14 @@
                 <div class="field"><label for="baseCurrency">Moeda principal</label><select id="baseCurrency" name="baseCurrency">${currencyOptions(primaryCurrency())}</select><p class="row-meta">Usada nos saldos, graficos e relatorios.</p></div>
               </div>
               <div class="field"><label for="secondaryCurrency">Moeda secundaria</label><select id="secondaryCurrency" name="secondaryCurrency">${currencyOptions(secondaryCurrency())}</select><p class="row-meta">Aparece entre parenteses como comparativo. Nao pode ser igual a principal.</p></div>
+              <div class="settings-profile-card family-leader-setting">
+                <div class="panel-head compact"><h3>Organizacao familiar</h3><span class="chip green">Compartilhado</span></div>
+                <div class="field">
+                  <label for="familyLeaderId">Chefe da familia</label>
+                  <select id="familyLeaderId" name="familyLeaderId">${familyPayerOptions(state.settings.familyLeaderId || familyDashboardMemberModel().currentKey)}</select>
+                  <p class="row-meta">Responsavel principal e pagador padrao para novas moradias.</p>
+                </div>
+              </div>
               <div class="settings-profile-card">
                 <div class="panel-head compact"><h3>Perfil do usuario</h3><span class="chip blue">Pessoal</span></div>
                 <div class="two-cols">
@@ -7117,66 +7048,39 @@
   }
 
   function renderFamilyPanel() {
-    const members = activeFamilyMembers();
-    const spending = familyMemberSpending().slice(0, 4);
-    const quickExpenses = monthLedgerEntries(state.ui.selectedMonth, "global")
-      .filter((item) => item.quickExpense || item.source === "receipt-scan" || item.note === "Criado pelo gasto rapido")
-      .slice(0, 4);
-    const housingOpen = (state.housingCards || [])
-      .filter((item) => item.active !== false)
-      .flatMap((card) => housingCardMonthRows(card, state.ui.selectedMonth))
-      .filter((item) => !item.paid && item.paymentMethod !== "company")
-      .reduce((total, item) => total + convert(item.amount, item.currency, primaryCurrency(), latestRate(state.ui.selectedMonth)), 0);
+    const family = familyDashboardSpending();
     return `
       <div class="panel-head">
         <div>
           <h2>Familia</h2>
-          <p class="row-meta">Moradia, pessoas e gastos por membro.</p>
+          <p class="row-meta">Pessoas e gastos de ${formatMonthLabel(state.ui.selectedMonth)}.</p>
         </div>
         <button class="small-action" type="button" data-action="open-modal" data-modal="familyMember">Pessoa</button>
       </div>
-      <div class="pro-summary-grid">
-        <div>
+      <div class="family-summary-grid">
+        <div class="family-summary-card">
           <span>Membros</span>
-          <strong>${members.length || 0}</strong>
+          <strong>${family.memberCount}</strong>
         </div>
-        <div>
-          <span>Moradia aberta</span>
-          <strong>${formatMoneyWithPrimary(housingOpen, primaryCurrency())}</strong>
+        <div class="family-summary-card">
+          <span>Familia</span>
+          <strong>${formatMoneyWithPrimary(family.total, family.currency)}</strong>
         </div>
       </div>
-      ${members.length ? `
-        <div class="compact-chip-list">
-          ${members.map((member) => `
-            <button class="family-chip" type="button" data-action="open-modal" data-modal="familyMember" data-id="${member.id}">
-              <span>${escapeHtml(member.name.slice(0, 1).toUpperCase())}</span>
+      <div class="family-member-spending-grid">
+        ${family.members.map((member, index) => `
+          <article class="family-member-spending-card" style="--member-accent:${["#128a63", "#5f63d3", "#d58b31", "#b85d75", "#317f98", "#7d62aa"][index % 6]}">
+            <span class="family-member-avatar">${escapeHtml(member.initials)}</span>
+            <div class="family-member-copy">
               <strong>${escapeHtml(member.name)}</strong>
-              <small>${escapeHtml(familyRoleMeta[member.role] || "Outros")}</small>
-            </button>
-          `).join("")}
-        </div>
-      ` : `<p class="empty-state">Cadastre as pessoas da familia para vincular gastos.</p>`}
-      ${spending.length ? `
-        <div class="mini-ledger">
-          ${spending.map((item) => `
-            <div>
-              <span>${escapeHtml(item.name)}</span>
-              <strong>${formatMoneyWithPrimary(item.amount, item.currency)}</strong>
+              <small>${member.isCurrentUser ? "Voce" : escapeHtml(member.roleLabel)}</small>
             </div>
-          `).join("")}
-        </div>
-      ` : ""}
-      ${quickExpenses.length ? `
-        <section class="family-quick-expenses">
-          <div class="family-quick-expenses-head"><strong>Gastos rapidos da familia</strong><small>${formatMonthLabel(state.ui.selectedMonth)}</small></div>
-          <div class="mini-ledger">
-            ${quickExpenses.map((item) => `<div><span><b>${escapeHtml(item.title || item.category || "Gasto")}</b><small>${formatShortDate(item.date)} · ${escapeHtml(familyMemberName(item.familyMemberId) || "Familia")}</small></span><strong>${formatMoneyWithPrimary(item.amount, item.currency)}</strong></div>`).join("")}
-          </div>
-        </section>
-      ` : ""}
-      <div class="row-actions">
-        <button class="small-action ghost" type="button" data-action="open-modal" data-modal="housingCard">Moradia</button>
-        <button class="small-action" type="button" data-action="open-modal" data-modal="quickExpense">Gasto rapido</button>
+            <div class="family-member-total">
+              <span>Gastos</span>
+              <strong>${formatMoneyWithPrimary(member.amount, family.currency)}</strong>
+            </div>
+          </article>
+        `).join("")}
       </div>
     `;
   }
@@ -7584,6 +7488,21 @@
       .filter((item) => !item.obligationPaid && item.paymentMethod !== "company")
       .reduce((total, item) => total + convert(item.amount, item.currency, totalCurrency, latestRate(month)), 0);
     const paidCount = rows.filter((item) => item.obligationPaid).length;
+    const payerTotals = rows.reduce((totals, item) => {
+      const payerId = effectiveHousingPayerId(card, item);
+      const current = totals.get(payerId) || { id: payerId, name: housingPayerName(card, item), amount: 0 };
+      current.amount += convert(item.amount, item.currency, totalCurrency, latestRate(month));
+      totals.set(payerId, current);
+      return totals;
+    }, new Map());
+    const payerBreakdown = [...payerTotals.values()];
+    const currentPayerId = familyDashboardMemberModel().currentKey;
+    const personalTotal = payerTotals.get(currentPayerId)?.amount || 0;
+    const responsibilityText = !payerBreakdown.length
+      ? `O pagador padrao e ${housingPayerName(card)}.`
+      : payerBreakdown.length === 1
+        ? `As contas deste card sao pagas por ${payerBreakdown[0].name}.`
+        : `As contas deste card sao divididas entre ${payerBreakdown.length} pessoas.`;
     return `
       <div class="housing-card">
         <div class="housing-card-head">
@@ -7593,6 +7512,16 @@
           </div>
           <span class="chip gold">ALUGUEL</span>
         </div>
+        <div class="housing-responsibility-card">
+          <div>
+            <span>Responsabilidade familiar</span>
+            <strong>${escapeHtml(responsibilityText)}</strong>
+            <small>Sua responsabilidade neste mes: ${formatMoneyWithPrimary(personalTotal, totalCurrency, month)}</small>
+          </div>
+          <div class="housing-payer-breakdown">
+            ${payerBreakdown.map((payer) => `<span><b>${escapeHtml(payer.name)}</b>${formatMoneyWithPrimary(payer.amount, totalCurrency, month)}</span>`).join("")}
+          </div>
+        </div>
         <div class="housing-total">
           <span>Total aberto</span>
           <strong>${formatMoneyWithPrimary(totalOpen, totalCurrency, month)}</strong>
@@ -7600,6 +7529,8 @@
         </div>
         <div class="housing-items">
           ${rows.length ? rows.map((item) => {
+            const payerName = housingPayerName(card, item);
+            const canAct = housingPayerCanAct(card, item);
             const cardLabel = item.paymentMethod === "card"
               ? creditCardById(item.cardId)?.nickname || creditCardById(item.cardId)?.issuer || "cartao"
               : item.paymentMethod === "company"
@@ -7614,18 +7545,19 @@
                 ? "A pagar no cartao"
                 : item.paymentMethod === "company"
                   ? "No salario"
-                  : "Pagar";
+                  : canAct ? "Pagar" : `Paga por ${payerName}`;
             return `
-              <div class="housing-item ${item.obligationPaid ? "is-paid" : ""}">
+              <div class="housing-item ${item.obligationPaid ? "is-paid" : ""} ${canAct ? "is-mine" : "is-other-payer"}">
                 <span class="row-icon ${item.obligationPaid ? "green" : cardPurchasePending ? "gold" : "blue"}">${escapeHtml(item.icon)}</span>
                 <div class="row-main">
                   <p class="row-title">${escapeHtml(item.label)}</p>
                   <p class="row-meta">${cardPurchasePending ? "fatura em aberto" : item.paymentMethod === "company" ? (item.paid ? "descontado no salario" : "desconto no proximo salario") : `vence ${formatShortDate(item.date)}`} - ${escapeHtml(cardLabel)}</p>
+                  <p class="housing-item-payer">Pago por ${escapeHtml(payerName)}</p>
                 </div>
                 <div class="row-amount ${item.obligationPaid ? "income" : "expense"}">
                   ${formatMoneyWithPrimary(item.amount, item.currency, month)}
                   <div class="row-actions">
-                    <button class="small-action ${item.obligationPaid || cardPurchasePending ? "ghost" : ""}" type="button" data-action="pay-housing-item" data-id="${card.id}" data-item-key="${item.key}" ${item.paid || item.paymentMethod === "company" ? "disabled" : ""}>${statusLabel}</button>
+                    <button class="small-action ${item.obligationPaid || cardPurchasePending || !canAct ? "ghost" : ""}" type="button" data-action="pay-housing-item" data-id="${card.id}" data-item-key="${item.key}" ${item.paid || item.paymentMethod === "company" || !canAct ? "disabled" : ""}>${escapeHtml(statusLabel)}</button>
                   </div>
                 </div>
               </div>
@@ -10524,6 +10456,7 @@
     const cards = state.creditCards || [];
     const bankAccounts = activeBankAccounts();
     const companies = factorySources();
+    const defaultPayerId = item?.defaultPayerId || state.settings.familyLeaderId || familyDashboardMemberModel().currentKey;
     return `
       <div class="modal-head">
         <h2>${item ? "Editar moradia" : "Nova moradia"}</h2>
@@ -10538,14 +10471,23 @@
           </div>
           ${countrySelect(activeCountry)}
         </div>
-        <div class="field">
-          <label for="housingCurrency">Moeda padrao</label>
-          <select id="housingCurrency" name="currency">
-            ${currencyOptions(selectedCurrency)}
-          </select>
+        <div class="two-cols">
+          <div class="field">
+            <label for="housingCurrency">Moeda padrao</label>
+            <select id="housingCurrency" name="currency">
+              ${currencyOptions(selectedCurrency)}
+            </select>
+          </div>
+          <div class="field">
+            <label for="housingDefaultPayerId">Quem paga normalmente</label>
+            <select id="housingDefaultPayerId" name="defaultPayerId" required>
+              ${familyPayerOptions(defaultPayerId)}
+            </select>
+            <p class="row-meta">Cada conta pode ter outro responsavel.</p>
+          </div>
         </div>
         <div class="housing-form-list">
-          ${services.map((service) => renderHousingServiceFormRow(service, cards, bankAccounts, companies, activeCountry)).join("")}
+          ${services.map((service) => renderHousingServiceFormRow(service, cards, bankAccounts, companies, activeCountry, defaultPayerId)).join("")}
         </div>
         <button class="secondary-button housing-add-other" type="button" data-action="add-housing-other">Adicionar outro</button>
         ${!cards.length ? `<p class="empty-state">Para pagar algum item no cartao, cadastre um cartao primeiro.</p>` : ""}
@@ -10557,10 +10499,13 @@
     `;
   }
 
-  function renderHousingServiceFormRow(service, cards, bankAccounts, companies, country) {
+  function renderHousingServiceFormRow(service, cards, bankAccounts, companies, country, defaultPayerId = "") {
     const key = service.key;
     const method = service.paymentMethod || "bank";
     const scopedAccounts = bankAccounts.filter((account) => account.country === country);
+    const effectivePayerId = service.payerId || defaultPayerId;
+    const payerAccount = scopedAccounts.find((account) => `user:${account.ownerId || account.createdBy || ""}` === effectivePayerId);
+    const selectedBankAccountId = service.bankAccountId || payerAccount?.id || "";
     return `
       <div class="housing-form-row" data-housing-key="${escapeAttr(key)}" data-custom="${service.custom ? "true" : "false"}">
         <label class="housing-service-toggle">
@@ -10584,7 +10529,18 @@
         <div class="field housing-bank-field ${method === "bank" ? "" : "is-hidden"}">
           <label for="${key}BankAccountId">Conta debito</label>
           <select id="${key}BankAccountId" name="${key}BankAccountId">
-            ${bankAccountSelectOptions(country, service.bankAccountId, scopedAccounts.length ? "Escolha a conta" : "Sem conta cadastrada")}
+            <option value="">${scopedAccounts.length ? "Escolha a conta" : "Sem conta cadastrada"}</option>
+            ${scopedAccounts.map((account) => {
+              const ownerRef = `user:${account.ownerId || account.createdBy || ""}`;
+              const ownerName = authorLabel(account);
+              return `<option value="${escapeAttr(account.id)}" data-owner-ref="${escapeAttr(ownerRef)}" ${selectedAttr(account.id, selectedBankAccountId)}>${escapeHtml(bankAccountName(account))}${ownerName ? ` - ${escapeHtml(ownerName)}` : ""}</option>`;
+            }).join("")}
+          </select>
+        </div>
+        <div class="field housing-payer-field">
+          <label for="${key}PayerId">Quem paga</label>
+          <select id="${key}PayerId" name="${key}PayerId">
+            ${familyPayerOptions(service.payerId === defaultPayerId ? "" : service.payerId, { allowDefault: true, defaultPayerId })}
           </select>
         </div>
         <div class="field housing-card-field ${method === "card" ? "" : "is-hidden"}">
@@ -10614,7 +10570,8 @@
     const country = form.querySelector("[name='country']")?.value || "japao";
     const currency = form.querySelector("[name='currency']")?.value || countryMeta[country]?.currency || primaryCurrency();
     const service = { key: uid("housing-other"), label: "Outro", icon: "O", custom: true, active: true, amount: 0, currency, dueDay: 1, paymentMethod: "bank", recurring: false, startMonth: state.ui.selectedMonth };
-    list.insertAdjacentHTML("beforeend", renderHousingServiceFormRow(service, state.creditCards || [], activeBankAccounts(), factorySources(), country));
+    const defaultPayerId = form.querySelector("[name='defaultPayerId']")?.value || state.settings.familyLeaderId || familyDashboardMemberModel().currentKey;
+    list.insertAdjacentHTML("beforeend", renderHousingServiceFormRow(service, state.creditCards || [], activeBankAccounts(), factorySources(), country, defaultPayerId));
     updateHousingPaymentFields();
     list.querySelector(`[data-housing-key="${CSS.escape(service.key)}"] .housing-custom-label`)?.focus();
   }
@@ -12263,6 +12220,8 @@
     try {
       const data = formData(form);
       const currency = sanitizeCurrency(data.currency, primaryCurrency());
+      const defaultPayerId = String(data.defaultPayerId || state.settings.familyLeaderId || familyDashboardMemberModel().currentKey).trim();
+      if (!familyPayerProfile(defaultPayerId)) throw new Error("Selecione quem paga as contas da moradia.");
       const previous = findItem("housingCards", data.id);
       const previousItems = new Map(normalizeHousingItems(previous?.items, currency).map((item) => [item.key, item]));
       const items = [...form.querySelectorAll(".housing-form-row")].map((row) => {
@@ -12281,6 +12240,9 @@
         if (paymentMethod === "company" && !companyId && data[`${key}Active`]) {
           throw new Error(`Selecione a empresa que desconta ${label}.`);
         }
+        if (paymentMethod === "bank" && number(data[`${key}Amount`]) > 0 && !bankAccountId && data[`${key}Active`]) {
+          throw new Error(`Selecione a conta bancaria de ${label}.`);
+        }
         return {
           key,
           label,
@@ -12294,6 +12256,7 @@
           cardId,
           bankAccountId,
           companyId,
+          payerId: String(data[`${key}PayerId`] || defaultPayerId).trim(),
           recurring: data[`${key}Recurring`] === "on",
           startMonth: previousItems.get(key)?.startMonth || state.ui.selectedMonth
         };
@@ -12302,6 +12265,7 @@
         name: data.name.trim(),
         country: data.country,
         currency,
+        defaultPayerId,
         active: true,
         items
       });
@@ -12825,6 +12789,7 @@
   function saveSettings(form) {
     const data = formData(form);
     state.settings.familyName = data.familyName.trim() || "Familia";
+    state.settings.familyLeaderId = String(data.familyLeaderId || "").trim();
     const baseCurrency = sanitizeCurrency(data.baseCurrency, PRIMARY_CURRENCY);
     state.settings.baseCurrency = baseCurrency;
     state.settings.secondaryCurrency = sanitizeSecondaryCurrency(data.secondaryCurrency, baseCurrency);
@@ -12853,6 +12818,10 @@
     if (!card) return;
     const item = housingItemByKey(card, itemKey);
     if (!item || item.active === false) return;
+    if (!housingPayerCanAct(card, item)) {
+      showToast(`Esta conta e responsabilidade de ${housingPayerName(card, item)}.`);
+      return;
+    }
     if (item.paymentMethod === "company") {
       showToast("Este item sera pago automaticamente no recebimento do salario.");
       return;
@@ -12871,6 +12840,7 @@
     const dueDate = housingItemDateForMonth(item, month);
     state.paidCommitments[key] = true;
     const author = currentUserAuthor();
+    const attribution = housingPayerAttribution(card, item);
 
     if (item.paymentMethod === "card") {
       const creditCard = creditCardById(item.cardId);
@@ -12893,6 +12863,9 @@
         note: "Criado a partir do card de moradia",
         housingId,
         housingItemKey: itemKey,
+        payerRef: attribution.payerRef,
+        payerName: attribution.payerName,
+        familyMemberId: attribution.familyMemberId,
         paidAtPurchase: true,
         createdAt: new Date().toISOString(),
         createdBy: author.id,
@@ -12915,6 +12888,9 @@
       currency: item.currency,
       bankAccountId: item.paymentMethod === "bank" ? item.bankAccountId || "" : "",
       note: `Pago via ${housingPaymentMethodLabel(item.paymentMethod)}`,
+      payerRef: attribution.payerRef,
+      payerName: attribution.payerName,
+      familyMemberId: attribution.familyMemberId,
       createdAt: new Date().toISOString(),
       createdBy: author.id,
       createdByName: author.name
@@ -17057,6 +17033,28 @@
     });
   }
 
+  function updateHousingDefaultPayerLabels(select) {
+    const form = select?.closest("form[data-form='housing-card']");
+    if (!form) return;
+    const payerName = familyPayerProfile(select.value)?.name || "responsavel padrao";
+    form.querySelectorAll(".housing-payer-field select option[value='']").forEach((option) => {
+      option.textContent = `Usar ${payerName}`;
+    });
+    form.querySelectorAll(".housing-payer-field select").forEach((payerSelect) => {
+      if (!payerSelect.value) updateHousingPayerAccount(payerSelect);
+    });
+  }
+
+  function updateHousingPayerAccount(select) {
+    const row = select?.closest(".housing-form-row");
+    const form = select?.closest("form[data-form='housing-card']");
+    const bankSelect = row?.querySelector('.housing-bank-field select[id$="BankAccountId"]');
+    if (!row || !form || !bankSelect) return;
+    const payerId = select.value || form.querySelector("#housingDefaultPayerId")?.value || "";
+    const matching = [...bankSelect.options].find((option) => option.dataset.ownerRef === payerId);
+    if (matching) bankSelect.value = matching.value;
+  }
+
   function updateSubscriptionCycleField() {
     const select = modalRoot.querySelector("#subscriptionBillingCycle");
     const field = modalRoot.querySelector(".subscription-due-date-field");
@@ -17493,6 +17491,162 @@
         return items;
       }, [])
       .sort((a, b) => b.amount - a.amount);
+  }
+
+  function familyDashboardMemberModel() {
+    const rows = [];
+    const aliases = {};
+    const remoteMembers = remoteSession.householdMembers?.length ? remoteSession.householdMembers : fallbackCurrentMember();
+    const author = currentUserAuthor();
+
+    remoteMembers.forEach((member) => {
+      const userId = member.userId || (member.isCurrentUser ? author.id : "");
+      if (!userId) return;
+      const name = member.isCurrentUser
+        ? smartProfileDisplayName()
+        : (member.displayName || member.email?.split("@")[0] || "Membro");
+      const id = `user:${userId}`;
+      rows.push({
+        id,
+        userId,
+        name,
+        initials: memberInitials({ displayName: name, email: member.email }),
+        roleLabel: householdRoleLabel(member.role || "member"),
+        isCurrentUser: Boolean(member.isCurrentUser || userId === author.id),
+        amount: 0
+      });
+      aliases[id] = id;
+    });
+
+    if (!rows.length) {
+      const name = smartProfileDisplayName();
+      const id = `user:${author.id}`;
+      rows.push({ id, userId: author.id, name, initials: memberInitials({ displayName: name }), roleLabel: "Membro", isCurrentUser: true, amount: 0 });
+      aliases[id] = id;
+    }
+
+    activeFamilyMembers().forEach((member) => {
+      const normalizedName = normalizeLookupText(member.name);
+      const matching = rows.find((row) => normalizeLookupText(row.name) === normalizedName);
+      const manualKey = `manual:${member.id}`;
+      if (matching) {
+        aliases[manualKey] = matching.id;
+        matching.manualId = member.id;
+        matching.roleLabel = familyRoleMeta[member.role] || matching.roleLabel;
+        return;
+      }
+      rows.push({
+        id: manualKey,
+        manualId: member.id,
+        name: member.name,
+        initials: String(member.name || "M").split(/\s+/).slice(0, 2).map((part) => part.slice(0, 1)).join("").toUpperCase(),
+        roleLabel: familyRoleMeta[member.role] || "Membro",
+        isCurrentUser: false,
+        amount: 0
+      });
+      aliases[manualKey] = manualKey;
+    });
+
+    return { rows, aliases, currentKey: `user:${author.id}` };
+  }
+
+  function familyPayerProfiles() {
+    return familyDashboardMemberModel().rows;
+  }
+
+  function familyPayerOptions(selected = "", options = {}) {
+    const profiles = familyPayerProfiles();
+    const defaultLabel = options.defaultPayerId
+      ? familyPayerProfile(options.defaultPayerId)?.name || "responsavel padrao"
+      : "responsavel padrao";
+    return `
+      ${options.allowDefault ? `<option value="" ${selectedAttr("", selected)}>Usar ${escapeHtml(defaultLabel)}</option>` : ""}
+      ${profiles.map((profile) => `<option value="${escapeAttr(profile.id)}" ${selectedAttr(profile.id, selected)}>${escapeHtml(profile.name)} - ${escapeHtml(profile.roleLabel)}</option>`).join("")}
+    `;
+  }
+
+  function familyPayerProfile(payerId) {
+    const id = String(payerId || "").trim();
+    return familyPayerProfiles().find((profile) => profile.id === id) || null;
+  }
+
+  function effectiveHousingPayerId(card, item = null) {
+    return String(item?.payerId || card?.defaultPayerId || state.settings.familyLeaderId || familyDashboardMemberModel().currentKey).trim();
+  }
+
+  function housingPayerName(card, item = null) {
+    const payerId = effectiveHousingPayerId(card, item);
+    return familyPayerProfile(payerId)?.name || "Responsavel da familia";
+  }
+
+  function housingPayerCanAct(card, item = null) {
+    const payerId = effectiveHousingPayerId(card, item);
+    if (!payerId.startsWith("user:")) return true;
+    return payerId === familyDashboardMemberModel().currentKey;
+  }
+
+  function housingPayerAttribution(card, item = null) {
+    const payerId = effectiveHousingPayerId(card, item);
+    const profile = familyPayerProfile(payerId);
+    return {
+      payerRef: payerId,
+      payerName: profile?.name || "Responsavel da familia",
+      familyMemberId: payerId.startsWith("manual:") ? payerId.slice(7) : ""
+    };
+  }
+
+  function familyDashboardSpending(month = state.ui.selectedMonth) {
+    const currency = primaryCurrency();
+    const rate = latestRate(month);
+    const model = familyDashboardMemberModel();
+    let memberCount = model.rows.length;
+    const byId = Object.fromEntries(model.rows.map((member) => [member.id, member]));
+    let unassigned = null;
+
+    monthTransactions(month, "global")
+      .filter((item) => item.type === "expense")
+      .forEach((item) => {
+        const payerKey = item.payerRef ? model.aliases[item.payerRef] || item.payerRef : "";
+        const manualKey = item.familyMemberId ? model.aliases[`manual:${item.familyMemberId}`] : "";
+        const authorKey = item.createdBy ? model.aliases[`user:${item.createdBy}`] : "";
+        const targetKey = payerKey || manualKey || (item.createdBy ? authorKey : model.currentKey);
+        let target = byId[targetKey];
+        if (!target && item.createdBy && item.createdByName) {
+          const inferredName = String(item.createdByName).includes("@")
+            ? String(item.createdByName).split("@")[0]
+            : String(item.createdByName);
+          const inferredId = `user:${item.createdBy}`;
+          target = {
+            id: inferredId,
+            userId: item.createdBy,
+            name: inferredName || "Membro",
+            initials: memberInitials({ displayName: inferredName || "Membro" }),
+            roleLabel: "Membro",
+            isCurrentUser: false,
+            amount: 0
+          };
+          model.rows.push(target);
+          model.aliases[inferredId] = inferredId;
+          byId[inferredId] = target;
+          memberCount += 1;
+        }
+        if (!target) {
+          if (!unassigned) {
+            unassigned = { id: "unassigned", name: "Sem atribuicao", initials: "?", roleLabel: "Lancamentos antigos", isCurrentUser: false, amount: 0 };
+            model.rows.push(unassigned);
+            byId[unassigned.id] = unassigned;
+          }
+          target = unassigned;
+        }
+        target.amount += convert(number(item.amount), item.currency, currency, rate);
+      });
+
+    return {
+      currency,
+      memberCount,
+      members: model.rows,
+      total: model.rows.reduce((sum, member) => sum + member.amount, 0)
+    };
   }
 
   function renderDashboardAccountCard(account, activeAccount, hideBalance) {
