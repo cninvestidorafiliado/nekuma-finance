@@ -326,6 +326,11 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "compact-account-cards-v250",
+    date: "2026-10-04",
+    title: "Mini cards bancarios compactos",
+    body: "Os cards de contas ficaram pela metade da altura e estao preparados para exibir as logos oficiais dos bancos."
+  }, {
     id: "desktop-header-wealth-v249",
     date: "2026-10-04",
     title: "Header e patrimonio reorganizados",
@@ -477,7 +482,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=249")
+      navigator.serviceWorker.register("./service-worker.js?v=250")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -3802,9 +3807,13 @@
           ${accounts.length ? accounts.map((account) => {
             const country = countryMeta[account.country] || countryMeta.japao;
             const balance = bankAccountBalance(account, state.ui.selectedMonth);
+            const bankAsset = bankCardAsset(account);
             return `
               <button type="button" data-action="set-tab" data-tab="accounts" class="workspace-account-tile" ${bankAccountStyleAttrs(account)} aria-label="Abrir conta ${escapeAttr(bankAccountName(account))}">
-                <span class="workspace-account-bank" aria-hidden="true"><span>${escapeHtml(country.short || "BK")}</span></span>
+                <span class="workspace-account-bank" aria-hidden="true">
+                  <span>${escapeHtml(country.short || "BK")}</span>
+                  <img src="./assets/banks/logos/${escapeAttr(bankAsset.key)}.png" alt="" onerror="this.hidden=true" />
+                </span>
                 <strong>${escapeHtml(bankAccountName(account))}</strong>
                 <b>${hideBalance ? maskedMoney(account.currency) : formatMoney(balance, account.currency)}</b>
               </button>
