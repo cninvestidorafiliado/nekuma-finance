@@ -7,8 +7,17 @@ Use estes nomes para os bancos ja reconhecidos pelo aplicativo:
 - nubank.png
 - caixa.png
 - santander.png
-- bancodobrasil.png
+- banco-do-brasil.png
 - inter.png
+- bradesco.png
+- itau.png
+- paypal.png
+- wise.png
+- mercado-pago.png
+- pagbank.png
+- picpay.png
+- seven.png
+- yucho.png
 
 Para contas sem um banco reconhecido, use:
 

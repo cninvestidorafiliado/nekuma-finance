@@ -37,6 +37,27 @@
     { key: "inter", country: "brasil", file: "inter-card.png", aliases: ["inter", "banco inter"] },
     { key: "yucho", country: "japao", file: "yucho-card.png", aliases: ["yucho", "yuucho", "ゆうちょ", "japan post bank"] }
   ];
+  const bankLogoAssets = [
+    { file: "banco-do-brasil.png", aliases: ["banco do brasil", "bb"] },
+    { file: "bradesco.png", aliases: ["bradesco"] },
+    { file: "caixa.png", aliases: ["caixa", "caixa economica", "caixa economica federal", "cef"] },
+    { file: "hsbc.png", aliases: ["hsbc"] },
+    { file: "inter.png", aliases: ["inter", "banco inter"] },
+    { file: "itau.png", aliases: ["itau", "itaú"] },
+    { file: "jcb.png", aliases: ["jcb"] },
+    { file: "mercado-pago.png", aliases: ["mercado pago", "mercadopago"] },
+    { file: "n26.png", aliases: ["n26"] },
+    { file: "nubank.png", aliases: ["nubank", "nu bank", "nu pagamento"] },
+    { file: "pagbank.png", aliases: ["pagbank", "pagseguro"] },
+    { file: "payoneer.png", aliases: ["payoneer"] },
+    { file: "paypal.png", aliases: ["paypal"] },
+    { file: "picpay.png", aliases: ["picpay"] },
+    { file: "santander.png", aliases: ["santander"] },
+    { file: "seven.png", aliases: ["seven bank", "sevenbank", "セブン銀行"] },
+    { file: "western-union.png", aliases: ["western union"] },
+    { file: "wise.png", aliases: ["wise", "transferwise"] },
+    { file: "yucho.png", aliases: ["yucho", "yuucho", "ゆうちょ", "japan post bank"] }
+  ];
   const vehicleBrandAssets = [
     { key: "toyota", file: "toyota.png", aliases: ["toyota", "トヨタ"] },
     { key: "honda", file: "honda.png", aliases: ["honda", "ホンダ"] },
@@ -326,6 +347,11 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "bank-logo-catalog-v252",
+    date: "2026-10-04",
+    title: "Catalogo de logos bancarias",
+    body: "As logos adicionadas a pasta agora sao reconhecidas pelo nome do banco e carregadas com atualizacao de cache."
+  }, {
     id: "simple-recent-transactions-v251",
     date: "2026-10-04",
     title: "Ultimos lancamentos simplificados",
@@ -487,7 +513,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=251")
+      navigator.serviceWorker.register("./service-worker.js?v=252")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -3806,12 +3832,12 @@
           ${accounts.length ? accounts.map((account) => {
             const country = countryMeta[account.country] || countryMeta.japao;
             const balance = bankAccountBalance(account, state.ui.selectedMonth);
-            const bankAsset = bankCardAsset(account);
+            const bankLogo = bankLogoAsset(account);
             return `
               <button type="button" data-action="set-tab" data-tab="accounts" class="workspace-account-tile" ${bankAccountStyleAttrs(account)} aria-label="Abrir conta ${escapeAttr(bankAccountName(account))}">
                 <span class="workspace-account-bank" aria-hidden="true">
                   <span>${escapeHtml(country.short || "BK")}</span>
-                  <img src="./assets/banks/logos/${escapeAttr(bankAsset.key)}.png" alt="" onerror="this.hidden=true" />
+                  ${bankLogo ? `<img src="./assets/banks/logos/${escapeAttr(bankLogo.file)}?v=252" alt="" onerror="this.hidden=true" />` : ""}
                 </span>
                 <strong>${escapeHtml(bankAccountName(account))}</strong>
                 <b>${hideBalance ? maskedMoney(account.currency) : formatMoney(balance, account.currency)}</b>
@@ -17394,6 +17420,11 @@
       file: country === "brasil" ? "outros-brasil-card.png" : "outros-japao-card.png",
       aliases: []
     };
+  }
+
+  function bankLogoAsset(account) {
+    const lookup = normalizeLookupText(`${account?.bankName || ""} ${account?.nickname || ""}`);
+    return bankLogoAssets.find((asset) => asset.aliases.some((alias) => lookup.includes(normalizeLookupText(alias)))) || null;
   }
 
   function bankAccountStyleAttrs(account) {
