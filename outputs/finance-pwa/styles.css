@@ -12400,3 +12400,122 @@ body[data-workspace-theme] .tab-card-columns .content-panel {
   .main-view.tab-dashboard .desktop-dashboard-month-row { display: grid !important; }
   .main-view.tab-dashboard .dashboard-finance-strip { display: none !important; }
 }
+
+/* Compact bank-account tiles inside the desktop workspace card. */
+@media (min-width: 1180px) {
+  .workspace-accounts-card {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .workspace-account-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 10px;
+    min-height: 0;
+    margin-top: 14px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  .workspace-account-tile {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    aspect-ratio: 1 / .92;
+    padding: 11px;
+    overflow: hidden;
+    border: 1px solid rgba(var(--account-color-rgb), .28);
+    border-radius: 8px;
+    color: var(--theme-text);
+    background:
+      linear-gradient(145deg, rgba(var(--account-color-rgb), .18), rgba(var(--account-color-rgb), .04)),
+      color-mix(in srgb, var(--theme-panel) 88%, white 12%);
+    box-shadow: 0 10px 22px rgba(var(--account-color-rgb), .1);
+    text-align: left;
+    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  }
+
+  .workspace-account-tile::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    right: -26px;
+    bottom: -32px;
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: rgba(var(--account-color-rgb), .1);
+  }
+
+  .workspace-account-tile:hover,
+  .workspace-account-tile:focus-visible {
+    border-color: rgba(var(--account-color-rgb), .56);
+    box-shadow: 0 14px 28px rgba(var(--account-color-rgb), .18);
+    transform: translateY(-2px);
+  }
+
+  .workspace-account-bank {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.34);
+    border-radius: 8px;
+    background-color: var(--account-color);
+    background-image: linear-gradient(rgba(8,18,15,.16), rgba(8,18,15,.16)), var(--bank-card-bg);
+    background-position: center;
+    background-size: cover;
+    box-shadow: 0 7px 16px rgba(var(--account-color-rgb), .2);
+  }
+
+  .workspace-account-bank > span {
+    display: grid;
+    min-width: 23px;
+    height: 23px;
+    padding: 0 4px;
+    place-items: center;
+    border-radius: 6px;
+    color: #fff;
+    background: rgba(8, 18, 15, .58);
+    font-size: .48rem;
+    font-weight: 950;
+    backdrop-filter: blur(5px);
+  }
+
+  .workspace-account-tile > strong {
+    align-self: end;
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: .72rem;
+    line-height: 1.22;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .workspace-account-tile > b {
+    overflow: hidden;
+    color: var(--account-color);
+    font-size: .76rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 1180px) and (max-width: 1399px) {
+  .workspace-account-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-account-tile {
+    aspect-ratio: auto;
+    min-height: 118px;
+  }
+}

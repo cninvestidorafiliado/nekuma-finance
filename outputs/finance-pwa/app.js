@@ -326,6 +326,11 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "account-mini-cards-v248",
+    date: "2026-10-04",
+    title: "Contas em mini cards",
+    body: "As contas do dashboard agora aparecem em mini cards coloridos com identidade do banco, nome escolhido e saldo na moeda da conta."
+  }, {
     id: "mobile-complete-menu-v247",
     date: "2026-10-04",
     title: "Menu completo no celular",
@@ -467,7 +472,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=247")
+      navigator.serviceWorker.register("./service-worker.js?v=248")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -3771,7 +3776,13 @@
           ${accounts.length ? accounts.map((account) => {
             const country = countryMeta[account.country] || countryMeta.japao;
             const balance = bankAccountBalance(account, state.ui.selectedMonth);
-            return `<button type="button" data-action="set-tab" data-tab="accounts" class="workspace-account-row" ${bankAccountStyleAttrs(account)}><span class="workspace-account-mark">${escapeHtml(country.short || "BK")}</span><span><strong>${escapeHtml(bankAccountName(account))}</strong><small>${countryFlag(account.country)} ${escapeHtml(account.currency)}</small></span><b>${hideBalance ? maskedMoney(account.currency) : formatMoney(balance, account.currency)}</b></button>`;
+            return `
+              <button type="button" data-action="set-tab" data-tab="accounts" class="workspace-account-tile" ${bankAccountStyleAttrs(account)} aria-label="Abrir conta ${escapeAttr(bankAccountName(account))}">
+                <span class="workspace-account-bank" aria-hidden="true"><span>${escapeHtml(country.short || "BK")}</span></span>
+                <strong>${escapeHtml(bankAccountName(account))}</strong>
+                <b>${hideBalance ? maskedMoney(account.currency) : formatMoney(balance, account.currency)}</b>
+              </button>
+            `;
           }).join("") : `<button class="workspace-empty-action" type="button" data-action="open-modal" data-modal="bankAccount"><i data-lucide="plus" aria-hidden="true"></i><span>Adicionar primeira conta</span></button>`}
         </div>
       </article>
