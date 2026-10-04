@@ -326,6 +326,16 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "japanese-receipt-labels-v245",
+    date: "2026-10-04",
+    title: "Recibos japoneses e data local",
+    body: "O scan reconhece os marcadores de total, valor recebido, troco e data japonesa, incluindo ano, mes e dia e numeros de largura cheia."
+  }, {
+    id: "receipt-parser-v244",
+    date: "2026-10-04",
+    title: "Leitura de recibos mais robusta",
+    body: "O scan agora aceita respostas estruturadas ou textuais da IA e interpreta com seguranca loja, total, data, moeda e forma de pagamento."
+  }, {
     id: "receipt-financial-integration-v243",
     date: "2026-10-04",
     title: "Scan integrado aos gastos da familia",
@@ -9348,6 +9358,21 @@
     `;
   }
 
+  function receiptDateDisplay(value) {
+    const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return match ? `${match[1]}/${match[2]}/${match[3]}` : String(value || "");
+  }
+
+  function normalizeReceiptDate(value) {
+    const normalized = String(value || "").trim().replace(/[年月.]/g, "/").replace(/日$/, "").replace(/-/g, "/");
+    const match = normalized.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (!match) return "";
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    if (month < 1 || month > 12 || day < 1 || day > new Date(Number(match[1]), month, 0).getDate()) return "";
+    return `${match[1]}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
   function renderReceiptModal(item = null) {
     const scan = receiptScanResult || {};
     const currency = scan.currency || item?.currency || primaryCurrency();
@@ -9391,8 +9416,9 @@
             <select id="receiptCurrency" name="currency">${currencyOptions(currency)}</select>
           </div>
           <div class="field">
-            <label for="receiptDate">Data</label>
-            <input id="receiptDate" name="date" type="date" required value="${escapeAttr(date)}" />
+            <label for="receiptDate">Data (ano/mes/dia)</label>
+            <input id="receiptDate" name="date" type="text" inputmode="numeric" required pattern="\\d{4}/\\d{2}/\\d{2}" placeholder="2026/09/22" value="${escapeAttr(receiptDateDisplay(date))}" />
+            <small class="form-hint">年 = ano · 月 = mes · 日 = dia</small>
           </div>
         </div>
         <div class="three-cols">
@@ -11456,6 +11482,12 @@
 
   function saveReceipt(form) {
     const data = formData(form);
+    const receiptDate = normalizeReceiptDate(data.date);
+    if (!receiptDate) {
+      showToast("Informe a data na ordem japonesa: ano/mes/dia.");
+      form.elements.date?.focus();
+      return;
+    }
     const receiptId = data.id || uid("rc");
     const author = currentUserAuthor();
     const now = new Date().toISOString();
@@ -11474,7 +11506,7 @@
       category: String(data.category || "Recibo").trim(),
       amount: number(data.amount),
       currency: sanitizeCurrency(data.currency, primaryCurrency()),
-      date: data.date,
+      date: receiptDate,
       familyMemberId: data.familyMemberId || "",
       note: String(data.note || "").trim(),
       status: receiptScanResult ? "reviewed" : "manual",
