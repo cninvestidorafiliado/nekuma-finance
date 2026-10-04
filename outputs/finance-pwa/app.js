@@ -318,6 +318,16 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "receipt-scan-v239",
+    date: "2026-10-04",
+    title: "Scan inteligente de recibos",
+    body: "Fotografe um recibo, revise loja, itens, valores e categorias e vincule a uma compra existente, conta ou cartao sem duplicar despesas."
+  }, {
+    id: "projections-simulations-v238",
+    date: "2026-10-04",
+    title: "Projecoes e simulacoes",
+    body: "Compare o saldo dos proximos 12 meses com compras parceladas, novas despesas, mudancas de renda, reducoes de gastos e aportes sem alterar seus dados reais."
+  }, {
     id: "cards-installments-invoices-v237",
     date: "2026-10-04",
     title: "Cartoes, parcelas e faturas",
@@ -371,6 +381,9 @@
   let passwordRecoveryStep = isPasswordRecoveryLink ? "password" : "request";
   let passwordRecoveryEmail = "";
   let passwordRecoveryBusy = false;
+  let receiptScanImageData = "";
+  let receiptScanResult = null;
+  let receiptScanBusy = false;
   let installPrompt = null;
   window.addEventListener("beforeinstallprompt", event => {
     event.preventDefault();
@@ -406,7 +419,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=237")
+      navigator.serviceWorker.register("./service-worker.js?v=239")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -558,6 +571,13 @@
       showToast("Simulacao removida.");
     }
 
+    if (action === "scan-receipt-image") scanReceiptImage();
+    if (action === "remove-receipt-image") {
+      receiptScanImageData = "";
+      receiptScanResult = null;
+      openModal("receipt");
+    }
+
     if (action === "set-primary-bank-account") {
       setPrimaryBankAccount(button.dataset.id);
     }
@@ -566,7 +586,17 @@
       scrollSubscriptionCarousel(Number(button.dataset.direction || 1));
     }
 
-    if (action === "open-modal") openModal(button.dataset.modal, button.dataset.id || button.dataset.paymentId);
+    if (action === "open-modal") {
+      if (button.dataset.modal === "receipt" && !button.dataset.id) {
+        receiptScanImageData = "";
+        receiptScanResult = null;
+      } else if (button.dataset.modal === "receipt" && button.dataset.id) {
+        const savedReceipt = findItem("receipts", button.dataset.id);
+        receiptScanImageData = savedReceipt?.imageData || "";
+        receiptScanResult = savedReceipt ? { ...savedReceipt, total: savedReceipt.amount, confidence: 1 } : null;
+      }
+      openModal(button.dataset.modal, button.dataset.id || button.dataset.paymentId);
+    }
     if (action === "close-modal") closeModal();
     if (action === "pay-commitment") payCommitment(button.dataset.id);
     if (action === "pay-housing-item") payHousingItem(button.dataset.id, button.dataset.itemKey);
@@ -706,6 +736,7 @@
     }
     if (event.target.id === "import-file") importData(event.target.files[0]);
     if (event.target.id === "profile-avatar-file") saveProfileAvatar(event.target.files?.[0]);
+    if (event.target.id === "receipt-image-file") prepareReceiptImage(event.target.files?.[0]);
     if (event.target.id === "workspaceMonth" && /^\d{4}-\d{2}$/.test(event.target.value)) {
       state.ui.selectedMonth = event.target.value;
       saveState();
@@ -1789,7 +1820,12 @@
         date: String(item.date || dateInMonth(currentMonth(), new Date().getDate())).slice(0, 10),
         familyMemberId: String(item.familyMemberId || "").trim(),
         note: String(item.note || "").trim(),
-        status: item.status || "manual"
+        status: item.status || "manual",
+        items: Array.isArray(item.items) ? item.items : [],
+        imageData: String(item.imageData || ""),
+        linkedTransactionId: String(item.linkedTransactionId || ""),
+        linkedCardPurchaseId: String(item.linkedCardPurchaseId || ""),
+        paymentSource: String(item.paymentSource || "")
       }))
       .filter((item) => item.merchant || item.amount > 0);
   }
@@ -4686,6 +4722,11 @@
         <div class="chart-wrap"><canvas id="country-chart" aria-label="Comparativo entre paises"></canvas></div>
       </section>
 
+      <section class="content-panel receipt-history-panel">
+        <div class="panel-head"><div><h2>Recibos do mes</h2><p class="row-meta">Comprovantes revisados e vinculados ao financeiro.</p></div><button class="small-action" type="button" data-action="open-modal" data-modal="receipt"><i data-lucide="scan-line"></i>Escanear</button></div>
+        ${renderReceiptHistory()}
+      </section>
+
       <section class="split-grid">
         <article class="content-panel">
           <div class="panel-head">
@@ -4817,6 +4858,12 @@
         </div>
       </section>
     `;
+  }
+
+  function renderReceiptHistory() {
+    const receipts = (state.receipts || []).filter((item) => String(item.date || "").slice(0, 7) === state.ui.selectedMonth).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    if (!receipts.length) return `<div class="empty-state compact"><i data-lucide="receipt-text"></i><strong>Nenhum recibo neste mes</strong><p>Use o scan para guardar o comprovante e criar ou conciliar a despesa.</p></div>`;
+    return `<div class="receipt-history-list">${receipts.map((item) => `<article class="receipt-history-row">${item.imageData ? `<img src="${escapeAttr(item.imageData)}" alt="" />` : `<span class="row-icon">R</span>`}<div><strong>${escapeHtml(item.merchant || "Recibo")}</strong><small>${formatShortDate(item.date)} · ${escapeHtml(item.category)} · ${item.items?.length || 0} itens</small><span class="chip ${item.linkedTransactionId || item.linkedCardPurchaseId ? "green" : "blue"}">${item.linkedTransactionId || item.linkedCardPurchaseId ? "Conciliado" : "Lancado"}</span></div><b>${formatMoneyWithPrimary(item.amount, item.currency, item.date.slice(0, 7))}</b><div class="row-actions"><button class="icon-button" type="button" data-action="open-modal" data-modal="receipt" data-id="${escapeAttr(item.id)}" aria-label="Editar recibo"><i data-lucide="pencil"></i></button><button class="icon-button" type="button" data-action="delete-receipt" data-id="${escapeAttr(item.id)}" aria-label="Excluir recibo"><i data-lucide="trash-2"></i></button></div></article>`).join("")}</div>`;
   }
 
   function renderSmartFinancialProfile() {
@@ -8253,6 +8300,7 @@
       monthlyPayment: renderMonthlyPaymentModal,
       subscription: renderSubscriptionModal,
       categoryBudget: renderCategoryBudgetModal,
+      projectionScenario: renderProjectionScenarioModal,
       workspaceTheme: renderWorkspaceThemeModal
     };
     const modalData = type === "categoryBudget" && String(id).startsWith("new:")
@@ -8343,6 +8391,20 @@
       </form>`;
   }
 
+  function renderProjectionScenarioModal() {
+    const defaultMonth = addMonths(state.ui.selectedMonth, 1);
+    return `
+      <div class="modal-head"><div><h2>Nova simulacao</h2><p class="row-meta">Este cenario nao altera seus dados financeiros.</p></div><button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button></div>
+      <form class="form-grid" data-form="projection-scenario">
+        <div class="field"><label for="projectionName">Nome do cenario</label><input id="projectionName" name="name" required maxlength="60" placeholder="Ex: Comprar um celular" /></div>
+        <div class="two-cols"><div class="field"><label for="projectionType">Tipo</label><select id="projectionType" name="type">${Object.entries(projectionScenarioTypes).map(([value, meta]) => `<option value="${value}">${escapeHtml(meta.label)}</option>`).join("")}</select></div><div class="field"><label for="projectionAmount">Valor</label><input id="projectionAmount" name="amount" type="number" min="0.01" step="0.01" required /></div></div>
+        <div class="three-cols"><div class="field"><label for="projectionCurrency">Moeda</label><select id="projectionCurrency" name="currency">${currencyOptions(primaryCurrency())}</select></div><div class="field"><label for="projectionStart">Inicio</label><input id="projectionStart" name="startMonth" type="month" required value="${defaultMonth}" /></div><div class="field"><label for="projectionDuration">Duracao</label><input id="projectionDuration" name="duration" type="number" min="1" max="60" value="12" required /></div></div>
+        <div class="field"><label for="projectionNote">Observacao</label><textarea id="projectionNote" name="note" rows="2" placeholder="Hipoteses ou detalhes desta simulacao"></textarea></div>
+        <p class="form-hint">Em compra parcelada, o valor informado e dividido pela duracao. Nos demais tipos, ele representa o impacto mensal.</p>
+        <div class="form-actions"><button class="secondary-button" type="button" data-action="close-modal">Cancelar</button><button class="primary-button" type="submit">Simular</button></div>
+      </form>`;
+  }
+
   function closeModal() {
     modalRoot.innerHTML = "";
   }
@@ -8355,7 +8417,7 @@
           { modal: "quickExpense", icon: "R", title: "Gasto rapido", meta: "Mercado, kombini, farmacia, roupa ou qualquer compra do dia" },
           { modal: "creditCard", icon: "C", title: "Adicionar cartao", meta: "Cartao do Brasil ou Japao com bandeira e vencimento" },
           { modal: "subscription", icon: "S", title: "Adicionar subscricao", meta: "Streaming, apps e servicos recorrentes no Pix ou cartao" },
-          { modal: "receipt", icon: "N", title: "Recibo", meta: "Salvar recibo manual agora; leitura por IA fica preparada para API segura" },
+          { modal: "receipt", icon: "S", title: "Scan de recibo", meta: "Fotografar, revisar itens e conciliar sem duplicar despesas" },
           { modal: "shoppingList", icon: "L", title: "Lista de compras", meta: "Compare valores por mercado e acompanhe compras recorrentes" },
           { modal: "transaction", icon: "+", title: "Lancamento avulso", meta: "Entrada ou despesa unica fora dos cadastros acima" }
         ]
@@ -9147,26 +9209,31 @@
   }
 
   function renderReceiptModal(item = null) {
-    const currency = item?.currency || primaryCurrency();
+    const scan = receiptScanResult || {};
+    const currency = scan.currency || item?.currency || primaryCurrency();
+    const amount = number(scan.total) || number(item?.amount);
+    const date = scan.date || item?.date || dateInMonth(state.ui.selectedMonth, new Date().getDate());
+    const matches = (state.transactions || []).filter((entry) => entry.type === "expense" && entry.date === date && entry.currency === currency && Math.abs(number(entry.amount) - amount) < (currency === "JPY" ? 1 : 0.02));
+    const itemLines = Array.isArray(scan.items) ? scan.items : item?.items || [];
     return `
       <div class="modal-head">
-        <h2>${item ? "Editar recibo" : "Recibo"}</h2>
+        <div><h2>${item ? "Editar recibo" : "Scan de recibo"}</h2><p class="row-meta">Fotografe, revise e somente depois confirme o lancamento.</p></div>
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="receipt">
         ${editHidden(item)}
-        <div class="notice-card">
-          <strong>IA em preparo</strong>
-          <span>Agora salvamos o recibo manualmente. A leitura por foto precisa de uma Function segura no Cloudflare para chamar a LLM sem expor chave.</span>
-        </div>
+        <section class="receipt-scan-stage ${receiptScanImageData ? "has-image" : ""}">
+          ${receiptScanImageData ? `<img src="${escapeAttr(receiptScanImageData)}" alt="Recibo selecionado" /><div class="receipt-scan-actions"><button class="secondary-button" type="button" data-action="remove-receipt-image">Trocar imagem</button><button class="primary-button" type="button" data-action="scan-receipt-image" ${receiptScanBusy ? "disabled" : ""}>${receiptScanBusy ? "Lendo recibo..." : "Ler com IA"}</button></div>` : `<label for="receipt-image-file"><i data-lucide="scan-line" aria-hidden="true"></i><strong>Fotografar ou escolher recibo</strong><span>JPG, PNG ou WebP. Enquadre apenas o comprovante.</span></label><input id="receipt-image-file" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" />`}
+        </section>
+        ${receiptScanResult ? `<div class="receipt-confidence ${number(scan.confidence) < .7 ? "is-warning" : ""}"><i data-lucide="${number(scan.confidence) < .7 ? "triangle-alert" : "badge-check"}"></i><span>Confianca da leitura</span><strong>${Math.round(number(scan.confidence) * 100)}%</strong></div>` : `<p class="form-hint">A imagem e reduzida no aparelho antes do envio. A IA sugere os campos, mas nada e salvo sem sua confirmacao.</p>`}
         <div class="two-cols">
           <div class="field">
             <label for="receiptMerchant">Loja</label>
-            <input id="receiptMerchant" name="merchant" required placeholder="Ex: Trial, Sugi, Seven" value="${escapeAttr(item?.merchant || "")}" />
+            <input id="receiptMerchant" name="merchant" required placeholder="Ex: Trial, Sugi, Seven" value="${escapeAttr(scan.merchant || item?.merchant || "")}" />
           </div>
           <div class="field">
             <label for="receiptCategory">Categoria</label>
-            <input id="receiptCategory" name="category" list="quickExpenseCategoriesReceipt" required placeholder="Ex: Supermercado" value="${escapeAttr(item?.category || "")}" />
+            <input id="receiptCategory" name="category" list="quickExpenseCategoriesReceipt" required placeholder="Ex: Supermercado" value="${escapeAttr(scan.category || item?.category || "")}" />
             <datalist id="quickExpenseCategoriesReceipt">
               ${quickExpenseCategories.map((entry) => `<option value="${escapeAttr(entry)}"></option>`).join("")}
             </datalist>
@@ -9175,7 +9242,7 @@
         <div class="three-cols">
           <div class="field">
             <label for="receiptAmount">Valor</label>
-            <input id="receiptAmount" name="amount" required type="number" min="0" step="0.01" value="${item ? number(item.amount) : ""}" />
+            <input id="receiptAmount" name="amount" required type="number" min="0" step="0.01" value="${amount || ""}" />
           </div>
           <div class="field">
             <label for="receiptCurrency">Moeda</label>
@@ -9183,23 +9250,73 @@
           </div>
           <div class="field">
             <label for="receiptDate">Data</label>
-            <input id="receiptDate" name="date" type="date" required value="${escapeAttr(item?.date || dateInMonth(state.ui.selectedMonth, new Date().getDate()))}" />
+            <input id="receiptDate" name="date" type="date" required value="${escapeAttr(date)}" />
           </div>
         </div>
-        <div class="field">
-          <label for="receiptFamilyMemberId">Quem gastou</label>
-          <select id="receiptFamilyMemberId" name="familyMemberId">${familyMemberOptions(item?.familyMemberId)}</select>
-        </div>
+        <div class="two-cols"><div class="field"><label for="receiptPaymentSource">Pago com</label><select id="receiptPaymentSource" name="paymentSource"><option value="">Nao informado</option><optgroup label="Contas">${activeBankAccounts().map((account) => `<option value="bank:${escapeAttr(account.id)}">${escapeHtml(bankAccountName(account))}</option>`).join("")}</optgroup><optgroup label="Cartoes">${(state.creditCards || []).filter((card) => card.active !== false).map((card) => `<option value="card:${escapeAttr(card.id)}">${escapeHtml(card.nickname || card.issuer)}</option>`).join("")}</optgroup></select></div><div class="field"><label for="receiptFamilyMemberId">Quem gastou</label><select id="receiptFamilyMemberId" name="familyMemberId">${familyMemberOptions(item?.familyMemberId)}</select></div></div>
+        ${matches.length ? `<div class="receipt-match"><i data-lucide="link"></i><div><strong>Possivel compra ja registrada</strong><p>Encontramos uma movimentacao com a mesma data e valor. Vincule para evitar duplicidade.</p><select name="existingTransactionId"><option value="">Criar novo lancamento</option>${matches.map((entry) => `<option value="${escapeAttr(entry.id)}">${escapeHtml(entry.title)} · ${formatMoney(entry.amount, entry.currency)}</option>`).join("")}</select></div></div>` : ""}
+        ${itemLines.length ? `<section class="receipt-items-review"><div class="panel-head"><div><h3>Itens detectados</h3><p class="row-meta">${itemLines.length} itens · soma ${formatMoney(itemLines.reduce((total, line) => total + number(line.total), 0), currency)}</p></div></div>${itemLines.map((line, index) => `<div class="receipt-item-row"><input type="hidden" name="itemName_${index}" value="${escapeAttr(line.name)}" /><input type="hidden" name="itemTotal_${index}" value="${number(line.total)}" /><span>${escapeHtml(line.name)}</span><small>${escapeHtml(line.category || "Outros")}</small><strong>${formatMoney(line.total, currency)}</strong></div>`).join("")}</section>` : ""}
         <div class="field">
           <label for="receiptNote">Itens/observacao</label>
-          <textarea id="receiptNote" name="note">${escapeHtml(item?.note || "")}</textarea>
+          <textarea id="receiptNote" name="note">${escapeHtml(item?.note || (scan.paymentMethod ? `Pagamento identificado: ${scan.paymentMethod}` : ""))}</textarea>
         </div>
+        ${receiptScanImageData ? `<label class="check-row"><input type="checkbox" name="keepImage" value="1" /><span>Guardar tambem a imagem comprimida do recibo</span></label>` : ""}
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
-          <button class="primary-button" type="submit">Salvar recibo</button>
+          <button class="primary-button" type="submit">Confirmar e lancar</button>
         </div>
       </form>
     `;
+  }
+
+  async function prepareReceiptImage(file) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return showToast("Escolha uma imagem do recibo.");
+    if (file.size > 12 * 1024 * 1024) return showToast("A imagem deve ter no maximo 12 MB.");
+    try {
+      receiptScanImageData = await compressImageFile(file, 1280, .76);
+      receiptScanResult = null;
+      openModal("receipt");
+    } catch {
+      showToast("Nao consegui preparar esta imagem.");
+    }
+  }
+
+  function compressImageFile(file, maxSide, quality) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        canvas.getContext("2d", { alpha: false }).drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+        URL.revokeObjectURL(image.src);
+      };
+      image.onerror = reject;
+      image.src = URL.createObjectURL(file);
+    });
+  }
+
+  async function scanReceiptImage() {
+    if (!receiptScanImageData || receiptScanBusy) return;
+    receiptScanBusy = true;
+    openModal("receipt");
+    try {
+      const token = await currentSupabaseAccessToken();
+      if (!token) throw new Error("Entre na sua conta para usar o scan com IA.");
+      const response = await fetch("./api/receipt-scan", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ image: receiptScanImageData }) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Nao foi possivel ler o recibo.");
+      receiptScanResult = payload.receipt || null;
+      showToast("Leitura concluida. Confira os campos antes de salvar.");
+    } catch (error) {
+      showToast(error.message || "Nao consegui ler o recibo.");
+    } finally {
+      receiptScanBusy = false;
+      openModal("receipt");
+    }
   }
 
   function renderInvestmentModal(item = null) {
@@ -10944,6 +11061,27 @@
     showToast(updated ? "Orcamento atualizado." : "Orcamento criado.");
   }
 
+  function saveProjectionScenario(form) {
+    const data = formData(form);
+    const scenario = {
+      id: uid("ps"),
+      name: String(data.name || "Simulacao").trim(),
+      type: projectionScenarioTypes[data.type] ? data.type : "expense",
+      amount: Math.max(0, number(data.amount)),
+      currency: sanitizeCurrency(data.currency, primaryCurrency()),
+      startMonth: /^\d{4}-\d{2}$/.test(data.startMonth) ? data.startMonth : addMonths(state.ui.selectedMonth, 1),
+      duration: clamp(Math.round(number(data.duration) || 1), 1, 60),
+      note: String(data.note || "").trim(),
+      createdAt: new Date().toISOString()
+    };
+    state.projectionScenarios = [scenario, ...(state.projectionScenarios || [])];
+    state.ui.activeProjectionScenarioId = scenario.id;
+    saveState();
+    closeModal();
+    render();
+    showToast("Simulacao criada. Seus dados reais nao foram alterados.");
+  }
+
   function copyPreviousCategoryBudgets() {
     const month = state.ui.selectedMonth;
     const previous = addMonths(month, -1);
@@ -11173,6 +11311,12 @@
     const data = formData(form);
     const receiptId = data.id || uid("rc");
     const author = currentUserAuthor();
+    const items = [...form.querySelectorAll("[name^='itemName_']")].map((input) => {
+      const index = input.name.split("_").pop();
+      return { name: input.value, total: number(form.elements[`itemTotal_${index}`]?.value), category: receiptScanResult?.items?.[number(index)]?.category || "Outros" };
+    });
+    const paymentSource = String(data.paymentSource || "");
+    const existingTransaction = data.existingTransactionId ? findItem("transactions", data.existingTransactionId) : null;
     const receipt = {
       merchant: String(data.merchant || "").trim(),
       category: String(data.category || "Recibo").trim(),
@@ -11181,10 +11325,31 @@
       date: data.date,
       familyMemberId: data.familyMemberId || "",
       note: String(data.note || "").trim(),
-      status: "manual"
+      status: receiptScanResult ? "reviewed" : "manual",
+      items,
+      imageData: data.keepImage === "1" ? receiptScanImageData : "",
+      paymentSource,
+      linkedTransactionId: existingTransaction?.id || ""
     };
     const updated = upsertItem("receipts", receiptId, receipt, true);
-    if (!updated) {
+    if (existingTransaction) {
+      existingTransaction.receiptId = receiptId;
+      existingTransaction.note = [existingTransaction.note, "Recibo conciliado"].filter(Boolean).join(" · ");
+      existingTransaction.reconciliationStatus = "reconciled";
+    } else if (!updated && paymentSource.startsWith("card:")) {
+      const cardId = paymentSource.slice(5);
+      const card = creditCardById(cardId);
+      if (card) {
+        const purchaseId = uid("cp");
+        const purchaseMonth = receipt.date.slice(0, 7);
+        const firstBillMonth = Number(receipt.date.slice(8, 10)) > number(card.closingDay) ? addMonths(purchaseMonth, 1) : purchaseMonth;
+        state.cardPurchases.unshift({ id: purchaseId, cardId, country: card.country, title: receipt.merchant || "Recibo", category: receipt.category, totalAmount: receipt.amount, currency: receipt.currency, installments: 1, firstBillMonth, purchaseDate: receipt.date, familyMemberId: receipt.familyMemberId, interestAmount: 0, note: receipt.note, receiptId, createdAt: new Date().toISOString(), createdBy: author.id, createdByName: author.name });
+        receipt.linkedCardPurchaseId = purchaseId;
+        const stored = findItem("receipts", receiptId);
+        if (stored) stored.linkedCardPurchaseId = purchaseId;
+      }
+    } else if (!updated) {
+      const bankAccountId = paymentSource.startsWith("bank:") ? paymentSource.slice(5) : "";
       state.transactions.unshift({
         id: uid("tx"),
         date: receipt.date,
@@ -11194,6 +11359,7 @@
         category: receipt.category,
         amount: receipt.amount,
         currency: receipt.currency,
+        bankAccountId,
         familyMemberId: receipt.familyMemberId,
         note: receipt.note ? `Recibo: ${receipt.note}` : "Criado a partir de recibo",
         receiptId,
@@ -11203,10 +11369,12 @@
       });
     }
     state.ui.selectedMonth = receipt.date.slice(0, 7);
+    receiptScanImageData = "";
+    receiptScanResult = null;
     saveState();
     closeModal();
     render();
-    showToast(updated ? "Recibo atualizado." : "Recibo salvo e lancado.");
+    showToast(existingTransaction ? "Recibo vinculado sem duplicar a despesa." : updated ? "Recibo atualizado." : "Recibo revisado e lancado.");
   }
 
   function saveTransfer(form) {
@@ -12687,6 +12855,8 @@
     if (trend) drawTrendChart(trend);
     const projection = document.getElementById("balance-projection-chart");
     if (projection) drawBalanceProjectionChart(projection);
+    const projectionComparison = document.getElementById("projection-comparison-chart");
+    if (projectionComparison) drawProjectionComparisonChart(projectionComparison);
     const category = document.getElementById("category-chart");
     if (category) drawCategoryChart(category);
     const country = document.getElementById("country-chart");
@@ -13178,6 +13348,47 @@
             `Gastos ${formatMoneyWithPrimary(hit.outflow, model.currency)}`
           ];
       return { title: hit.label, lines: detail, color: lineColor };
+    });
+  }
+
+  function drawProjectionComparisonChart(canvas) {
+    const ctx = prepCanvas(canvas);
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const model = projectionComparisonModel();
+    const points = [{ label: "Hoje", balance: model.openingBalance, simulatedBalance: model.openingBalance }, ...model.months];
+    const values = points.flatMap((item) => [item.balance, item.simulatedBalance]);
+    const minValue = Math.min(0, ...values);
+    const maxValue = Math.max(1, ...values);
+    const range = Math.max(1, maxValue - minValue);
+    const padding = { top: 24, right: 18, bottom: 38, left: 18 };
+    const chartW = width - padding.left - padding.right;
+    const chartH = height - padding.top - padding.bottom;
+    const stepX = chartW / Math.max(1, points.length - 1);
+    const yFor = (value) => padding.top + ((maxValue - value) / range) * chartH;
+    ctx.clearRect(0, 0, width, height);
+    drawGrid(ctx, padding, chartW, chartH, width);
+    const drawLine = (key, color) => {
+      ctx.beginPath();
+      points.forEach((point, index) => {
+        const x = padding.left + stepX * index;
+        const y = yFor(point[key]);
+        if (!index) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+    };
+    drawLine("balance", "#76877f");
+    drawLine("simulatedBalance", model.totalImpact < 0 ? "#d95d4e" : "#2f9a68");
+    ctx.fillStyle = "#718078";
+    ctx.font = "600 11px Manrope, sans-serif";
+    ctx.textAlign = "center";
+    points.forEach((point, index) => {
+      if (index % 2 && index !== points.length - 1) return;
+      ctx.fillText(index ? shortMonthLabel(point.month) : "Hoje", padding.left + stepX * index, height - 12);
     });
   }
 
@@ -14363,11 +14574,11 @@
 
   function projectionScenarioEffect(scenario, month) {
     if (!scenario || month < scenario.startMonth) return 0;
-    const offset = monthDifference(scenario.startMonth, month);
+    const offset = monthDiff(scenario.startMonth, month);
     const duration = Math.max(1, number(scenario.duration) || 1);
     if (offset < 0 || offset >= duration) return 0;
     const meta = projectionScenarioTypes[scenario.type] || projectionScenarioTypes.expense;
-    const amount = number(scenario.amount);
+    const amount = convert(number(scenario.amount), scenario.currency || primaryCurrency(), primaryCurrency(), latestRate(month));
     const monthly = scenario.type === "purchase" ? amount / duration : amount;
     return monthly * meta.direction;
   }
@@ -14465,7 +14676,7 @@
           <h2>Projecoes de saldo</h2>
           <p class="row-meta">Salario previsto menos gastos mensais dos proximos 6 meses.</p>
         </div>
-        <span class="chip blue">6 meses</span>
+        <button class="small-action" type="button" data-action="set-tab" data-tab="projections">Abrir projecoes</button>
       </div>
       <div class="balance-projection-chart-wrap">
         <canvas id="balance-projection-chart" aria-label="Projecao do saldo para os proximos seis meses"></canvas>
