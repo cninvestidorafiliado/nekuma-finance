@@ -31,9 +31,16 @@ export async function onRequest({ request, env }) {
   const image = String(body?.image || "");
   if (!/^data:image\/(jpeg|png|webp);base64,/.test(image)) return json({ error: "Envie uma imagem JPG, PNG ou WebP." }, 400);
 
-  const prompt = `Leia este recibo de compra, inclusive se estiver em japones ou portugues. Retorne SOMENTE JSON valido, sem markdown, comentarios ou texto antes/depois, no formato:
-{"merchant":"","date":"YYYY-MM-DD ou vazio","currency":"JPY|BRL|USD|EUR","subtotal":0,"tax":0,"discount":0,"total":0,"paymentMethod":"","category":"","confidence":0,"items":[{"name":"","quantity":1,"unitPrice":0,"total":0,"category":""}]}
-Regras: nao invente texto ilegivel; traduza nomes de categorias, mas preserve loja e itens como impressos; confidence deve ser de 0 a 1; use numeros sem simbolos; category deve ser uma categoria financeira curta; a soma pode divergir do total e deve preservar os valores impressos.`;
+  const prompt = `Leia este recibo de compra, inclusive se estiver em japones ou portugues. Extraia somente os dados essenciais e retorne SOMENTE um objeto JSON valido, sem markdown ou explicacoes:
+{"merchant":"","date":"YYYY-MM-DD ou vazio","currency":"JPY|BRL|USD|EUR","total":0,"paymentMethod":"cash|card|electronic_money|qr_wallet|bank_transfer|unknown","category":"","confidence":0}
+
+Regras para recibos japoneses:
+- merchant: nome ou logotipo da loja no topo.
+- total: valor junto de 合計, 総合計, お会計 ou TOTAL.
+- Nunca use como total os valores de 小計 (subtotal), 内税/消費税 (imposto), お預り (valor entregue), お釣り (troco), saldo ou pontos.
+- paymentMethod cash apenas quando houver 現金 ou a combinacao お預り e お釣り; card para クレジット/カード; electronic_money para ICOCA, Suica, PASMO e similares; qr_wallet para PayPay, Merpay ou outro QR; bank_transfer para transferencia; caso nao esteja impresso use unknown.
+- Para recarga de transporte, use categoria "Recarga de transporte". Para mercado, farmacia, restaurante e outras compras, use uma categoria financeira curta em portugues.
+- Nao invente dados ilegíveis. Use numeros sem simbolos e confidence entre 0 e 1. Itens, subtotal e impostos nao sao necessarios.`;
   let output;
   try {
     output = await env.AI.run(env.RECEIPT_AI_MODEL || VISION_MODEL, {
@@ -42,7 +49,7 @@ Regras: nao invente texto ilegivel; traduza nomes de categorias, mas preserve lo
         { role: "user", content: prompt }
       ],
       image,
-      max_tokens: 1800,
+      max_tokens: 650,
       temperature: 0
     });
   } catch (error) {
@@ -52,7 +59,9 @@ Regras: nao invente texto ilegivel; traduza nomes de categorias, mas preserve lo
   let receipt = parseModelJson(text);
   if (!receipt && text) receipt = await repairModelJson(env, text);
   if (!receipt) return json({ error: "A IA leu o recibo, mas nao conseguiu organizar os dados. Tente novamente." }, 502);
-  return json({ receipt: sanitizeReceipt(receipt) });
+  const sanitized = sanitizeReceipt(receipt);
+  if (!sanitized.merchant && sanitized.total <= 0) return json({ error: "A leitura nao encontrou loja nem valor total. Confira o enquadramento e tente novamente." }, 422);
+  return json({ receipt: sanitized });
 }
 
 function parseModelJson(text) {
@@ -76,15 +85,15 @@ function parseModelJson(text) {
 
 async function repairModelJson(env, modelText) {
   const repairPrompt = `Converta o texto abaixo em um unico objeto JSON valido. Nao altere valores nem invente dados. Use exatamente estas chaves:
-merchant,date,currency,subtotal,tax,discount,total,paymentMethod,category,confidence,items.
-Cada item usa name,quantity,unitPrice,total,category. Responda somente com JSON.\n\n${String(modelText).slice(0, 12000)}`;
+merchant,date,currency,total,paymentMethod,category,confidence.
+paymentMethod deve ser cash, card, electronic_money, qr_wallet, bank_transfer ou unknown. Responda somente com JSON.\n\n${String(modelText).slice(0, 6000)}`;
   try {
     const repaired = await env.AI.run(env.RECEIPT_AI_MODEL || VISION_MODEL, {
       messages: [
         { role: "system", content: "Voce corrige JSON sem modificar o significado dos dados." },
         { role: "user", content: repairPrompt }
       ],
-      max_tokens: 1800,
+      max_tokens: 650,
       temperature: 0
     });
     return parseModelJson(repaired?.response || repaired?.description || repaired?.result?.response || "");
@@ -96,17 +105,25 @@ Cada item usa name,quantity,unitPrice,total,category. Responda somente com JSON.
 function sanitizeReceipt(value) {
   const allowedCurrencies = new Set(["JPY", "BRL", "USD", "EUR"]);
   const money = (number) => Number.isFinite(Number(number)) ? Math.max(0, Number(number)) : 0;
+  const source = value?.receipt && typeof value.receipt === "object" ? value.receipt : value;
+  const currency = String(source?.currency || "JPY").toUpperCase();
+  const rawMethod = String(source?.paymentMethod || source?.payment_method || "unknown").toLowerCase();
+  const paymentAliases = {
+    cash: "cash", dinheiro: "cash", "現金": "cash",
+    card: "card", credit_card: "card", credit: "card", cartao: "card", "カード": "card", "クレジット": "card",
+    electronic_money: "electronic_money", e_money: "electronic_money", icoca: "electronic_money", suica: "electronic_money", pasmo: "electronic_money",
+    qr_wallet: "qr_wallet", paypay: "qr_wallet", merpay: "qr_wallet", wallet: "qr_wallet",
+    bank_transfer: "bank_transfer", transfer: "bank_transfer", transferencia: "bank_transfer",
+    unknown: "unknown", "": "unknown"
+  };
   return {
-    merchant: String(value?.merchant || "").slice(0, 120),
-    date: /^\d{4}-\d{2}-\d{2}$/.test(String(value?.date || "")) ? value.date : "",
-    currency: allowedCurrencies.has(value?.currency) ? value.currency : "JPY",
-    subtotal: money(value?.subtotal), tax: money(value?.tax), discount: money(value?.discount), total: money(value?.total),
-    paymentMethod: String(value?.paymentMethod || "").slice(0, 80),
-    category: String(value?.category || "Recibo").slice(0, 80),
-    confidence: Math.min(1, Math.max(0, Number(value?.confidence) || 0)),
-    items: (Array.isArray(value?.items) ? value.items : []).slice(0, 80).map((item) => ({
-      name: String(item?.name || "Item").slice(0, 160), quantity: money(item?.quantity) || 1,
-      unitPrice: money(item?.unitPrice), total: money(item?.total), category: String(item?.category || "Outros").slice(0, 80)
-    }))
+    merchant: String(source?.merchant || source?.store || source?.merchant_name || "").slice(0, 120),
+    date: /^\d{4}-\d{2}-\d{2}$/.test(String(source?.date || "")) ? source.date : "",
+    currency: allowedCurrencies.has(currency) ? currency : "JPY",
+    total: money(source?.total ?? source?.amount ?? source?.grand_total),
+    paymentMethod: paymentAliases[rawMethod] || "unknown",
+    category: String(source?.category || "Outros").slice(0, 80),
+    confidence: Math.min(1, Math.max(0, Number(source?.confidence) || 0)),
+    items: []
   };
 }

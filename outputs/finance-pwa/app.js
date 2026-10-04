@@ -97,6 +97,14 @@
       other: "Outro"
     }
   };
+  const scannedPaymentMethods = {
+    unknown: "Nao identificado",
+    cash: "Dinheiro",
+    card: "Cartao",
+    electronic_money: "Dinheiro eletronico",
+    qr_wallet: "Carteira QR",
+    bank_transfer: "Transferencia"
+  };
   const typeMeta = {
     income: { label: "Entrada", icon: "+", tone: "green" },
     expense: { label: "Despesa", icon: "-", tone: "red" },
@@ -318,6 +326,11 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "receipt-financial-integration-v243",
+    date: "2026-10-04",
+    title: "Scan integrado aos gastos da familia",
+    body: "Recibos confirmados agora geram um unico gasto familiar e alimentam lancamentos, saldos, orcamentos, graficos, extrato e projecoes sem duplicidade."
+  }, {
     id: "automatic-financial-insights-v242",
     date: "2026-10-04",
     title: "Sugestoes e divergencias automaticas",
@@ -336,7 +349,7 @@
     id: "receipt-scan-v239",
     date: "2026-10-04",
     title: "Scan inteligente de recibos",
-    body: "Fotografe um recibo, revise loja, itens, valores e categorias e vincule a uma compra existente, conta ou cartao sem duplicar despesas."
+    body: "Fotografe um recibo, revise loja, total, pagamento e categoria e vincule a uma compra existente, conta ou cartao sem duplicar despesas."
   }, {
     id: "projections-simulations-v238",
     date: "2026-10-04",
@@ -649,7 +662,7 @@
     if (action === "delete-business-record") deleteBusinessRecord(button.dataset.businessId, button.dataset.recordId);
     if (action === "mark-business-record-paid") markBusinessRecordPaid(button.dataset.businessId, button.dataset.recordId);
     if (action === "delete-shopping-list") deleteItem("shoppingLists", button.dataset.id, "Lista removida.");
-    if (action === "delete-receipt") deleteItem("receipts", button.dataset.id, "Recibo removido.");
+    if (action === "delete-receipt") deleteReceipt(button.dataset.id);
     if (action === "delete-work-override") deleteItem("workScheduleOverrides", button.dataset.id, "Folga extra removida.");
     if (action === "delete-category-budget") deleteItem("categoryBudgets", button.dataset.id, "Orcamento removido.");
     if (action === "refresh-crypto") refreshCryptoQuotes(true);
@@ -1850,7 +1863,8 @@
         imageData: String(item.imageData || ""),
         linkedTransactionId: String(item.linkedTransactionId || ""),
         linkedCardPurchaseId: String(item.linkedCardPurchaseId || ""),
-        paymentSource: String(item.paymentSource || "")
+        paymentSource: String(item.paymentSource || ""),
+        paymentMethod: scannedPaymentMethods[item.paymentMethod] ? item.paymentMethod : "unknown"
       }))
       .filter((item) => item.merchant || item.amount > 0);
   }
@@ -4989,7 +5003,7 @@
   function renderReceiptHistory() {
     const receipts = (state.receipts || []).filter((item) => String(item.date || "").slice(0, 7) === state.ui.selectedMonth).sort((a, b) => String(b.date).localeCompare(String(a.date)));
     if (!receipts.length) return `<div class="empty-state compact"><i data-lucide="receipt-text"></i><strong>Nenhum recibo neste mes</strong><p>Use o scan para guardar o comprovante e criar ou conciliar a despesa.</p></div>`;
-    return `<div class="receipt-history-list">${receipts.map((item) => `<article class="receipt-history-row">${item.imageData ? `<img src="${escapeAttr(item.imageData)}" alt="" />` : `<span class="row-icon">R</span>`}<div><strong>${escapeHtml(item.merchant || "Recibo")}</strong><small>${formatShortDate(item.date)} · ${escapeHtml(item.category)} · ${item.items?.length || 0} itens</small><span class="chip ${item.linkedTransactionId || item.linkedCardPurchaseId ? "green" : "blue"}">${item.linkedTransactionId || item.linkedCardPurchaseId ? "Conciliado" : "Lancado"}</span></div><b>${formatMoneyWithPrimary(item.amount, item.currency, item.date.slice(0, 7))}</b><div class="row-actions"><button class="icon-button" type="button" data-action="open-modal" data-modal="receipt" data-id="${escapeAttr(item.id)}" aria-label="Editar recibo"><i data-lucide="pencil"></i></button><button class="icon-button" type="button" data-action="delete-receipt" data-id="${escapeAttr(item.id)}" aria-label="Excluir recibo"><i data-lucide="trash-2"></i></button></div></article>`).join("")}</div>`;
+    return `<div class="receipt-history-list">${receipts.map((item) => `<article class="receipt-history-row">${item.imageData ? `<img src="${escapeAttr(item.imageData)}" alt="" />` : `<span class="row-icon">R</span>`}<div><strong>${escapeHtml(item.merchant || "Recibo")}</strong><small>${formatShortDate(item.date)} · ${escapeHtml(item.category)} · ${escapeHtml(scannedPaymentMethods[item.paymentMethod] || "Pagamento nao informado")}</small><span class="chip ${item.linkedTransactionId || item.linkedCardPurchaseId ? "green" : "blue"}">${item.linkedTransactionId || item.linkedCardPurchaseId ? "Integrado ao financeiro" : "Pendente"}</span></div><b>${formatMoneyWithPrimary(item.amount, item.currency, item.date.slice(0, 7))}</b><div class="row-actions"><button class="icon-button" type="button" data-action="open-modal" data-modal="receipt" data-id="${escapeAttr(item.id)}" aria-label="Editar recibo"><i data-lucide="pencil"></i></button><button class="icon-button" type="button" data-action="delete-receipt" data-id="${escapeAttr(item.id)}" aria-label="Excluir recibo"><i data-lucide="trash-2"></i></button></div></article>`).join("")}</div>`;
   }
 
   function renderSmartFinancialProfile() {
@@ -8543,7 +8557,7 @@
           { modal: "quickExpense", icon: "R", title: "Gasto rapido", meta: "Mercado, kombini, farmacia, roupa ou qualquer compra do dia" },
           { modal: "creditCard", icon: "C", title: "Adicionar cartao", meta: "Cartao do Brasil ou Japao com bandeira e vencimento" },
           { modal: "subscription", icon: "S", title: "Adicionar subscricao", meta: "Streaming, apps e servicos recorrentes no Pix ou cartao" },
-          { modal: "receipt", icon: "S", title: "Scan de recibo", meta: "Fotografar, revisar itens e conciliar sem duplicar despesas" },
+          { modal: "receipt", icon: "S", title: "Scan de recibo", meta: "Fotografar, revisar o total e lancar no financeiro da familia" },
           { modal: "shoppingList", icon: "L", title: "Lista de compras", meta: "Compare valores por mercado e acompanhe compras recorrentes" },
           { modal: "transaction", icon: "+", title: "Lancamento avulso", meta: "Entrada ou despesa unica fora dos cadastros acima" }
         ]
@@ -9339,8 +9353,10 @@
     const currency = scan.currency || item?.currency || primaryCurrency();
     const amount = number(scan.total) || number(item?.amount);
     const date = scan.date || item?.date || dateInMonth(state.ui.selectedMonth, new Date().getDate());
-    const matches = (state.transactions || []).filter((entry) => entry.type === "expense" && entry.date === date && entry.currency === currency && Math.abs(number(entry.amount) - amount) < (currency === "JPY" ? 1 : 0.02));
+    const matches = amount > 0 ? (state.transactions || []).filter((entry) => entry.type === "expense" && entry.date === date && entry.currency === currency && Math.abs(number(entry.amount) - amount) < (currency === "JPY" ? 1 : 0.02)) : [];
     const itemLines = Array.isArray(scan.items) ? scan.items : item?.items || [];
+    const paymentMethod = scannedPaymentMethods[scan.paymentMethod] ? scan.paymentMethod : (scannedPaymentMethods[item?.paymentMethod] ? item.paymentMethod : "unknown");
+    const paymentSource = item?.paymentSource || "";
     return `
       <div class="modal-head">
         <div><h2>${item ? "Editar recibo" : "Scan de recibo"}</h2><p class="row-meta">Fotografe, revise e somente depois confirme o lancamento.</p></div>
@@ -9379,17 +9395,21 @@
             <input id="receiptDate" name="date" type="date" required value="${escapeAttr(date)}" />
           </div>
         </div>
-        <div class="two-cols"><div class="field"><label for="receiptPaymentSource">Pago com</label><select id="receiptPaymentSource" name="paymentSource"><option value="">Nao informado</option><optgroup label="Contas">${activeBankAccounts().map((account) => `<option value="bank:${escapeAttr(account.id)}">${escapeHtml(bankAccountName(account))}</option>`).join("")}</optgroup><optgroup label="Cartoes">${(state.creditCards || []).filter((card) => card.active !== false).map((card) => `<option value="card:${escapeAttr(card.id)}">${escapeHtml(card.nickname || card.issuer)}</option>`).join("")}</optgroup></select></div><div class="field"><label for="receiptFamilyMemberId">Quem gastou</label><select id="receiptFamilyMemberId" name="familyMemberId">${familyMemberOptions(item?.familyMemberId)}</select></div></div>
-        ${matches.length ? `<div class="receipt-match"><i data-lucide="link"></i><div><strong>Possivel compra ja registrada</strong><p>Encontramos uma movimentacao com a mesma data e valor. Vincule para evitar duplicidade.</p><select name="existingTransactionId"><option value="">Criar novo lancamento</option>${matches.map((entry) => `<option value="${escapeAttr(entry.id)}">${escapeHtml(entry.title)} · ${formatMoney(entry.amount, entry.currency)}</option>`).join("")}</select></div></div>` : ""}
+        <div class="three-cols">
+          <div class="field"><label for="receiptPaymentMethod">Forma identificada</label><select id="receiptPaymentMethod" name="paymentMethod">${Object.entries(scannedPaymentMethods).map(([value, label]) => `<option value="${value}" ${selectedAttr(value, paymentMethod)}>${escapeHtml(label)}</option>`).join("")}</select></div>
+          <div class="field"><label for="receiptPaymentSource">Conta ou cartao</label><select id="receiptPaymentSource" name="paymentSource"><option value="">Sem vinculo</option><optgroup label="Contas">${activeBankAccounts().map((account) => `<option value="bank:${escapeAttr(account.id)}" ${selectedAttr(`bank:${account.id}`, paymentSource)}>${escapeHtml(bankAccountName(account))}</option>`).join("")}</optgroup><optgroup label="Cartoes">${(state.creditCards || []).filter((card) => card.active !== false).map((card) => `<option value="card:${escapeAttr(card.id)}" ${selectedAttr(`card:${card.id}`, paymentSource)}>${escapeHtml(card.nickname || card.issuer)}</option>`).join("")}</optgroup></select></div>
+          <div class="field"><label for="receiptFamilyMemberId">Quem gastou</label><select id="receiptFamilyMemberId" name="familyMemberId">${familyMemberOptions(item?.familyMemberId)}</select></div>
+        </div>
+        ${matches.length ? `<div class="receipt-match"><i data-lucide="link"></i><div><strong>Possivel compra ja registrada</strong><p>Encontramos uma movimentacao com a mesma data e valor. Vincule para evitar duplicidade.</p><select name="existingTransactionId"><option value="">Criar novo lancamento</option>${matches.map((entry) => `<option value="${escapeAttr(entry.id)}" ${selectedAttr(entry.id, item?.linkedTransactionId || "")}>${escapeHtml(entry.title)} · ${formatMoney(entry.amount, entry.currency)}</option>`).join("")}</select></div></div>` : ""}
         ${itemLines.length ? `<section class="receipt-items-review"><div class="panel-head"><div><h3>Itens detectados</h3><p class="row-meta">${itemLines.length} itens · soma ${formatMoney(itemLines.reduce((total, line) => total + number(line.total), 0), currency)}</p></div></div>${itemLines.map((line, index) => `<div class="receipt-item-row"><input type="hidden" name="itemName_${index}" value="${escapeAttr(line.name)}" /><input type="hidden" name="itemTotal_${index}" value="${number(line.total)}" /><span>${escapeHtml(line.name)}</span><small>${escapeHtml(line.category || "Outros")}</small><strong>${formatMoney(line.total, currency)}</strong></div>`).join("")}</section>` : ""}
         <div class="field">
-          <label for="receiptNote">Itens/observacao</label>
-          <textarea id="receiptNote" name="note">${escapeHtml(item?.note || (scan.paymentMethod ? `Pagamento identificado: ${scan.paymentMethod}` : ""))}</textarea>
+          <label for="receiptNote">Observacao opcional</label>
+          <textarea id="receiptNote" name="note">${escapeHtml(item?.note || "")}</textarea>
         </div>
-        ${receiptScanImageData ? `<label class="check-row"><input type="checkbox" name="keepImage" value="1" /><span>Guardar tambem a imagem comprimida do recibo</span></label>` : ""}
+        ${receiptScanImageData ? `<label class="check-row"><input type="checkbox" name="keepImage" value="1" ${item?.imageData ? "checked" : ""} /><span>Guardar tambem a imagem comprimida do recibo</span></label>` : ""}
         <div class="form-actions">
           <button class="secondary-button" type="button" data-action="close-modal">Cancelar</button>
-          <button class="primary-button" type="submit">Confirmar e lancar</button>
+          <button class="primary-button" type="submit">Confirmar gasto familiar</button>
         </div>
       </form>
     `;
@@ -11438,11 +11458,16 @@
     const data = formData(form);
     const receiptId = data.id || uid("rc");
     const author = currentUserAuthor();
+    const now = new Date().toISOString();
     const items = [...form.querySelectorAll("[name^='itemName_']")].map((input) => {
       const index = input.name.split("_").pop();
       return { name: input.value, total: number(form.elements[`itemTotal_${index}`]?.value), category: receiptScanResult?.items?.[number(index)]?.category || "Outros" };
     });
     const paymentSource = String(data.paymentSource || "");
+    const paymentMethod = scannedPaymentMethods[data.paymentMethod] ? data.paymentMethod : "unknown";
+    const generatedTransaction = (state.transactions || []).find((entry) => entry.receiptId === receiptId && entry.createdFromReceipt);
+    const previouslyLinkedTransactions = (state.transactions || []).filter((entry) => entry.receiptId === receiptId && !entry.createdFromReceipt);
+    const linkedCardPurchase = (state.cardPurchases || []).find((entry) => entry.receiptId === receiptId);
     const existingTransaction = data.existingTransactionId ? findItem("transactions", data.existingTransactionId) : null;
     const receipt = {
       merchant: String(data.merchant || "").trim(),
@@ -11456,29 +11481,67 @@
       items,
       imageData: data.keepImage === "1" ? receiptScanImageData : "",
       paymentSource,
-      linkedTransactionId: existingTransaction?.id || ""
+      paymentMethod,
+      linkedTransactionId: "",
+      linkedCardPurchaseId: ""
     };
     const updated = upsertItem("receipts", receiptId, receipt, true);
+    const storedReceipt = findItem("receipts", receiptId);
+    const removeGeneratedTransaction = () => {
+      if (!generatedTransaction) return;
+      state.transactions = state.transactions.filter((entry) => entry.id !== generatedTransaction.id);
+      rememberDeletedItems("transactions", [generatedTransaction], now);
+    };
+    const removeLinkedCardPurchase = () => {
+      if (!linkedCardPurchase) return;
+      state.cardPurchases = state.cardPurchases.filter((entry) => entry.id !== linkedCardPurchase.id);
+      rememberDeletedItems("cardPurchases", [linkedCardPurchase], now);
+    };
+    previouslyLinkedTransactions.forEach((entry) => {
+      if (entry.id === existingTransaction?.id) return;
+      entry.receiptId = "";
+      if (entry.reconciliationStatus === "reconciled") entry.reconciliationStatus = "pending";
+      entry.updatedAt = now;
+    });
     if (existingTransaction) {
+      if (generatedTransaction && generatedTransaction.id !== existingTransaction.id) removeGeneratedTransaction();
+      removeLinkedCardPurchase();
+      Object.assign(existingTransaction, {
+        date: receipt.date,
+        country: receipt.currency === "BRL" ? "brasil" : "japao",
+        type: "expense",
+        title: receipt.merchant || existingTransaction.title || "Recibo",
+        category: receipt.category,
+        amount: receipt.amount,
+        currency: receipt.currency,
+        bankAccountId: paymentSource.startsWith("bank:") ? paymentSource.slice(5) : existingTransaction.bankAccountId || "",
+        paymentMethod,
+        receiptMethod: paymentMethod,
+        familyMemberId: receipt.familyMemberId,
+        receiptId,
+        reconciliationStatus: "reconciled",
+        updatedAt: now
+      });
       existingTransaction.receiptId = receiptId;
-      existingTransaction.note = [existingTransaction.note, "Recibo conciliado"].filter(Boolean).join(" · ");
-      existingTransaction.reconciliationStatus = "reconciled";
-    } else if (!updated && paymentSource.startsWith("card:")) {
+      existingTransaction.note = [String(existingTransaction.note || "").replace(/(?: · )?Recibo conciliado/g, "").trim(), "Recibo conciliado"].filter(Boolean).join(" · ");
+      if (storedReceipt) storedReceipt.linkedTransactionId = existingTransaction.id;
+    } else if (paymentSource.startsWith("card:")) {
+      removeGeneratedTransaction();
       const cardId = paymentSource.slice(5);
       const card = creditCardById(cardId);
       if (card) {
-        const purchaseId = uid("cp");
         const purchaseMonth = receipt.date.slice(0, 7);
         const firstBillMonth = Number(receipt.date.slice(8, 10)) > number(card.closingDay) ? addMonths(purchaseMonth, 1) : purchaseMonth;
-        state.cardPurchases.unshift({ id: purchaseId, cardId, country: card.country, title: receipt.merchant || "Recibo", category: receipt.category, totalAmount: receipt.amount, currency: receipt.currency, installments: 1, firstBillMonth, purchaseDate: receipt.date, familyMemberId: receipt.familyMemberId, interestAmount: 0, note: receipt.note, receiptId, createdAt: new Date().toISOString(), createdBy: author.id, createdByName: author.name });
-        receipt.linkedCardPurchaseId = purchaseId;
-        const stored = findItem("receipts", receiptId);
-        if (stored) stored.linkedCardPurchaseId = purchaseId;
+        const purchase = { id: linkedCardPurchase?.id || uid("cp"), cardId, country: card.country, title: receipt.merchant || "Recibo", category: receipt.category, totalAmount: receipt.amount, currency: receipt.currency, installments: 1, firstBillMonth, purchaseDate: receipt.date, familyMemberId: receipt.familyMemberId, interestAmount: 0, paymentMethod: "card", note: receipt.note, receiptId, createdFromReceipt: true, quickExpense: true, source: "receipt-scan", createdAt: linkedCardPurchase?.createdAt || now, createdBy: linkedCardPurchase?.createdBy || author.id, createdByName: linkedCardPurchase?.createdByName || author.name, updatedAt: now };
+        if (linkedCardPurchase) Object.assign(linkedCardPurchase, purchase);
+        else state.cardPurchases.unshift(purchase);
+        if (storedReceipt) storedReceipt.linkedCardPurchaseId = purchase.id;
       }
-    } else if (!updated) {
+    } else {
+      removeLinkedCardPurchase();
       const bankAccountId = paymentSource.startsWith("bank:") ? paymentSource.slice(5) : "";
-      state.transactions.unshift({
-        id: uid("tx"),
+      const financialEntry = {
+        id: generatedTransaction?.id || uid("tx"),
         date: receipt.date,
         country: receipt.currency === "BRL" ? "brasil" : "japao",
         type: "expense",
@@ -11487,13 +11550,23 @@
         amount: receipt.amount,
         currency: receipt.currency,
         bankAccountId,
+        paymentMethod,
+        receiptMethod: paymentMethod,
         familyMemberId: receipt.familyMemberId,
         note: receipt.note ? `Recibo: ${receipt.note}` : "Criado a partir de recibo",
         receiptId,
-        createdAt: new Date().toISOString(),
-        createdBy: author.id,
-        createdByName: author.name
-      });
+        createdFromReceipt: true,
+        quickExpense: true,
+        source: "receipt-scan",
+        reconciliationStatus: "reconciled",
+        createdAt: generatedTransaction?.createdAt || now,
+        createdBy: generatedTransaction?.createdBy || author.id,
+        createdByName: generatedTransaction?.createdByName || author.name,
+        updatedAt: now
+      };
+      if (generatedTransaction) Object.assign(generatedTransaction, financialEntry);
+      else state.transactions.unshift(financialEntry);
+      if (storedReceipt) storedReceipt.linkedTransactionId = financialEntry.id;
     }
     state.ui.selectedMonth = receipt.date.slice(0, 7);
     receiptScanImageData = "";
@@ -11501,7 +11574,7 @@
     saveState();
     closeModal();
     render();
-    showToast(existingTransaction ? "Recibo vinculado sem duplicar a despesa." : updated ? "Recibo atualizado." : "Recibo revisado e lancado.");
+    showToast(existingTransaction ? "Recibo conciliado com o gasto existente." : updated ? "Recibo e gasto familiar atualizados." : "Recibo lancado nos gastos da familia.");
   }
 
   function saveTransfer(form) {
@@ -12886,6 +12959,28 @@
     saveState({ remoteNow: true });
     render();
     showToast("Aporte excluído.");
+  }
+
+  function deleteReceipt(id) {
+    const receipt = findItem("receipts", id);
+    if (!receipt || !window.confirm("Excluir este recibo e o gasto criado por ele?")) return;
+    const deletedAt = new Date().toISOString();
+    const generatedTransactions = (state.transactions || []).filter((entry) => entry.receiptId === id && entry.createdFromReceipt);
+    const linkedPurchases = (state.cardPurchases || []).filter((entry) => entry.receiptId === id);
+    state.transactions = (state.transactions || []).filter((entry) => !generatedTransactions.some((generated) => generated.id === entry.id));
+    state.cardPurchases = (state.cardPurchases || []).filter((entry) => !linkedPurchases.some((purchase) => purchase.id === entry.id));
+    (state.transactions || []).forEach((entry) => {
+      if (entry.receiptId !== id) return;
+      entry.receiptId = "";
+      if (entry.reconciliationStatus === "reconciled") entry.reconciliationStatus = "pending";
+    });
+    state.receipts = state.receipts.filter((entry) => entry.id !== id);
+    rememberDeletedItems("transactions", generatedTransactions, deletedAt);
+    rememberDeletedItems("cardPurchases", linkedPurchases, deletedAt);
+    rememberDeletedItems("receipts", [receipt], deletedAt);
+    saveState({ remoteNow: true });
+    render();
+    showToast("Recibo e gasto vinculado removidos.");
   }
 
   function deleteItem(collection, id, message) {
@@ -17346,6 +17441,7 @@
   function receiptMethodLabel(method) {
     return receiptMethods.japao[method]
       || receiptMethods.brasil[method]
+      || scannedPaymentMethods[method]
       || monthlyPaymentMethodLabel(method)
       || "";
   }
