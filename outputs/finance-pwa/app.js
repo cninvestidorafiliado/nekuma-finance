@@ -326,6 +326,11 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "desktop-header-wealth-v249",
+    date: "2026-10-04",
+    title: "Header e patrimonio reorganizados",
+    body: "O desktop ganhou conversor compacto e botao Sair no header. Os cards de patrimonio agora ocupam as duas colunas sem espacos vazios."
+  }, {
     id: "account-mini-cards-v248",
     date: "2026-10-04",
     title: "Contas em mini cards",
@@ -472,7 +477,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=248")
+      navigator.serviceWorker.register("./service-worker.js?v=249")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -788,7 +793,7 @@
       if (event.target.value.length === 6 && form && !passwordRecoveryBusy) form.requestSubmit();
     }
     if (event.target.closest("[data-form='transfer']")) updateTransferPreview();
-    if (event.target.closest(".fx-converter-card")) updateFxConverterPreview();
+    if (event.target.closest(".fx-converter-card")) updateFxConverterPreview(event.target.closest(".fx-converter-card"));
   });
 
   document.addEventListener("change", (event) => {
@@ -827,7 +832,7 @@
     if (event.target.id === "goalCountry") updateGoalCurrencyField();
     if (event.target.id === "goalContributionGoalId") updateGoalContributionCurrencyField();
     if (event.target.id === "vehicleInsurancePaymentType") updateVehicleInsuranceCardField();
-    if (event.target.closest(".fx-converter-card")) updateFxConverterPreview();
+    if (event.target.closest(".fx-converter-card")) updateFxConverterPreview(event.target.closest(".fx-converter-card"));
   });
 
   document.addEventListener("keydown", (event) => {
@@ -3200,8 +3205,8 @@
       .join("");
   }
 
-  function updateFxConverterPreview() {
-    const card = document.querySelector(".fx-converter-card");
+  function updateFxConverterPreview(targetCard = null) {
+    const card = targetCard || document.querySelector(".fx-converter-card");
     if (!card) return;
     const amount = number(card.querySelector(".fx-converter-amount")?.value);
     const from = sanitizeCurrency(card.querySelector(".fx-converter-from")?.value || "USD", "USD");
@@ -3715,10 +3720,16 @@
                 <i data-lucide="calendar-days" aria-hidden="true"></i>
                 <input id="workspaceMonth" type="month" value="${escapeAttr(state.ui.selectedMonth)}" aria-label="Escolher mes do dashboard" />
               </label>
-              <button class="workspace-customize-button" type="button" data-action="open-modal" data-modal="workspaceTheme">
-                <i data-lucide="palette" aria-hidden="true"></i>
-                Personalizar
-              </button>
+              <div class="workspace-hero-actions">
+                <button class="workspace-customize-button" type="button" data-action="open-modal" data-modal="workspaceTheme">
+                  <i data-lucide="palette" aria-hidden="true"></i>
+                  Personalizar
+                </button>
+                <button class="workspace-signout-button" type="button" data-action="remote-signout">
+                  <i data-lucide="log-out" aria-hidden="true"></i>
+                  Sair
+                </button>
+              </div>
             </div>
             <nav class="workspace-context-tabs" aria-label="Visoes do dashboard">
               <button class="is-active" type="button" data-action="set-tab" data-tab="dashboard">Main</button>
@@ -3737,6 +3748,7 @@
               <article class="workspace-metric"><span>Dolar / Real</span><strong>${quotes.usdBrl ? formatFxRate(quotes.usdBrl, 4) : "--"}</strong>${renderFxChangeChip(quotes.usdBrlChange)}</article>
               <article class="workspace-metric"><span>Dolar / Iene</span><strong>${usdJpy ? formatYenRate(usdJpy) : "--"}</strong>${renderFxChangeChip(quotes.usdJpyChange)}</article>
               <article class="workspace-metric"><span>BTC / Dolar</span><strong>${btcUsd ? formatUsdRate(btcUsd) : "--"}</strong>${renderFxChangeChip(quotes.btcUsdChange)}</article>
+              ${renderWorkspaceFxConverter()}
               <article class="workspace-metric workspace-update-metric"><span>Atualizado</span><strong>${updatedLabel}</strong><button type="button" data-action="refresh-fx" aria-label="Atualizar cotacoes"><i data-lucide="refresh-cw" aria-hidden="true"></i></button></article>
             </div>
           </div>
@@ -3748,6 +3760,20 @@
           <article class="workspace-fixed-card workspace-reserve-card">${renderEmergencyReservePanel(summary)}</article>
         </div>
       </section>
+    `;
+  }
+
+  function renderWorkspaceFxConverter() {
+    return `
+      <article class="workspace-metric workspace-converter-metric fx-converter-card" aria-label="Conversor de moedas do dashboard">
+        <div class="workspace-converter-head"><span>Conversor</span><strong data-fx-converter-result>${formatMoney(convert(250, "USD", "BRL", latestRate()), "BRL")}</strong></div>
+        <div class="workspace-converter-controls">
+          <input class="fx-converter-amount" type="number" min="0" step="0.01" value="250" aria-label="Valor para converter no dashboard" />
+          <select class="fx-converter-from" aria-label="Moeda de origem no dashboard">${fxConverterCurrencyOptions("USD")}</select>
+          <span aria-hidden="true">→</span>
+          <select class="fx-converter-to" aria-label="Moeda de destino no dashboard">${fxConverterCurrencyOptions("BRL")}</select>
+        </div>
+      </article>
     `;
   }
 
@@ -4583,8 +4609,16 @@
       <div class="detail-page-shell">
         ${renderPageIntro("Patrimonio", "Planos de longo prazo", "Centralize metas, investimentos, financiamentos e consorcios sem sobrecarregar o dashboard.", `<button class="secondary-button" type="button" data-action="open-modal" data-modal="investment">Novo investimento</button><button class="primary-button" type="button" data-action="open-modal" data-modal="goal">Nova meta</button>`)}
         <section class="detail-kpi-grid"><article><span>Investido</span><strong>${formatMoney(investmentTotal, primaryCurrency())}</strong><small>valor cadastrado</small></article><article><span>Dividas abertas</span><strong>${formatMoney(debtTotal, primaryCurrency())}</strong><small>saldo devedor</small></article><article><span>Metas ativas</span><strong>${goals.length}</strong><small>objetivos em andamento</small></article><article><span>Reserva</span><strong>${formatMoney(goalProgress(emergencyGoal() || {}).saved || 0, primaryCurrency())}</strong><small>emergencia</small></article></section>
-        <section class="detail-two-column"><article class="content-panel">${renderFinancialGoalsPanel()}</article><article class="content-panel"><div class="panel-head"><h2>Investimentos</h2><button class="small-action" type="button" data-action="open-modal" data-modal="investment">Novo</button></div>${renderInvestmentList()}${hasNubankAccount() ? `<div class="nubank-boxes-inline">${renderNubankBoxesPanel()}</div>` : ""}</article></section>
-        <section class="detail-two-column"><article class="content-panel"><div class="panel-head"><h2>Financiamentos</h2><button class="small-action" type="button" data-action="open-modal" data-modal="debt">Novo contrato</button></div>${renderDebtList("financing")}</article><article class="content-panel"><div class="panel-head"><h2>Consorcios</h2><button class="small-action" type="button" data-action="open-modal" data-modal="consortium">Novo consorcio</button></div>${renderConsortiumList()}</article></section>
+        <section class="wealth-card-columns">
+          <div class="wealth-card-column">
+            <article class="content-panel wealth-goals-card">${renderFinancialGoalsPanel()}</article>
+            <article class="content-panel wealth-financing-card"><div class="panel-head"><h2>Financiamentos</h2><button class="small-action" type="button" data-action="open-modal" data-modal="debt">Novo contrato</button></div>${renderDebtList("financing")}</article>
+          </div>
+          <div class="wealth-card-column">
+            <article class="content-panel wealth-investments-card"><div class="panel-head"><h2>Investimentos</h2><button class="small-action" type="button" data-action="open-modal" data-modal="investment">Novo</button></div>${renderInvestmentList()}${hasNubankAccount() ? `<div class="nubank-boxes-inline">${renderNubankBoxesPanel()}</div>` : ""}</article>
+            <article class="content-panel wealth-consortium-card"><div class="panel-head"><h2>Consorcios</h2><button class="small-action" type="button" data-action="open-modal" data-modal="consortium">Novo consorcio</button></div>${renderConsortiumList()}</article>
+          </div>
+        </section>
       </div>
     `;
   }

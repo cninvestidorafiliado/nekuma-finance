@@ -12519,3 +12519,148 @@ body[data-workspace-theme] .tab-card-columns .content-panel {
     min-height: 118px;
   }
 }
+
+.wealth-card-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 14px;
+}
+
+.wealth-card-column {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.wealth-card-column > .content-panel {
+  width: 100%;
+  margin: 0;
+}
+
+@media (max-width: 759px) {
+  .wealth-card-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wealth-card-column {
+    display: contents;
+  }
+
+  .wealth-goals-card { order: 1; }
+  .wealth-investments-card { order: 2; }
+  .wealth-financing-card { order: 3; }
+  .wealth-consortium-card { order: 4; }
+}
+
+@media (min-width: 1180px) {
+  .workspace-hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .workspace-signout-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 12px;
+    border: 1px solid rgba(255, 255, 255, .28);
+    border-radius: 6px;
+    color: #fff;
+    background: rgba(9, 16, 14, .48);
+    font-size: .72rem;
+    font-weight: 850;
+    backdrop-filter: blur(12px);
+  }
+
+  .workspace-signout-button:hover,
+  .workspace-signout-button:focus-visible {
+    border-color: rgba(255, 255, 255, .5);
+    background: rgba(9, 16, 14, .68);
+  }
+
+  .workspace-signout-button svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .workspace-metrics {
+    grid-template-columns: minmax(150px, 1.1fr) repeat(3, minmax(112px, .78fr)) minmax(205px, 1.28fr) minmax(108px, .68fr);
+  }
+
+  .workspace-converter-metric.fx-converter-card {
+    grid-column: auto;
+    align-content: center;
+    gap: 7px;
+    padding: 9px 11px;
+  }
+
+  .workspace-converter-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .workspace-converter-head > span {
+    color: rgba(255, 255, 255, .62);
+    font-size: .54rem;
+    font-weight: 850;
+    text-transform: uppercase;
+  }
+
+  .workspace-converter-head > strong {
+    overflow: hidden;
+    color: #fff;
+    font-size: .72rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workspace-converter-controls {
+    display: grid;
+    grid-template-columns: minmax(42px, .78fr) minmax(43px, .62fr) auto minmax(43px, .62fr);
+    align-items: center;
+    gap: 4px;
+  }
+
+  .workspace-converter-controls input,
+  .workspace-converter-controls select {
+    width: 100%;
+    min-width: 0;
+    height: 28px;
+    padding: 3px 5px;
+    border: 1px solid rgba(255, 255, 255, .2);
+    border-radius: 6px;
+    color: #fff;
+    background: rgba(7, 20, 16, .34);
+    font: inherit;
+    font-size: .58rem;
+    font-weight: 850;
+  }
+
+  .workspace-converter-controls select option {
+    color: #162b24;
+    background: #fff;
+  }
+
+  .workspace-converter-controls > span {
+    color: rgba(255, 255, 255, .72);
+    font-size: .62rem;
+    font-weight: 900;
+  }
+}
+
+@media (min-width: 1180px) and (max-width: 1399px) {
+  .workspace-metrics {
+    grid-template-columns: minmax(145px, 1fr) repeat(3, minmax(96px, .7fr)) minmax(180px, 1.15fr) minmax(96px, .64fr);
+    gap: 6px;
+  }
+
+  .workspace-metric {
+    padding-inline: 10px;
+  }
+}
