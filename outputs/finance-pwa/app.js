@@ -318,6 +318,11 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "projection-salary-v240",
+    date: "2026-10-04",
+    title: "Salario correto nas projecoes",
+    body: "O detalhamento mensal agora usa somente o salario liquido previsto de cada mes, sem confundir transferencias ou outras entradas com remuneracao."
+  }, {
     id: "receipt-scan-v239",
     date: "2026-10-04",
     title: "Scan inteligente de recibos",
@@ -14553,9 +14558,7 @@
     const cardsTotal = salaryCards.reduce((total, card) => {
       return total + convert(number(card.netAmount ?? card.amount), card.currency, currency, rate);
     }, 0);
-    const summary = summarizeMonth(month, "global");
-    const recordedIncome = convert(summary.projectedInflow, summary.currency, currency, rate);
-    return Math.max(0, cardsTotal, recordedIncome);
+    return Math.max(0, cardsTotal);
   }
 
   const projectionScenarioTypes = {
@@ -14629,7 +14632,7 @@
         </section>
         <section class="projection-timeline-table">
           <div class="panel-head"><div><h2>Detalhamento mensal</h2><p class="row-meta">A simulacao nunca altera seus saldos ou lancamentos.</p></div></div>
-          <div class="projection-table-head"><span>Mes</span><span>Entradas</span><span>Saidas</span><span>Impacto</span><span>Saldo simulado</span></div>
+          <div class="projection-table-head"><span>Mes</span><span>Salario previsto</span><span>Saidas</span><span>Impacto</span><span>Saldo simulado</span></div>
           ${model.months.map((item) => `<div class="projection-table-row"><strong>${escapeHtml(formatMonthLabel(item.month))}</strong><span class="income">${formatMoney(item.salary, model.currency)}</span><span class="expense">${formatMoney(item.outflow, model.currency)}</span><span class="${item.effect < 0 ? "expense" : item.effect > 0 ? "income" : ""}">${item.effect > 0 ? "+" : ""}${formatMoney(item.effect, model.currency)}</span><strong class="${item.simulatedBalance < 0 ? "expense" : ""}">${formatMoney(item.simulatedBalance, model.currency)}</strong></div>`).join("")}
         </section>
       </div>
