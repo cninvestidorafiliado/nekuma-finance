@@ -326,6 +326,11 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "receipt-mobile-family-v246",
+    date: "2026-10-04",
+    title: "Scan organizado no celular",
+    body: "O formulario do recibo agora se adapta ao mobile e os gastos confirmados aparecem no card Familia no mes correspondente."
+  }, {
     id: "japanese-receipt-labels-v245",
     date: "2026-10-04",
     title: "Recibos japoneses e data local",
@@ -532,7 +537,6 @@
 
     if (action === "set-tab") {
       state.ui.activeTab = button.dataset.tab;
-      if (state.ui.activeTab === "dashboard") state.ui.selectedMonth = currentMonth();
       saveState();
       render();
     }
@@ -3924,10 +3928,9 @@
   }
 
   function ensureDashboardCurrentMonth() {
-    const month = currentMonth();
-    if (dashboardMonthAnchored === month) return;
-    dashboardMonthAnchored = month;
-    state.ui.selectedMonth = month;
+    if (dashboardMonthAnchored) return;
+    dashboardMonthAnchored = currentMonth();
+    if (!/^\d{4}-\d{2}$/.test(String(state.ui.selectedMonth || ""))) state.ui.selectedMonth = dashboardMonthAnchored;
   }
 
   function renderBalanceOverview(summary) {
@@ -7030,6 +7033,9 @@
   function renderFamilyPanel() {
     const members = activeFamilyMembers();
     const spending = familyMemberSpending().slice(0, 4);
+    const quickExpenses = monthLedgerEntries(state.ui.selectedMonth, "global")
+      .filter((item) => item.quickExpense || item.source === "receipt-scan" || item.note === "Criado pelo gasto rapido")
+      .slice(0, 4);
     const housingOpen = (state.housingCards || [])
       .filter((item) => item.active !== false)
       .flatMap((card) => housingCardMonthRows(card, state.ui.selectedMonth))
@@ -7073,6 +7079,14 @@
             </div>
           `).join("")}
         </div>
+      ` : ""}
+      ${quickExpenses.length ? `
+        <section class="family-quick-expenses">
+          <div class="family-quick-expenses-head"><strong>Gastos rapidos da familia</strong><small>${formatMonthLabel(state.ui.selectedMonth)}</small></div>
+          <div class="mini-ledger">
+            ${quickExpenses.map((item) => `<div><span><b>${escapeHtml(item.title || item.category || "Gasto")}</b><small>${formatShortDate(item.date)} · ${escapeHtml(familyMemberName(item.familyMemberId) || "Familia")}</small></span><strong>${formatMoneyWithPrimary(item.amount, item.currency)}</strong></div>`).join("")}
+          </div>
+        </section>
       ` : ""}
       <div class="row-actions">
         <button class="small-action ghost" type="button" data-action="open-modal" data-modal="housingCard">Moradia</button>
@@ -9393,7 +9407,7 @@
           ${receiptScanImageData ? `<img src="${escapeAttr(receiptScanImageData)}" alt="Recibo selecionado" /><div class="receipt-scan-actions"><button class="secondary-button" type="button" data-action="remove-receipt-image">Trocar imagem</button><button class="primary-button" type="button" data-action="scan-receipt-image" ${receiptScanBusy ? "disabled" : ""}>${receiptScanBusy ? "Lendo recibo..." : "Ler com IA"}</button></div>` : `<label for="receipt-image-file"><i data-lucide="scan-line" aria-hidden="true"></i><strong>Fotografar ou escolher recibo</strong><span>JPG, PNG ou WebP. Enquadre apenas o comprovante.</span></label><input id="receipt-image-file" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" />`}
         </section>
         ${receiptScanResult ? `<div class="receipt-confidence ${number(scan.confidence) < .7 ? "is-warning" : ""}"><i data-lucide="${number(scan.confidence) < .7 ? "triangle-alert" : "badge-check"}"></i><span>Confianca da leitura</span><strong>${Math.round(number(scan.confidence) * 100)}%</strong></div>` : `<p class="form-hint">A imagem e reduzida no aparelho antes do envio. A IA sugere os campos, mas nada e salvo sem sua confirmacao.</p>`}
-        <div class="two-cols">
+        <div class="two-cols receipt-identity-grid">
           <div class="field">
             <label for="receiptMerchant">Loja</label>
             <input id="receiptMerchant" name="merchant" required placeholder="Ex: Trial, Sugi, Seven" value="${escapeAttr(scan.merchant || item?.merchant || "")}" />
@@ -9406,7 +9420,7 @@
             </datalist>
           </div>
         </div>
-        <div class="three-cols">
+        <div class="three-cols receipt-amount-grid">
           <div class="field">
             <label for="receiptAmount">Valor</label>
             <input id="receiptAmount" name="amount" required type="number" min="0" step="0.01" value="${amount || ""}" />
@@ -9421,7 +9435,7 @@
             <small class="form-hint">年 = ano · 月 = mes · 日 = dia</small>
           </div>
         </div>
-        <div class="three-cols">
+        <div class="three-cols receipt-payment-grid">
           <div class="field"><label for="receiptPaymentMethod">Forma identificada</label><select id="receiptPaymentMethod" name="paymentMethod">${Object.entries(scannedPaymentMethods).map(([value, label]) => `<option value="${value}" ${selectedAttr(value, paymentMethod)}>${escapeHtml(label)}</option>`).join("")}</select></div>
           <div class="field"><label for="receiptPaymentSource">Conta ou cartao</label><select id="receiptPaymentSource" name="paymentSource"><option value="">Sem vinculo</option><optgroup label="Contas">${activeBankAccounts().map((account) => `<option value="bank:${escapeAttr(account.id)}" ${selectedAttr(`bank:${account.id}`, paymentSource)}>${escapeHtml(bankAccountName(account))}</option>`).join("")}</optgroup><optgroup label="Cartoes">${(state.creditCards || []).filter((card) => card.active !== false).map((card) => `<option value="card:${escapeAttr(card.id)}" ${selectedAttr(`card:${card.id}`, paymentSource)}>${escapeHtml(card.nickname || card.issuer)}</option>`).join("")}</optgroup></select></div>
           <div class="field"><label for="receiptFamilyMemberId">Quem gastou</label><select id="receiptFamilyMemberId" name="familyMemberId">${familyMemberOptions(item?.familyMemberId)}</select></div>
@@ -11294,6 +11308,8 @@
       receiptMethod: data.paymentMethod || "",
       familyMemberId: data.familyMemberId || "",
       note: "Criado pelo gasto rapido",
+      quickExpense: true,
+      source: "quick-expense",
       createdAt: new Date().toISOString(),
       createdBy: author.id,
       createdByName: author.name
@@ -11601,6 +11617,7 @@
       if (storedReceipt) storedReceipt.linkedTransactionId = financialEntry.id;
     }
     state.ui.selectedMonth = receipt.date.slice(0, 7);
+    dashboardMonthAnchored = currentMonth();
     receiptScanImageData = "";
     receiptScanResult = null;
     saveState();
@@ -15570,7 +15587,9 @@
       currency: card.currency,
       familyMemberId: purchase.familyMemberId || "",
       interestAmount: number(purchase.interestAmount),
-      note: String(purchase.note || "")
+      note: String(purchase.note || ""),
+      quickExpense: Boolean(purchase.quickExpense),
+      source: String(purchase.source || "")
     };
   }
 

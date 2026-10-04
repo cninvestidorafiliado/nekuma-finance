@@ -4254,6 +4254,30 @@ canvas {
   margin-top: 10px;
 }
 
+.family-quick-expenses {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.family-quick-expenses-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.family-quick-expenses-head strong { color: var(--ink); font-size: .78rem; }
+.family-quick-expenses-head small { color: var(--muted); font-size: .66rem; font-weight: 800; }
+.family-quick-expenses .mini-ledger { margin-top: 0; }
+.family-quick-expenses .mini-ledger > div { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.family-quick-expenses .mini-ledger span { display: grid; gap: 2px; min-width: 0; text-transform: none; }
+.family-quick-expenses .mini-ledger b { overflow: hidden; color: var(--ink); font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }
+.family-quick-expenses .mini-ledger small { color: var(--muted); font-size: .61rem; font-weight: 750; }
+.family-quick-expenses .mini-ledger > div > strong { font-size: .78rem; text-align: right; }
+
 .patrimony-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -9110,6 +9134,41 @@ h1 {
   .receipt-item-row small { grid-column: 1 / -1; }
   .receipt-history-row { grid-template-columns: 42px minmax(0,1fr) auto; }
   .receipt-history-row .row-actions { grid-column: 2 / -1; justify-content: flex-end; }
+}
+
+@media (max-width: 759px) {
+  .modal-receipt {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - 16px);
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .modal-receipt .form-grid { gap: 14px; }
+  .modal-receipt .receipt-scan-stage.has-image { grid-template-columns: 1fr; }
+  .modal-receipt .receipt-scan-stage.has-image img { max-height: 210px; }
+  .modal-receipt .receipt-identity-grid { grid-template-columns: 1fr; }
+  .modal-receipt .receipt-amount-grid,
+  .modal-receipt .receipt-payment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .modal-receipt .receipt-amount-grid > .field:last-child,
+  .modal-receipt .receipt-payment-grid > .field:last-child { grid-column: 1 / -1; }
+  .modal-receipt .field label { min-height: auto; line-height: 1.2; }
+  .modal-receipt .field input,
+  .modal-receipt .field select { min-height: 48px; font-size: .94rem; }
+  .modal-receipt .field textarea { min-height: 76px; }
+  .modal-receipt .form-hint { line-height: 1.35; }
+  .modal-receipt .form-actions { display: grid; grid-template-columns: minmax(0, .72fr) minmax(0, 1.28fr); }
+  .modal-receipt .form-actions button { width: 100%; min-width: 0; padding-inline: 10px; }
+}
+
+@media (max-width: 420px) {
+  .modal-receipt .receipt-amount-grid,
+  .modal-receipt .receipt-payment-grid { grid-template-columns: 1fr; }
+  .modal-receipt .receipt-amount-grid > .field:last-child,
+  .modal-receipt .receipt-payment-grid > .field:last-child { grid-column: auto; }
+  .modal-receipt .form-actions { grid-template-columns: 1fr; }
+  .modal-receipt .form-actions .primary-button { grid-row: 1; }
 }
 
 /* Credit card, installments and invoice center */
