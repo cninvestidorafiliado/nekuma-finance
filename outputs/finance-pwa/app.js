@@ -326,6 +326,11 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "simple-recent-transactions-v251",
+    date: "2026-10-04",
+    title: "Ultimos lancamentos simplificados",
+    body: "O card inicial agora mostra apenas estabelecimento, data e valor. Edicao, categoria, pagamento e conta continuam completos no Extrato."
+  }, {
     id: "compact-account-cards-v250",
     date: "2026-10-04",
     title: "Mini cards bancarios compactos",
@@ -482,7 +487,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=250")
+      navigator.serviceWorker.register("./service-worker.js?v=251")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -3619,14 +3624,8 @@
           <article class="content-panel recent-transactions-panel">
             <div class="panel-head">
               <h2>Ultimos lancamentos</h2>
-              <div class="panel-actions">
-                ${renderVisibilityToggle("recentTransactions", state.ui.hideRecentTransactions, "últimos lançamentos")}
-                <button class="small-action ghost" type="button" data-action="set-tab" data-tab="accounts">Ver contas</button>
-              </div>
             </div>
-            ${state.ui.hideRecentTransactions
-              ? renderHiddenDetails("Lançamentos ocultos", "Clique no olho para mostrar os últimos lançamentos do mês.")
-              : renderTransactionList(monthLedgerEntries(state.ui.selectedMonth, "global").slice(0, 7))}
+            ${renderDashboardTransactionList(monthLedgerEntries(state.ui.selectedMonth, "global").slice(0, 7))}
           </article>
 
           <article class="content-panel work-calendar-panel">
@@ -8560,6 +8559,24 @@
     updateCreditCardPaymentFields();
     updateDebtTypeFields();
     updateMonthlyPaymentFields();
+  }
+
+  function renderDashboardTransactionList(items) {
+    if (!items.length) return `<p class="empty-state">Nenhum lancamento neste mes.</p>`;
+    return `
+      <div class="dashboard-transaction-list" aria-label="Ultimos lancamentos do mes">
+        ${items.map((item) => {
+          const isIncome = item.type === "income";
+          return `
+            <div class="dashboard-transaction-row">
+              <strong>${escapeHtml(item.title || "Lancamento")}</strong>
+              <time datetime="${escapeAttr(item.date || "")}">${escapeHtml(formatShortDate(item.date))}</time>
+              <b class="${isIncome ? "income" : "expense"}">${isIncome ? "+" : "-"} ${formatMoney(item.amount, item.currency)}</b>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
   }
 
   function renderWorkspaceThemeModal() {

@@ -12734,3 +12734,70 @@ body[data-workspace-theme] .tab-card-columns .content-panel {
     min-height: 94px;
   }
 }
+
+.dashboard-transaction-list {
+  display: grid;
+  margin-top: 4px;
+}
+
+.dashboard-transaction-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(92px, auto);
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px 2px;
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-ink, var(--ink)), transparent 88%);
+}
+
+.dashboard-transaction-row:last-child {
+  border-bottom: 0;
+}
+
+.dashboard-transaction-row > strong {
+  overflow: hidden;
+  color: var(--theme-text, var(--ink));
+  font-size: .76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-transaction-row > time {
+  color: var(--muted);
+  font-size: .64rem;
+  white-space: nowrap;
+}
+
+.dashboard-transaction-row > b {
+  justify-self: end;
+  overflow: hidden;
+  font-size: .72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-transaction-row > b.income {
+  color: var(--green);
+}
+
+.dashboard-transaction-row > b.expense {
+  color: var(--red);
+}
+
+@media (max-width: 480px) {
+  .dashboard-transaction-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 10px;
+    padding-block: 10px;
+  }
+
+  .dashboard-transaction-row > time {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .dashboard-transaction-row > b {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+}
