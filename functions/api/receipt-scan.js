@@ -31,21 +31,66 @@ export async function onRequest({ request, env }) {
   const image = String(body?.image || "");
   if (!/^data:image\/(jpeg|png|webp);base64,/.test(image)) return json({ error: "Envie uma imagem JPG, PNG ou WebP." }, 400);
 
-  const prompt = `Leia este recibo de compra, inclusive se estiver em japones ou portugues. Retorne SOMENTE JSON valido, sem markdown, no formato:
+  const prompt = `Leia este recibo de compra, inclusive se estiver em japones ou portugues. Retorne SOMENTE JSON valido, sem markdown, comentarios ou texto antes/depois, no formato:
 {"merchant":"","date":"YYYY-MM-DD ou vazio","currency":"JPY|BRL|USD|EUR","subtotal":0,"tax":0,"discount":0,"total":0,"paymentMethod":"","category":"","confidence":0,"items":[{"name":"","quantity":1,"unitPrice":0,"total":0,"category":""}]}
-Regras: nao invente texto ilegivel; confidence deve ser de 0 a 1; use numeros sem simbolos; category deve ser uma categoria financeira curta; a soma pode divergir do total e deve preservar os valores impressos.`;
+Regras: nao invente texto ilegivel; traduza nomes de categorias, mas preserve loja e itens como impressos; confidence deve ser de 0 a 1; use numeros sem simbolos; category deve ser uma categoria financeira curta; a soma pode divergir do total e deve preservar os valores impressos.`;
   let output;
   try {
-    output = await env.AI.run(env.RECEIPT_AI_MODEL || VISION_MODEL, { prompt, image, max_tokens: 1800, temperature: 0.1 });
+    output = await env.AI.run(env.RECEIPT_AI_MODEL || VISION_MODEL, {
+      messages: [
+        { role: "system", content: "Voce extrai dados de recibos e responde exclusivamente com um unico objeto JSON valido." },
+        { role: "user", content: prompt }
+      ],
+      image,
+      max_tokens: 1800,
+      temperature: 0
+    });
   } catch (error) {
     return json({ error: "Nao foi possivel ler o recibo agora. Confira se a licenca do modelo de visao foi aceita no Cloudflare." }, 502);
   }
   const text = String(output?.response || output?.description || output?.result?.response || "").trim();
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) return json({ error: "A leitura nao retornou dados estruturados. Tente uma foto mais nitida." }, 502);
-  let receipt;
-  try { receipt = JSON.parse(match[0]); } catch { return json({ error: "Nao consegui interpretar a leitura. Tente novamente." }, 502); }
+  let receipt = parseModelJson(text);
+  if (!receipt && text) receipt = await repairModelJson(env, text);
+  if (!receipt) return json({ error: "A IA leu o recibo, mas nao conseguiu organizar os dados. Tente novamente." }, 502);
   return json({ receipt: sanitizeReceipt(receipt) });
+}
+
+function parseModelJson(text) {
+  const cleaned = String(text || "")
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  const candidate = cleaned.slice(start, end + 1).replace(/,\s*([}\]])/g, "$1");
+  try {
+    const parsed = JSON.parse(candidate);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function repairModelJson(env, modelText) {
+  const repairPrompt = `Converta o texto abaixo em um unico objeto JSON valido. Nao altere valores nem invente dados. Use exatamente estas chaves:
+merchant,date,currency,subtotal,tax,discount,total,paymentMethod,category,confidence,items.
+Cada item usa name,quantity,unitPrice,total,category. Responda somente com JSON.\n\n${String(modelText).slice(0, 12000)}`;
+  try {
+    const repaired = await env.AI.run(env.RECEIPT_AI_MODEL || VISION_MODEL, {
+      messages: [
+        { role: "system", content: "Voce corrige JSON sem modificar o significado dos dados." },
+        { role: "user", content: repairPrompt }
+      ],
+      max_tokens: 1800,
+      temperature: 0
+    });
+    return parseModelJson(repaired?.response || repaired?.description || repaired?.result?.response || "");
+  } catch {
+    return null;
+  }
 }
 
 function sanitizeReceipt(value) {
