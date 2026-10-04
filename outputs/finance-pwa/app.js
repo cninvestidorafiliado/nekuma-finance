@@ -326,6 +326,11 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "mobile-complete-menu-v247",
+    date: "2026-10-04",
+    title: "Menu completo no celular",
+    body: "A barra mobile agora concentra Inicio, adicionar e Menu. Todas as paginas do app ficam disponiveis em um painel organizado."
+  }, {
     id: "receipt-mobile-family-v246",
     date: "2026-10-04",
     title: "Scan organizado no celular",
@@ -462,7 +467,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=239")
+      navigator.serviceWorker.register("./service-worker.js?v=247")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -538,6 +543,7 @@
     if (action === "set-tab") {
       state.ui.activeTab = button.dataset.tab;
       saveState();
+      if (button.closest(".modal-mobileMenu")) closeModal();
       render();
     }
 
@@ -2627,7 +2633,8 @@
     app.innerHTML = `${renderDesktopPrototypeNav()}${pageContent}`;
 
     document.querySelectorAll(".nav-item").forEach((item) => {
-      item.classList.toggle("is-active", item.dataset.tab === state.ui.activeTab);
+      const menuActive = item.hasAttribute("data-nav-menu") && state.ui.activeTab !== "dashboard";
+      item.classList.toggle("is-active", item.dataset.tab === state.ui.activeTab || menuActive);
     });
     window.NekumaDashboard?.setup(app, state.ui.dashboardLayouts || {}, layouts => {
       state.ui.dashboardLayouts = layouts;
@@ -8431,6 +8438,7 @@
   function openModal(type, id = "") {
     const map = {
       addHub: renderAddHubModal,
+      mobileMenu: renderMobileMenuModal,
       transaction: renderTransactionModal,
       transfer: renderTransferModal,
       commitment: renderCommitmentModal,
@@ -8633,6 +8641,56 @@
                     <strong>${escapeHtml(item.title)}</strong>
                     <small>${escapeHtml(item.meta)}</small>
                   </span>
+                </button>
+              `).join("")}
+            </div>
+          </section>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function renderMobileMenuModal() {
+    const groups = [{
+      title: "Principal",
+      items: [
+        { tab: "dashboard", icon: "layout-dashboard", label: "Inicio", meta: "Resumo financeiro do mes" },
+        { tab: "family", icon: "users", label: "Familia", meta: "Pessoas, permissoes e atividade" },
+        { tab: "referrals", icon: "share-2", label: "Indique e ganhe", meta: "Convites e recompensas" }
+      ]
+    }, {
+      title: "Financas",
+      items: [
+        { tab: "accounts", icon: "landmark", label: "Banking", meta: "Contas, empresas e salarios" },
+        { tab: "budgets", icon: "chart-pie", label: "Orcamentos", meta: "Limites por categoria" },
+        { tab: "projections", icon: "chart-spline", label: "Projecoes", meta: "Cenarios e simulacoes" },
+        { tab: "cards", icon: "credit-card", label: "Cartoes", meta: "Faturas, compras e parcelas" },
+        { tab: "reports", icon: "receipt-text", label: "Extrato", meta: "Entradas, saidas e conciliacao" }
+      ]
+    }, {
+      title: "Patrimonio e conta",
+      items: [
+        { tab: "crypto", icon: "bitcoin", label: "Cripto", meta: "Carteira, preco medio e historico" },
+        { tab: "wealth", icon: "chart-no-axes-combined", label: "Patrimonio", meta: "Metas, bens e investimentos" },
+        { tab: "plans", icon: "badge-percent", label: "Planos", meta: "Plano atual e recursos" },
+        { tab: "settings", icon: "settings", label: "Ajustes", meta: "Perfil, nuvem, backup e privacidade" }
+      ]
+    }];
+    return `
+      <div class="modal-head mobile-menu-head">
+        <div><p class="mini-label">Navegacao</p><h2>Menu</h2></div>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <div class="mobile-menu-groups">
+        ${groups.map((group) => `
+          <section class="mobile-menu-group">
+            <h3>${escapeHtml(group.title)}</h3>
+            <div class="mobile-menu-grid">
+              ${group.items.map((item) => `
+                <button class="mobile-menu-item ${item.tab === state.ui.activeTab ? "is-active" : ""}" type="button" data-action="set-tab" data-tab="${item.tab}">
+                  <span class="mobile-menu-icon"><i data-lucide="${item.icon}" aria-hidden="true"></i></span>
+                  <span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.meta)}</small></span>
+                  <i class="mobile-menu-arrow" data-lucide="chevron-right" aria-hidden="true"></i>
                 </button>
               `).join("")}
             </div>

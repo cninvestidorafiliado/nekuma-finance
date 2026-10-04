@@ -7124,7 +7124,7 @@ canvas {
   left: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 4px;
   max-width: none;
   min-height: calc(var(--nav-h) + env(safe-area-inset-bottom));
@@ -7168,6 +7168,122 @@ canvas {
 .nav-item.is-active span {
   color: var(--ink);
   background: var(--gold);
+}
+
+.modal-mobileMenu {
+  width: min(680px, calc(100vw - 24px));
+}
+
+.mobile-menu-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.mobile-menu-head .mini-label,
+.mobile-menu-head h2 {
+  margin: 0;
+}
+
+.mobile-menu-groups {
+  display: grid;
+  gap: 18px;
+}
+
+.mobile-menu-group {
+  display: grid;
+  gap: 9px;
+}
+
+.mobile-menu-group h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: .74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.mobile-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mobile-menu-item {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 70px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 92%, var(--workspace-accent, var(--gold)) 8%);
+  text-align: left;
+}
+
+.mobile-menu-item > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.mobile-menu-item strong,
+.mobile-menu-item small {
+  overflow-wrap: anywhere;
+}
+
+.mobile-menu-item strong {
+  font-size: .9rem;
+}
+
+.mobile-menu-item small {
+  color: var(--muted);
+  font-size: .7rem;
+  line-height: 1.3;
+}
+
+.mobile-menu-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--deep);
+  background: color-mix(in srgb, var(--workspace-accent, var(--gold)) 72%, white 28%);
+}
+
+.mobile-menu-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.mobile-menu-arrow {
+  width: 17px;
+  color: var(--muted);
+}
+
+.mobile-menu-item.is-active {
+  border-color: var(--workspace-accent, var(--gold));
+  box-shadow: inset 3px 0 0 var(--workspace-accent, var(--gold));
+}
+
+@media (max-width: 560px) {
+  .modal-mobileMenu {
+    align-self: end;
+    width: 100%;
+    max-height: min(82dvh, 760px);
+    border-radius: 22px 22px 0 0;
+  }
+
+  .mobile-menu-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-menu-item {
+    min-height: 62px;
+  }
 }
 
 .nav-add-button {
