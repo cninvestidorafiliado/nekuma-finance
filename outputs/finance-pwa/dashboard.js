@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  const cardClasses = ['overview-card', 'paypal-panel', 'dashboard-cards-panel', 'housing-panel', 'vehicle-panel', 'subscriptions-panel', 'financial-calendar-panel', 'balance-projection-panel', 'work-calendar-panel', 'family-pie-panel', 'dashboard-trend-panel', 'emergency-reserve-panel', 'crypto-panel', 'goals-panel', 'nubank-boxes-home-panel', 'debt-home-panel', 'consortium-home-panel', 'family-tools-panel', 'family-panel', 'recent-transactions-panel'];
+  const cardClasses = ['overview-card', 'paypal-panel', 'dashboard-cards-panel', 'housing-panel', 'vehicle-panel', 'subscriptions-panel', 'financial-calendar-panel', 'balance-projection-panel', 'work-calendar-panel', 'family-pie-panel', 'dashboard-trend-panel', 'emergency-reserve-panel', 'crypto-panel', 'goals-panel', 'nubank-boxes-home-panel', 'debt-home-panel', 'consortium-home-panel', 'family-tools-panel', 'family-panel', 'recent-transactions-panel', 'budget-summary-panel'];
   let sortables = [];
   let dragging = false;
   let pinned = {};
@@ -108,7 +108,7 @@
 
   function setup(root, layouts, save, month) {
     const groups = [
-      { id: 'work', title: 'Trabalho e Familia', cards: ['overview-card', 'paypal-panel', 'subscriptions-panel', 'dashboard-cards-panel', 'housing-panel', 'vehicle-panel', 'family-panel', 'financial-calendar-panel', 'recent-transactions-panel'] },
+      { id: 'work', title: 'Trabalho e Familia', cards: ['overview-card', 'paypal-panel', 'subscriptions-panel', 'dashboard-cards-panel', 'housing-panel', 'vehicle-panel', 'family-panel', 'budget-summary-panel', 'financial-calendar-panel', 'recent-transactions-panel'] },
       { id: 'investments', title: 'Investimentos', cards: ['goals-panel', 'nubank-boxes-home-panel', 'debt-home-panel', 'consortium-home-panel', 'emergency-reserve-panel', 'family-tools-panel', 'crypto-panel'] },
       { id: 'reports', title: 'Graficos e Resumos', cards: ['work-calendar-panel', 'family-pie-panel', 'balance-projection-panel', 'dashboard-trend-panel'] }
     ];

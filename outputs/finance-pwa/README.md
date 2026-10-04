@@ -147,6 +147,12 @@ tabela `ai_daily_usage` e criada automaticamente no D1 no primeiro uso.
 
 ## Supabase
 
+### Recuperacao de senha
+
+Sem dominio proprio, o app usa o remetente padrao gratuito do Supabase. O formulario chama `resetPasswordForEmail` e envia um link temporario para o email cadastrado. O link retorna para `app.html?auth=reset`, cria a sessao de recuperacao e mostra dentro do Nekuma os campos de nova senha e confirmacao.
+
+Mantenha `Authentication > URL Configuration > Site URL` apontando para `https://nekuma-finance.pages.dev` e inclua esse endereco na lista de redirecionamentos permitidos. O arquivo `supabase-password-recovery-template.html` fica reservado para uma futura migracao para SMTP proprio e recuperacao por codigo.
+
 Exemplo de `supabase-config.js`:
 
 ```js
@@ -182,3 +188,5 @@ O build inclui os ajustes de compatibilidade da interface do SDK 2.1.1.
 ## Multiusuario
 
 O schema cria uma familia (`households`) e salva os dados em `app_states`. Em **Ajustes > Nuvem**, o dono ve o codigo da familia. Outro usuario pode informar esse codigo no login, no cadastro ou em **Entrar em outra familia** para virar membro da mesma familia. As politicas RLS usam `household_members`, entao um usuario so acessa os dados das familias em que e membro.
+
+Depois do schema base, aplique `supabase-family-permissions.sql`. A migracao adiciona os papeis Dono, Administrador, Colaborador e Visualizador, protege a gravacao do estado financeiro no servidor e libera a troca de papeis apenas para o dono da familia.

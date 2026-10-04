@@ -132,7 +132,10 @@
     familyBusinesses: "fb",
     shoppingLists: "sl",
     receipts: "rc",
-    workScheduleOverrides: "wo"
+    workScheduleOverrides: "wo",
+    financialSnapshots: "fs",
+    achievementLedger: "al",
+    categoryBudgets: "cb"
   };
   const familyRoleMeta = {
     father: "Pai",
@@ -315,6 +318,21 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "cards-installments-invoices-v237",
+    date: "2026-10-04",
+    title: "Cartoes, parcelas e faturas",
+    body: "A nova Central de cartoes detalha fatura atual, limite disponivel, parcelas futuras, historico, composicao dos gastos e pagamentos parciais sem duplicar despesas."
+  }, {
+    id: "financial-reconciliation-v235",
+    date: "2026-10-04",
+    title: "Status e conciliacao financeira",
+    body: "Calendario, pagamentos e ultimos lancamentos agora compartilham uma unica regra de status. A nova Central de conciliacao no Extrato mostra pendencias, sugestoes, divergencias e pagamentos conciliados."
+  }, {
+    id: "crypto-average-v234",
+    date: "2026-10-04",
+    title: "Preco medio das criptos",
+    body: "A carteira agora calcula o preco medio ponderado, separa resultado realizado e nao realizado e registra compras, vendas, recebimentos, taxas e transferencias de custodia."
+  }, {
     id: "business-controls-v220",
     date: "2026-09-24",
     title: "Negocios e Controles",
@@ -350,6 +368,9 @@
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const isPasswordRecoveryLink = urlParams.get("type") === "recovery" || hashParams.get("type") === "recovery";
   let authView = isPasswordRecoveryLink ? "reset" : (["login", "signup", "reset"].includes(urlParams.get("auth")) ? urlParams.get("auth") : "login");
+  let passwordRecoveryStep = isPasswordRecoveryLink ? "password" : "request";
+  let passwordRecoveryEmail = "";
+  let passwordRecoveryBusy = false;
   let installPrompt = null;
   window.addEventListener("beforeinstallprompt", event => {
     event.preventDefault();
@@ -385,7 +406,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=220")
+      navigator.serviceWorker.register("./service-worker.js?v=237")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -417,10 +438,15 @@
     if (!button) return;
 
     const action = button.dataset.action;
+    if (isProtectedMutationAction(action, button) && !hasHouseholdPermission("write")) {
+      showToast("Seu perfil familiar possui acesso somente para visualizacao.");
+      return;
+    }
     if (action === "install-login") { installLoginApp(); return; }
     if (action === "none") return;
     if (action === "set-auth-view") {
       authView = button.dataset.view || "welcome";
+      if (authView === "reset" && !isPasswordRecoveryLink) passwordRecoveryStep = "request";
       remoteSession.error = "";
       render();
       return;
@@ -430,7 +456,26 @@
       return;
     }
     if (action === "request-password-reset") {
-      requestPasswordReset();
+      passwordRecoveryEmail = String(document.querySelector("#loginEmail")?.value || "").trim();
+      passwordRecoveryStep = "request";
+      authView = "reset";
+      remoteSession.error = "";
+      render();
+      return;
+    }
+    if (action === "restart-password-recovery") {
+      passwordRecoveryStep = "request";
+      remoteSession.error = "";
+      render();
+      return;
+    }
+    if (action === "cancel-password-recovery") {
+      passwordRecoveryStep = "request";
+      passwordRecoveryEmail = "";
+      authView = "login";
+      remoteSession.error = "";
+      window.history.replaceState({}, "", `${window.location.pathname}?auth=login`);
+      render();
       return;
     }
 
@@ -439,6 +484,30 @@
       if (state.ui.activeTab === "dashboard") state.ui.selectedMonth = currentMonth();
       saveState();
       render();
+    }
+
+    if (action === "prototype-feature") {
+      showToast(`${button.dataset.feature || "Este modulo"} entra na proxima etapa do upgrade.`);
+    }
+
+    if (action === "set-workspace-theme") {
+      state.ui.workspaceTheme = sanitizeWorkspaceTheme(button.dataset.theme);
+      saveState();
+      closeModal();
+      renderKeepingScroll();
+      showToast("Visual do dashboard atualizado.");
+    }
+
+    if (action === "set-custom-workspace-palette") {
+      const colors = [...modalRoot.querySelectorAll("[data-workspace-palette-color]")]
+        .sort((a, b) => number(a.dataset.workspacePaletteColor) - number(b.dataset.workspacePaletteColor))
+        .map((input) => input.value);
+      state.ui.workspacePaletteColors = sanitizeWorkspacePaletteColors(colors);
+      state.ui.workspaceTheme = "personalized";
+      saveState();
+      closeModal();
+      renderKeepingScroll();
+      showToast("Sua paleta personalizada foi aplicada.");
     }
 
     if (action === "month-prev" || action === "month-next") {
@@ -455,8 +524,38 @@
       selectCardCarousel(Number(button.dataset.index || 0), Number(button.dataset.total || 0));
     }
 
+    if (action === "copy-previous-budgets") copyPreviousCategoryBudgets();
+
     if (action === "select-dashboard-account") {
       selectDashboardAccount(button.dataset.id);
+    }
+
+    if (action === "set-card-detail-view") {
+      state.ui.cardDetailView = ["current", "future", "history"].includes(button.dataset.view) ? button.dataset.view : "current";
+      persistLocalState();
+      renderKeepingScroll();
+    }
+
+    if (action === "select-card-detail") {
+      const cards = (state.creditCards || []).filter((item) => item.active !== false);
+      const index = cards.findIndex((item) => item.id === button.dataset.id);
+      if (index >= 0) state.ui.activeCardIndex = index;
+      persistLocalState();
+      renderKeepingScroll();
+    }
+
+    if (action === "select-projection-scenario") {
+      state.ui.activeProjectionScenarioId = button.dataset.id || "";
+      persistLocalState();
+      renderKeepingScroll();
+    }
+
+    if (action === "delete-projection-scenario") {
+      state.projectionScenarios = (state.projectionScenarios || []).filter((item) => item.id !== button.dataset.id);
+      if (state.ui.activeProjectionScenarioId === button.dataset.id) state.ui.activeProjectionScenarioId = "";
+      saveState();
+      renderKeepingScroll();
+      showToast("Simulacao removida.");
     }
 
     if (action === "set-primary-bank-account") {
@@ -498,6 +597,7 @@
     if (action === "delete-shopping-list") deleteItem("shoppingLists", button.dataset.id, "Lista removida.");
     if (action === "delete-receipt") deleteItem("receipts", button.dataset.id, "Recibo removido.");
     if (action === "delete-work-override") deleteItem("workScheduleOverrides", button.dataset.id, "Folga extra removida.");
+    if (action === "delete-category-budget") deleteItem("categoryBudgets", button.dataset.id, "Orcamento removido.");
     if (action === "refresh-crypto") refreshCryptoQuotes(true);
     if (action === "open-crypto-ai") openCryptoAiAnalysis();
     if (action === "refresh-fx") refreshFxQuotes(true);
@@ -527,8 +627,15 @@
     if (action === "dismiss-salary-receipt") closeModal();
     if (action === "dismiss-due-alert") closeModal();
     if (action === "copy-invite-code") copyInviteCode();
+    if (action === "copy-referral-code") copyReferralCode();
+    if (action === "share-referral") shareReferral();
+    if (action === "select-commercial-plan") selectCommercialPlan(button.dataset.plan);
+    if (action === "update-family-role") updateFamilyMemberRole(button.dataset.userId, button.dataset.role);
     if (action === "request-account-delete") showAccountDeleteInfo();
     if (action === "export-data") exportData();
+    if (action === "close-financial-month") closeFinancialMonth(button.dataset.month);
+    if (action === "open-achievements") showAchievementsModal();
+    if (action === "remove-profile-avatar") removeProfileAvatar();
     if (action === "reset-demo") resetDemo();
   });
 
@@ -538,6 +645,10 @@
     event.preventDefault();
 
     const formType = form.dataset.form;
+    if (!hasHouseholdPermission("write") && !["auth-login", "auth-signup", "auth-recovery-request", "auth-recovery-code", "auth-reset", "join-family", "settings"].includes(formType)) {
+      showToast("Seu perfil familiar possui acesso somente para visualizacao.");
+      return;
+    }
     if (formType === "transaction") saveTransaction(form);
     if (formType === "transfer") saveTransfer(form);
     if (formType === "commitment") saveCommitment(form);
@@ -567,20 +678,40 @@
     if (formType === "receipt") saveReceipt(form);
     if (formType === "salary-receipt") saveSalaryReceipt(form);
     if (formType === "work-override") saveWorkOverride(form);
+    if (formType === "category-budget") saveCategoryBudget(form);
+    if (formType === "projection-scenario") saveProjectionScenario(form);
     if (formType === "auth-login") signInRemote(form);
     if (formType === "auth-signup") signUpRemote(form);
+    if (formType === "auth-recovery-request") requestPasswordReset(form);
+    if (formType === "auth-recovery-code") verifyPasswordRecoveryCode(form);
     if (formType === "auth-reset") updatePasswordFromRecovery(form);
     if (formType === "join-family") joinFamilyFromForm(form);
     if (formType === "settings") saveSettings(form);
   });
 
   document.addEventListener("input", (event) => {
+    if (event.target.matches("#recoveryCode")) {
+      event.target.value = String(event.target.value || "").replace(/\D/g, "").slice(0, 6);
+      const form = event.target.form;
+      if (event.target.value.length === 6 && form && !passwordRecoveryBusy) form.requestSubmit();
+    }
     if (event.target.closest("[data-form='transfer']")) updateTransferPreview();
     if (event.target.closest(".fx-converter-card")) updateFxConverterPreview();
   });
 
   document.addEventListener("change", (event) => {
+    if (event.target.matches("[data-family-role]")) {
+      updateFamilyMemberRole(event.target.dataset.userId, event.target.value);
+      return;
+    }
     if (event.target.id === "import-file") importData(event.target.files[0]);
+    if (event.target.id === "profile-avatar-file") saveProfileAvatar(event.target.files?.[0]);
+    if (event.target.id === "workspaceMonth" && /^\d{4}-\d{2}$/.test(event.target.value)) {
+      state.ui.selectedMonth = event.target.value;
+      saveState();
+      render();
+    }
+    if (event.target.id === "workspace-theme-image") applyWorkspaceBackgroundFile(event.target.files?.[0]);
     if (event.target.id === "sourceType") updateIncomeSourceDynamicFields();
     if (event.target.id === "businessTemplate") applyControlTemplateFields(event.target.value);
     if (event.target.id === "shiftSystem") updateIncomeSourceDynamicFields();
@@ -708,6 +839,7 @@
       if (authView === "reset") {
         remoteSession.user = session.user;
         remoteSession.status = "passwordReset";
+        passwordRecoveryStep = "password";
         render();
         return;
       }
@@ -809,23 +941,68 @@
     showToast("Voce saiu da conta.");
   }
 
-  async function requestPasswordReset() {
+  async function requestPasswordReset(form) {
     if (!remoteStore.enabled) {
       window.alert("Recuperação de senha disponível apenas no modo online.");
       return;
     }
-    const email = String(document.querySelector("#loginEmail")?.value || "").trim();
+    const data = formData(form);
+    const email = String(data.email || "").trim().toLowerCase();
     if (!email) {
-      window.alert("Digite seu email no campo de login para recuperar a senha.");
+      remoteSession.error = "Digite o email cadastrado no Nekuma.";
+      render();
       return;
     }
+    passwordRecoveryBusy = true;
+    remoteSession.status = "loading";
+    remoteSession.error = "";
+    render();
     try {
       const redirectTo = `${window.location.origin}${window.location.pathname}?auth=reset`;
       const { error } = await remoteStore.client.auth.resetPasswordForEmail(email, { redirectTo });
       if (error) throw error;
-      window.alert("Enviamos as instruções de recuperação para seu email.");
+      passwordRecoveryEmail = email;
+      passwordRecoveryStep = "sent";
+      remoteSession.status = "signedOut";
+      render();
+      showToast("Link de recuperação enviado.");
     } catch (error) {
-      window.alert(error.message || "Não foi possível enviar a recuperação de senha.");
+      remoteSession.status = "signedOut";
+      remoteSession.error = error.message || "Não foi possível enviar o link de recuperação.";
+      render();
+    } finally {
+      passwordRecoveryBusy = false;
+    }
+  }
+
+  async function verifyPasswordRecoveryCode(form) {
+    if (!remoteStore.enabled || passwordRecoveryBusy) return;
+    const data = formData(form);
+    const email = String(passwordRecoveryEmail || data.email || "").trim().toLowerCase();
+    const token = String(data.token || "").replace(/\D/g, "");
+    if (!email || token.length !== 6) {
+      remoteSession.error = "Informe o código de seis números enviado por email.";
+      render();
+      return;
+    }
+    passwordRecoveryBusy = true;
+    remoteSession.status = "loading";
+    remoteSession.error = "";
+    render();
+    try {
+      const { data: authData, error } = await remoteStore.client.auth.verifyOtp({ email, token, type: "recovery" });
+      if (error) throw error;
+      remoteSession.user = authData?.user || authData?.session?.user || null;
+      remoteSession.status = "passwordReset";
+      passwordRecoveryStep = "password";
+      render();
+      requestAnimationFrame(() => document.querySelector("#resetPassword")?.focus());
+    } catch (error) {
+      remoteSession.status = "signedOut";
+      remoteSession.error = error.message || "Código inválido ou expirado. Solicite um novo código.";
+      render();
+    } finally {
+      passwordRecoveryBusy = false;
     }
   }
 
@@ -855,8 +1032,12 @@
       await remoteStore.client.auth.signOut().catch(() => {});
       remoteSession.status = "signedOut";
       remoteSession.user = null;
-      window.alert("Senha atualizada com sucesso. Faça login novamente.");
-      window.location.href = "./index.html";
+      passwordRecoveryStep = "request";
+      passwordRecoveryEmail = "";
+      authView = "login";
+      window.history.replaceState({}, "", `${window.location.pathname}?auth=login`);
+      render();
+      showToast("Senha atualizada. Entre com sua nova senha.");
     } catch (error) {
       remoteSession.status = "passwordReset";
       remoteSession.error = error.message || "Não foi possível atualizar a senha.";
@@ -1075,6 +1256,10 @@
 
   async function writeRemoteState() {
     if (!remoteStore.enabled || !remoteSession.user || !remoteSession.householdId) return;
+    if (!hasHouseholdPermission("write")) {
+      lastLocalChangeAt = 0;
+      return;
+    }
     clearTimeout(remoteSaveTimer);
     remoteSaveTimer = null;
     remoteSession.saving = true;
@@ -1301,7 +1486,8 @@
       city: String(raw.profile?.city || "").trim(),
       age: String(raw.profile?.age || "").trim(),
       gender: String(raw.profile?.gender || "").trim(),
-      language: String(raw.profile?.language || base.profile.language).trim() || base.profile.language
+      language: String(raw.profile?.language || base.profile.language).trim() || base.profile.language,
+      avatarDataUrl: sanitizeProfileAvatar(raw.profile?.avatarDataUrl)
     };
     const vehicles = normalizeVehicles(raw.vehicles, raw.vehicle, base.vehicle, number(raw.vehicleSchemaVersion));
     const normalized = {
@@ -1309,6 +1495,7 @@
       vehicleSchemaVersion: 2,
       settings,
       profile,
+      commercial: normalizeCommercialState(raw.commercial || base.commercial),
       ui: {
         ...base.ui,
         ...(raw.ui || {}),
@@ -1317,6 +1504,8 @@
         hideBalance: Boolean(raw.ui?.hideBalance),
         hideCalendarDetails: Boolean(raw.ui?.hideCalendarDetails),
         hideCryptoDetails: Boolean(raw.ui?.hideCryptoDetails),
+        workspaceTheme: sanitizeWorkspaceTheme(raw.ui?.workspaceTheme),
+        workspacePaletteColors: sanitizeWorkspacePaletteColors(raw.ui?.workspacePaletteColors),
         cryptoRiskProfile: sanitizeCryptoRiskProfile(raw.ui?.cryptoRiskProfile),
         hideRecentTransactions: raw.ui?.hideRecentTransactions === undefined ? true : Boolean(raw.ui.hideRecentTransactions)
       },
@@ -1350,6 +1539,10 @@
       shoppingLists: normalizeShoppingLists(raw.shoppingLists, base.shoppingLists),
       receipts: normalizeReceipts(raw.receipts, base.receipts),
       workScheduleOverrides: normalizeWorkItems(raw.workScheduleOverrides, base.workScheduleOverrides),
+      financialSnapshots: normalizeFinancialSnapshots(raw.financialSnapshots),
+      categoryBudgets: normalizeCategoryBudgets(raw.categoryBudgets),
+      projectionScenarios: Array.isArray(raw.projectionScenarios) ? raw.projectionScenarios : [],
+      achievementLedger: normalizeAchievementLedger(raw.achievementLedger),
       paidCommitments: raw.paidCommitments || {},
       deletedItems: normalizeDeletedItems(raw.deletedItems || base.deletedItems)
     };
@@ -1366,10 +1559,60 @@
     }
     normalized.ui.selectedDashboardAccountId = normalized.ui.primaryBankAccountId || normalized.ui.selectedDashboardAccountId;
     const requestedTab = urlParams.get("tab");
-    const validTabs = ["dashboard", "accounts", "crypto", "wise", "reports", "settings"];
+    const validTabs = ["dashboard", "family", "referrals", "accounts", "budgets", "projections", "crypto", "cards", "wealth", "reports", "plans", "settings"];
     if (validTabs.includes(requestedTab)) normalized.ui.activeTab = requestedTab;
     else if (urlParams.get("home") === "1") normalized.ui.activeTab = "dashboard";
     return normalized;
+  }
+
+  function normalizeFinancialSnapshots(items) {
+    if (!Array.isArray(items)) return [];
+    return items
+      .filter((item) => /^\d{4}-\d{2}$/.test(String(item?.month || "")))
+      .map((item) => ({
+        ...item,
+        id: item.id || `snapshot:${item.month}`,
+        month: String(item.month),
+        currency: sanitizeCurrency(item.currency, PRIMARY_CURRENCY),
+        income: Math.max(0, number(item.income)),
+        expenses: Math.max(0, number(item.expenses)),
+        investments: Math.max(0, number(item.investments)),
+        balance: number(item.balance),
+        savingsAmount: Math.max(0, number(item.savingsAmount)),
+        obligationCount: Math.max(0, Math.round(number(item.obligationCount))),
+        paidObligations: Math.max(0, Math.round(number(item.paidObligations))),
+        overdueObligations: Math.max(0, Math.round(number(item.overdueObligations))),
+        reserveSaved: Math.max(0, number(item.reserveSaved)),
+        reserveMonths: Math.max(0, number(item.reserveMonths)),
+        totalDebt: Math.max(0, number(item.totalDebt)),
+        score: clamp(Math.round(number(item.score)), 0, 100),
+        closedAt: item.closedAt || item.createdAt || new Date().toISOString()
+      }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+  }
+
+  function normalizeCommercialState(raw = {}) {
+    const validPlans = ["free", "plus", "family"];
+    return {
+      plan: validPlans.includes(raw.plan) ? raw.plan : "free",
+      referralCode: String(raw.referralCode || "").replace(/[^A-Z0-9]/gi, "").toUpperCase().slice(0, 16),
+      referralCredits: Math.max(0, number(raw.referralCredits)),
+      referrals: Array.isArray(raw.referrals) ? raw.referrals.slice(0, 200) : []
+    };
+  }
+
+  function normalizeAchievementLedger(items) {
+    if (!Array.isArray(items)) return [];
+    return items
+      .filter((item) => String(item?.key || "").trim())
+      .map((item) => ({
+        ...item,
+        id: item.id || `achievement:${item.key}`,
+        key: String(item.key),
+        tier: sanitizeAchievementTier(item.tier),
+        unlockedAt: item.unlockedAt || item.createdAt || new Date().toISOString(),
+        updatedAt: item.updatedAt || item.unlockedAt || item.createdAt || new Date().toISOString()
+      }));
   }
 
   function normalizeIncomeSources(items, fallback = []) {
@@ -1752,6 +1995,10 @@
     return transfers.at(-1)?.toProvider || String(item?.provider || item?.note || "Banco/corretora nao informado").trim();
   }
 
+  function normalizeCryptoOperationType(value) {
+    return ["buy", "sell", "receive"].includes(value) ? value : "buy";
+  }
+
   function normalizeCryptoAssets(items, fallback = [], quotes = state?.cryptoQuotes, fallbackCurrency = primaryCurrency()) {
     if (!Array.isArray(items)) return fallback;
     return items.map((item) => ({
@@ -1761,6 +2008,9 @@
       quantity: normalizeCryptoQuantityText(item, quotes),
       costAmount: number(item.costAmount),
       costCurrency: sanitizeCurrency(item.costCurrency, fallbackCurrency),
+      operationType: normalizeCryptoOperationType(item.operationType),
+      feeAmount: number(item.feeAmount),
+      feeCurrency: sanitizeCurrency(item.feeCurrency, item.costCurrency || fallbackCurrency),
       custodyTransfers: normalizeCryptoCustodyTransfers(item.custodyTransfers),
       updatedAt: item.updatedAt || item.savedAt || ""
     }));
@@ -1965,7 +2215,7 @@
       return { state: { ...(remoteReset > localReset ? remote : local), ui: local.ui }, changed: localReset > remoteReset };
     }
     const crypto = mergeCryptoAssetsWithLocal(remote.cryptoAssets, local.cryptoAssets);
-    const merged = mergeLocalCollections(remote, local, ["incomeSources", "workIncomes", "workScheduleOverrides", "familyMembers", "familyBusinesses", "shoppingLists", "receipts", "vehicles", "nubankBoxes", "nubankBoxContributions"]);
+    const merged = mergeLocalCollections(remote, local, ["incomeSources", "workIncomes", "workScheduleOverrides", "familyMembers", "familyBusinesses", "shoppingLists", "receipts", "vehicles", "nubankBoxes", "nubankBoxContributions", "financialSnapshots", "achievementLedger", "categoryBudgets"]);
     const deletedItems = mergeDeletedItems(remote.deletedItems, local.deletedItems);
     const mergedWallet = window.NekumaMetaMask.mergeWallets(remote.web3Wallet, local.web3Wallet);
     const walletChanged = JSON.stringify(mergedWallet) !== JSON.stringify(remote.web3Wallet);
@@ -2044,6 +2294,7 @@
 
   function saveState(options = {}) {
     lastLocalChangeAt = Date.now();
+    refreshAchievementLedger();
     persistLocalState();
     if (options.remoteNow) {
       flushRemoteState().catch((error) => {
@@ -2076,18 +2327,29 @@
         city: "",
         age: "",
         gender: "",
-        language: "pt-BR"
+        language: "pt-BR",
+        avatarDataUrl: ""
+      },
+      commercial: {
+        plan: "free",
+        referralCode: "",
+        referralCredits: 0,
+        referrals: []
       },
       ui: {
         activeCountry: "global",
         activeTab: "dashboard",
         selectedMonth,
         activeCardIndex: 0,
+        cardDetailView: "current",
+        activeProjectionScenarioId: "",
         selectedDashboardAccountId: "",
         primaryBankAccountId: "",
         hideBalance: false,
         hideCalendarDetails: false,
         hideCryptoDetails: false,
+        workspaceTheme: "natural",
+        workspacePaletteColors: ["#F4E5C2", "#0B8457", "#096C47", "#323232"],
         cryptoRiskProfile: "moderate",
         hideRecentTransactions: true
       },
@@ -2172,6 +2434,10 @@
       shoppingLists: [],
       receipts: [],
       workScheduleOverrides: [],
+      financialSnapshots: [],
+      achievementLedger: [],
+      categoryBudgets: [],
+      projectionScenarios: [],
       paidCommitments: {},
       deletedItems: {}
     };
@@ -2239,7 +2505,8 @@
     document.body.classList.toggle("auth-mode", remoteStore.enabled && remoteSession.status !== "ready");
     document.documentElement.classList.toggle("auth-mode", remoteStore.enabled && remoteSession.status !== "ready");
     document.body.classList.toggle("online-mode", remoteStore.enabled && remoteSession.status === "ready");
-    ["dashboard", "accounts", "crypto", "wise", "reports", "settings"].forEach((tab) => app.classList.remove(`tab-${tab}`));
+    applyWorkspacePalette();
+    ["dashboard", "family", "referrals", "accounts", "budgets", "projections", "crypto", "cards", "wealth", "reports", "plans", "settings"].forEach((tab) => app.classList.remove(`tab-${tab}`));
     app.classList.add(`tab-${state.ui.activeTab}`);
     updateAppGreeting();
     updateAppNewsButton();
@@ -2251,11 +2518,15 @@
       return;
     }
 
+    if (refreshAchievementLedger()) {
+      persistLocalState();
+      scheduleRemoteSave();
+    }
     if (reconcileRecordedPayments()) saveState();
 
     const currentTabContent = renderCurrentTab();
-    const usesCardColumns = ["accounts", "crypto", "settings"].includes(state.ui.activeTab);
-    app.innerHTML = state.ui.activeTab === "dashboard"
+    const usesCardColumns = ["crypto", "settings"].includes(state.ui.activeTab);
+    const pageContent = state.ui.activeTab === "dashboard"
       ? currentTabContent
       : [
         renderToolbar(),
@@ -2263,11 +2534,11 @@
           ? `<div class="tab-card-columns">${currentTabContent}</div>`
           : currentTabContent
       ].join("");
+    app.innerHTML = `${renderDesktopPrototypeNav()}${pageContent}`;
 
     document.querySelectorAll(".nav-item").forEach((item) => {
       item.classList.toggle("is-active", item.dataset.tab === state.ui.activeTab);
     });
-
     window.NekumaDashboard?.setup(app, state.ui.dashboardLayouts || {}, layouts => {
       state.ui.dashboardLayouts = layouts;
       saveState();
@@ -2284,6 +2555,31 @@
     scheduleCryptoRefresh(false);
     scheduleCdiRefresh(false);
     setTimeout(showDueAlertIfNeeded, 250);
+  }
+
+  function renderDesktopPrototypeNav() {
+    const tab = state.ui.activeTab;
+    const items = [
+      { label: "Dashboard", icon: "layout-dashboard", tab: "dashboard" },
+      { label: "Banking", icon: "landmark", tab: "accounts" },
+      { label: "Orcamentos", icon: "chart-pie", tab: "budgets" },
+      { label: "Projecoes", icon: "chart-spline", tab: "projections" },
+      { label: "Cripto", icon: "bitcoin", tab: "crypto" },
+      { label: "Cartoes", icon: "credit-card", tab: "cards" },
+      { label: "Patrimonio", icon: "chart-no-axes-combined", tab: "wealth" },
+      { label: "Extrato", icon: "receipt-text", tab: "reports" },
+      { label: "Planos", icon: "badge-percent", tab: "plans" },
+      { label: "Ajustes", icon: "settings", tab: "settings" }
+    ];
+    return `
+      <nav class="desktop-prototype-nav" aria-label="Navegacao principal do desktop">
+        <div class="desktop-prototype-brand"><img src="./assets/nekuma-logo-192.png" alt="" /><span>N</span></div>
+        <div class="desktop-prototype-links">
+          ${items.map((item) => `<button class="${item.tab === tab ? "is-active" : ""}" type="button" data-action="${item.tab ? "set-tab" : "prototype-feature"}" ${item.tab ? `data-tab="${item.tab}"` : `data-feature="${item.feature}"`} title="${item.label}"><i data-lucide="${item.icon}" aria-hidden="true"></i><span>${item.label}</span></button>`).join("")}
+        </div>
+        <button class="desktop-prototype-profile" type="button" data-action="set-tab" data-tab="settings" aria-label="Abrir perfil"><img src="./assets/nekuma-logo-192.png" alt="" /></button>
+      </nav>
+    `;
   }
 
   function reconcileRecordedPayments() {
@@ -2352,6 +2648,10 @@
     const wrapper = app.querySelector('.tab-card-columns');
     if (!wrapper || !window.matchMedia('(min-width: 760px)').matches) return;
     if (state.ui.activeTab === "crypto") return;
+    if (state.ui.activeTab === "settings" && wrapper.querySelector('.settings-smart-layout')) {
+      wrapper.classList.add('settings-smart-wrapper');
+      return;
+    }
     const count = window.matchMedia('(min-width: 1180px)').matches ? 3 : 2;
     [...wrapper.children].forEach(group => {
       if (group.matches('.split-grid, .profile-support-grid')) group.replaceWith(...group.children);
@@ -2551,7 +2851,12 @@
 
         <article class="auth-card">
           ${remoteSession.error ? `<p class="auth-error">${escapeHtml(remoteSession.error)}</p>` : ""}
-          ${isLoading ? `<p class="empty-state">Conectando...</p>` : view === "login" ? renderAuthLoginForm() : view === "signup" ? renderAuthSignupForm(canSignup) : view === "reset" ? renderAuthResetForm() : renderAuthWelcome(canSignup)}
+          ${isLoading ? `
+            <div class="auth-connecting" role="status" aria-live="polite">
+              <img src="./assets/nekuma-logo-192.png" alt="" aria-hidden="true" />
+              <span class="sr-only">Conectando ao Nekuma Finance</span>
+            </div>
+          ` : view === "login" ? renderAuthLoginForm() : view === "signup" ? renderAuthSignupForm(canSignup) : view === "reset" ? renderAuthResetForm() : renderAuthWelcome(canSignup)}
         </article>
       </section>
     `;
@@ -2666,26 +2971,50 @@
   }
 
   function renderAuthResetForm() {
+    const step = passwordRecoveryStep;
+    const stepNumber = step === "request" ? 1 : 2;
     return `
       <div class="auth-card-head">
         <div>
           <p class="auth-kicker">Recuperar senha</p>
-          <h2>Crie uma nova senha</h2>
+          <h2>${step === "request" ? "Informe seu email" : step === "sent" ? "Confira seu email" : "Crie uma nova senha"}</h2>
         </div>
       </div>
-      <p class="auth-lead">Digite uma nova senha para sua conta. Depois da confirmação, você volta para a landing e entra pelo login novamente.</p>
-      <form class="form-grid" data-form="auth-reset">
-        <div class="field">
-          <label for="resetPassword">Nova senha</label>
-          <input id="resetPassword" name="password" type="password" autocomplete="new-password" minlength="6" required />
+      <div class="auth-recovery-steps" aria-label="Etapas da recuperação de senha">
+        ${["Email", "Nova senha"].map((label, index) => `<span class="${stepNumber >= index + 1 ? "is-active" : ""}"><i>${index + 1}</i>${label}</span>`).join("")}
+      </div>
+      ${step === "request" ? `
+        <p class="auth-lead">Digite o email cadastrado. Enviaremos um link seguro para abrir a criação da nova senha no Nekuma.</p>
+        <form class="form-grid" data-form="auth-recovery-request">
+          <div class="field">
+            <label for="recoveryEmail">Email</label>
+            <input id="recoveryEmail" name="email" type="email" autocomplete="email" value="${escapeAttr(passwordRecoveryEmail)}" required autofocus />
+          </div>
+          <button class="primary-button" type="submit">Enviar link de recuperação</button>
+        </form>
+      ` : step === "sent" ? `
+        <p class="auth-lead">Enviamos o link para <strong>${escapeHtml(passwordRecoveryEmail)}</strong>. Abra o email e toque em <strong>Reset password</strong>. O formulário para criar a nova senha será aberto no próprio Nekuma.</p>
+        <div class="auth-recovery-waiting" role="status">
+          <i data-lucide="mail-check" aria-hidden="true"></i>
+          <strong>Email enviado</strong>
+          <span>O link é temporário e pode ser usado apenas uma vez. Confira também a caixa de spam.</span>
         </div>
-        <div class="field">
-          <label for="resetConfirmPassword">Confirmar nova senha</label>
-          <input id="resetConfirmPassword" name="confirmPassword" type="password" autocomplete="new-password" minlength="6" required />
-        </div>
-        <button class="primary-button" type="submit">Atualizar senha</button>
-      </form>
-      <p class="auth-footer-link"><a href="./app.html?auth=login">Voltar para login</a></p>
+        <button class="primary-button" type="button" data-action="restart-password-recovery">Reenviar ou alterar email</button>
+      ` : `
+        <p class="auth-lead">Link confirmado. Escolha sua nova senha sem sair do Nekuma.</p>
+        <form class="form-grid" data-form="auth-reset">
+          <div class="field">
+            <label for="resetPassword">Nova senha</label>
+            <input id="resetPassword" name="password" type="password" autocomplete="new-password" minlength="6" required autofocus />
+          </div>
+          <div class="field">
+            <label for="resetConfirmPassword">Confirmar nova senha</label>
+            <input id="resetConfirmPassword" name="confirmPassword" type="password" autocomplete="new-password" minlength="6" required />
+          </div>
+          <button class="primary-button" type="submit">Salvar nova senha</button>
+        </form>
+      `}
+      <p class="auth-footer-link"><button class="link-action" type="button" data-action="cancel-password-recovery">Voltar para login</button></p>
     `;
   }
 
@@ -2782,10 +3111,16 @@
 
   function renderCurrentTab() {
     const tab = state.ui.activeTab;
+    if (tab === "family") return renderFamilyPage();
+    if (tab === "referrals") return renderReferralPage();
     if (tab === "accounts") return renderAccounts();
+    if (tab === "budgets") return renderBudgetsPage();
+    if (tab === "projections") return renderProjectionsPage();
     if (tab === "crypto") return renderCryptoTab();
-    if (tab === "wise") return renderWise();
+    if (tab === "cards") return renderCardsPage();
+    if (tab === "wealth") return renderWealthPage();
     if (tab === "reports") return renderReports();
+    if (tab === "plans") return renderPlansPage();
     if (tab === "settings") return renderSettings();
     return renderDashboard();
   }
@@ -3094,6 +3429,8 @@
           ${renderToolbar()}
         </div>
 
+        ${renderDesktopWorkspacePrototype(summary)}
+
         ${renderDesktopFinanceStrip(summary)}
 
         <aside class="desktop-dashboard-column desktop-dashboard-left">
@@ -3133,6 +3470,9 @@
 
           <section class="content-panel family-panel">
             ${renderFamilyPanel()}
+          </section>
+          <section class="content-panel budget-summary-panel">
+            ${renderBudgetSummaryPanel()}
           </section>
         </aside>
 
@@ -3202,7 +3542,7 @@
                 <button class="small-action ghost" type="button" data-action="refresh-crypto">Atualizar</button>
               </div>
             </div>
-            ${renderCryptoPanel(true)}
+            ${renderCryptoDashboardSummary()}
           </section>
 
           <section class="content-panel emergency-reserve-panel">
@@ -3240,6 +3580,261 @@
         </aside>
       </div>
     `;
+  }
+
+  function renderDesktopWorkspacePrototype(summary) {
+    const hideBalance = Boolean(state.ui.hideBalance);
+    const salaryCards = dashboardSalaryCards(state.ui.selectedMonth);
+    const salaryTotal = salaryCards.reduce((total, card) => {
+      const net = card.kind === "factory" ? number(card.netAmount) : number(card.amount);
+      return total + convert(net, card.currency, primaryCurrency(), latestRate(state.ui.selectedMonth));
+    }, 0);
+    const quotes = state.fxQuotes || {};
+    const usdJpy = Number(quotes.usdJpy || (quotes.usdBrl && quotes.jpyBrl ? quotes.usdBrl / quotes.jpyBrl : 0));
+    const btcUsd = Number(quotes.btcUsd || cryptoPrice("BTC", "USD") || 0);
+    const updatedLabel = quotes.updatedAt ? formatTime(quotes.updatedAt) : "--:--";
+    const theme = sanitizeWorkspaceTheme(state.ui.workspaceTheme);
+    const calendarSource = primaryFactorySource();
+    const calendarSchedule = calendarSource ? factoryScheduleConfig(calendarSource) : null;
+    const calendarUsesLetters = calendarSchedule?.banNaming === "letters";
+    const calendarStyle = calendarSchedule && !calendarUsesLetters ? `style="--calendar-ban-color:${escapeAttr(calendarSchedule.myBanColor)}"` : "";
+    const calendarClass = calendarSchedule ? (calendarUsesLetters ? "uses-letter-ban" : "uses-color-ban") : "";
+    const customBackground = theme === "custom" ? workspaceCustomBackground() : "";
+    const backgroundStyle = customBackground ? `style="background-image:url('${escapeAttr(customBackground)}')"` : "";
+    return `
+      <section class="desktop-workspace-prototype theme-${escapeAttr(theme)}" aria-label="Visao geral personalizada">
+        <div class="workspace-hero" ${backgroundStyle}>
+          <div class="workspace-hero-overlay" aria-hidden="true"></div>
+          <div class="workspace-hero-content">
+            <div class="workspace-hero-head">
+              <label class="workspace-month-title" for="workspaceMonth">
+                <span>Visao geral de</span>
+                <strong>${escapeHtml(formatMonthLabel(state.ui.selectedMonth))}</strong>
+                <i data-lucide="calendar-days" aria-hidden="true"></i>
+                <input id="workspaceMonth" type="month" value="${escapeAttr(state.ui.selectedMonth)}" aria-label="Escolher mes do dashboard" />
+              </label>
+              <button class="workspace-customize-button" type="button" data-action="open-modal" data-modal="workspaceTheme">
+                <i data-lucide="palette" aria-hidden="true"></i>
+                Personalizar
+              </button>
+            </div>
+            <nav class="workspace-context-tabs" aria-label="Visoes do dashboard">
+              <button class="is-active" type="button" data-action="set-tab" data-tab="dashboard">Main</button>
+              <button type="button" data-action="set-tab" data-tab="family">Familia</button>
+              <button type="button" data-action="set-tab" data-tab="referrals">Indique e ganhe</button>
+              <button type="button" data-action="set-tab" data-tab="wealth">Investimentos</button>
+              <button class="is-disabled" type="button" data-action="prototype-feature" data-feature="Novo espaco" aria-label="Novo espaco, em breve">+</button>
+            </nav>
+            <div class="workspace-metrics">
+              <article class="workspace-metric workspace-salary-metric" tabindex="0">
+                <span>Salario previsto</span>
+                <strong>${hideBalance ? "*****" : formatMoney(salaryTotal, primaryCurrency())}</strong>
+                <small>${salaryCards.length ? `${salaryCards.length} fonte${salaryCards.length === 1 ? "" : "s"} no mes` : "Cadastre uma fonte de renda"}</small>
+                ${renderWorkspaceSalaryPopover(salaryCards, hideBalance)}
+              </article>
+              <article class="workspace-metric"><span>Dolar / Real</span><strong>${quotes.usdBrl ? formatFxRate(quotes.usdBrl, 4) : "--"}</strong>${renderFxChangeChip(quotes.usdBrlChange)}</article>
+              <article class="workspace-metric"><span>Dolar / Iene</span><strong>${usdJpy ? formatYenRate(usdJpy) : "--"}</strong>${renderFxChangeChip(quotes.usdJpyChange)}</article>
+              <article class="workspace-metric"><span>BTC / Dolar</span><strong>${btcUsd ? formatUsdRate(btcUsd) : "--"}</strong>${renderFxChangeChip(quotes.btcUsdChange)}</article>
+              <article class="workspace-metric workspace-update-metric"><span>Atualizado</span><strong>${updatedLabel}</strong><button type="button" data-action="refresh-fx" aria-label="Atualizar cotacoes"><i data-lucide="refresh-cw" aria-hidden="true"></i></button></article>
+            </div>
+          </div>
+        </div>
+        <div class="workspace-fixed-grid">
+          ${renderWorkspaceAccountsCard(hideBalance)}
+          ${renderWorkspaceSubscriptionsCard()}
+          <article class="workspace-fixed-card workspace-calendar-card ${calendarClass}" ${calendarStyle}>${renderWorkspaceCompactCalendar()}</article>
+          <article class="workspace-fixed-card workspace-reserve-card">${renderEmergencyReservePanel(summary)}</article>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderWorkspaceSalaryPopover(cards, hideBalance) {
+    if (hideBalance) return "";
+    if (!cards.length) return `<div class="workspace-salary-popover" role="tooltip"><p>Nenhuma previsao salarial cadastrada.</p></div>`;
+    return `
+      <div class="workspace-salary-popover" role="tooltip">
+        <strong>Detalhamento do salario previsto</strong>
+        ${cards.map((card) => {
+          const gross = number(card.amount);
+          const net = card.kind === "factory" ? number(card.netAmount) : gross;
+          const deductions = Math.max(0, gross - net);
+          return `<div><span>${escapeHtml(card.title)}</span><small>Bruto ${formatMoney(gross, card.currency)} · Descontos ${formatMoney(deductions, card.currency)}</small><b>${formatMoney(net, card.currency)}</b></div>`;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function renderWorkspaceAccountsCard(hideBalance) {
+    const accounts = activeBankAccounts().slice(0, 6);
+    return `
+      <article class="workspace-fixed-card workspace-accounts-card">
+        <div class="workspace-card-head"><div><span>Contas</span><strong>${accounts.length}</strong></div><button type="button" data-action="set-tab" data-tab="accounts" aria-label="Abrir Banking"><i data-lucide="sliders-horizontal" aria-hidden="true"></i></button></div>
+        <div class="workspace-account-list">
+          ${accounts.length ? accounts.map((account) => {
+            const country = countryMeta[account.country] || countryMeta.japao;
+            const balance = bankAccountBalance(account, state.ui.selectedMonth);
+            return `<button type="button" data-action="set-tab" data-tab="accounts" class="workspace-account-row" ${bankAccountStyleAttrs(account)}><span class="workspace-account-mark">${escapeHtml(country.short || "BK")}</span><span><strong>${escapeHtml(bankAccountName(account))}</strong><small>${countryFlag(account.country)} ${escapeHtml(account.currency)}</small></span><b>${hideBalance ? maskedMoney(account.currency) : formatMoney(balance, account.currency)}</b></button>`;
+          }).join("") : `<button class="workspace-empty-action" type="button" data-action="open-modal" data-modal="bankAccount"><i data-lucide="plus" aria-hidden="true"></i><span>Adicionar primeira conta</span></button>`}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderWorkspaceSubscriptionsCard() {
+    const subscriptions = monthSubscriptions(state.ui.selectedMonth, "global").filter((item) => isSubscriptionDueInMonth(item, state.ui.selectedMonth));
+    return `
+      <article class="workspace-fixed-card workspace-subscriptions-card">
+        <div class="workspace-card-head"><div><span>Subscricoes</span><strong>${subscriptions.length}</strong></div><button type="button" data-action="open-modal" data-modal="subscription" aria-label="Adicionar subscricao"><i data-lucide="plus" aria-hidden="true"></i></button></div>
+        <div class="workspace-subscription-summary"><strong>${subscriptionMonthTotalLabel(state.ui.selectedMonth)}</strong><span>Total previsto no mes</span></div>
+        <div class="workspace-subscription-names">${subscriptions.slice(0, 3).map((item) => `<span>${renderSubscriptionLogo(item, "subscription-logo workspace-subscription-logo")}<b>${escapeHtml(subscriptionName(item))}</b></span>`).join("") || `<small>Nenhuma subscricao neste mes.</small>`}</div>
+      </article>
+    `;
+  }
+
+  function renderWorkspaceCompactCalendar() {
+    const source = primaryFactorySource();
+    if (!source) {
+      return `
+        <div class="panel-head">
+          <div><h2>Calendario de turnos</h2><p class="row-meta">Cadastre uma fabrica para gerar sua escala.</p></div>
+          <button class="small-action" type="button" data-action="open-modal" data-modal="incomeSource">Cadastrar</button>
+        </div>
+      `;
+    }
+
+    const schedule = factoryScheduleConfig(source);
+    if (!schedule.cycleStartDate) {
+      return `
+        <div class="panel-head">
+          <div><h2>Calendario de turnos</h2><p class="row-meta">Configure a data inicial da escala.</p></div>
+          <button class="small-action ghost" type="button" data-action="open-modal" data-modal="incomeSource" data-id="${escapeAttr(source.id)}">Configurar</button>
+        </div>
+      `;
+    }
+
+    const days = daysInMonth(state.ui.selectedMonth).map((date) => factoryScheduleDay(source, date));
+    return `
+      <div class="panel-head">
+        <div><h2>Calendario de turnos</h2><p class="row-meta">${escapeHtml(source.name)} · ${escapeHtml(scheduleLabel(schedule))}</p></div>
+        <div class="workspace-calendar-actions">
+          ${schedule.banNaming === "letters" ? `<strong class="workspace-ban-letter" title="Grupo de trabalho">${escapeHtml(String(schedule.myBanName || "A").slice(0, 2).toUpperCase())}</strong>` : ""}
+          <span class="workspace-shift-legend"><i class="is-day"></i>Dia</span>
+          <span class="workspace-shift-legend"><i class="is-night"></i>Noite</span>
+          <span class="workspace-shift-legend"><i class="is-off"></i>Folga</span>
+          <button class="workspace-calendar-add" type="button" data-action="open-modal" data-modal="workOverride" aria-label="Adicionar folga forcada" title="Adicionar folga forcada"><i data-lucide="plus" aria-hidden="true"></i></button>
+        </div>
+      </div>
+      <div class="work-calendar-weekdays" aria-hidden="true">
+        ${["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"].map((day) => `<span>${day}</span>`).join("")}
+      </div>
+      <div class="work-calendar-grid workspace-compact-calendar">
+        ${renderWorkCalendarBlanks(state.ui.selectedMonth)}
+        ${days.map((day) => renderWorkCalendarCell(day)).join("")}
+      </div>
+    `;
+  }
+
+  function normalizeCategoryBudgets(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map((item) => ({
+      ...item,
+      id: String(item.id || uid("cb")),
+      month: /^\d{4}-\d{2}$/.test(String(item.month || "")) ? item.month : currentMonth(),
+      category: String(item.category || "Outros").trim() || "Outros",
+      limit: Math.max(0, number(item.limit)),
+      currency: sanitizeCurrency(item.currency, primaryCurrency()),
+      warningThreshold: clamp(number(item.warningThreshold) || 80, 1, 100)
+    })).filter((item) => item.limit > 0);
+  }
+
+  function budgetCategoryKey(value) {
+    return normalizeLookupText(value || "Outros").replace(/\s+/g, "-") || "outros";
+  }
+
+  function categoryBudgetModel(month = state.ui.selectedMonth) {
+    const currency = primaryCurrency();
+    const rate = latestRate(month);
+    const amounts = new Map();
+    const add = (category, field, amount, sourceCurrency) => {
+      const label = String(category || "Outros").trim() || "Outros";
+      const key = budgetCategoryKey(label);
+      const current = amounts.get(key) || { key, category: label, paid: 0, committed: 0 };
+      current[field] += convert(number(amount), sourceCurrency || currency, currency, rate);
+      amounts.set(key, current);
+    };
+
+    monthTransactions(month, "global").forEach((item) => {
+      if (!outflowTypes.includes(item.type) || item.settlementOnly) return;
+      add(item.category || typeMeta[item.type]?.label, "paid", item.amount, item.currency);
+    });
+    cardPurchaseExpenseEntries(month, "global").forEach((item) => {
+      const card = item.cardId ? creditCardById(item.cardId) : null;
+      const invoice = card ? cardInvoiceStatus(card, month) : null;
+      const paidRatio = invoice?.bill.total ? clamp(invoice.paidAmount / invoice.bill.total, 0, 1) : item.statusTone === "green" ? 1 : 0;
+      if (paidRatio) add(item.category || "Cartao", "paid", item.amount * paidRatio, item.currency);
+      if (paidRatio < 1) add(item.category || "Cartao", "committed", item.amount * (1 - paidRatio), item.currency);
+    });
+    financialCalendarItems(month, "global").forEach((item) => {
+      if (item.kind === "income" || item.paid || item.type === "card") return;
+      add(item.category || item.meta || "Outros", "committed", item.amount, item.currency);
+    });
+
+    const configured = (state.categoryBudgets || []).filter((item) => item.month === month);
+    const rows = configured.map((budget) => {
+      const usage = amounts.get(budgetCategoryKey(budget.category)) || { paid: 0, committed: 0 };
+      const limit = convert(budget.limit, budget.currency, currency, rate);
+      const projected = usage.paid + usage.committed;
+      const percent = limit ? projected / limit * 100 : 0;
+      const status = percent > 100 ? "exceeded" : percent >= budget.warningThreshold ? "warning" : projected > 0 ? "healthy" : "planned";
+      return { ...budget, limit, currency, paid: usage.paid, committed: usage.committed, projected, available: limit - projected, percent, status };
+    }).sort((a, b) => b.percent - a.percent || a.category.localeCompare(b.category));
+    const totalLimit = rows.reduce((sum, item) => sum + item.limit, 0);
+    const totalPaid = rows.reduce((sum, item) => sum + item.paid, 0);
+    const totalCommitted = rows.reduce((sum, item) => sum + item.committed, 0);
+    return { month, currency, rows, totalLimit, totalPaid, totalCommitted, projected: totalPaid + totalCommitted, unbudgeted: [...amounts.values()].filter((item) => !configured.some((budget) => budgetCategoryKey(budget.category) === item.key)) };
+  }
+
+  function budgetStatusMeta(status) {
+    return {
+      planned: { label: "Planejado", tone: "blue" },
+      healthy: { label: "Dentro do limite", tone: "green" },
+      warning: { label: "Atencao", tone: "gold" },
+      exceeded: { label: "Excedido", tone: "red" }
+    }[status] || { label: "Planejado", tone: "blue" };
+  }
+
+  function renderBudgetSummaryPanel() {
+    const model = categoryBudgetModel();
+    const percent = model.totalLimit ? model.projected / model.totalLimit * 100 : 0;
+    const counts = model.rows.reduce((result, item) => ({ ...result, [item.status]: (result[item.status] || 0) + 1 }), {});
+    return `
+      <div class="panel-head"><div><h2>Orcamento mensal</h2><p class="row-meta">Realizado e comprometido por categoria.</p></div><button class="small-action ghost" type="button" data-action="set-tab" data-tab="budgets">Abrir</button></div>
+      ${model.rows.length ? `<div class="budget-summary-total"><strong>${formatMoneyWithPrimary(model.projected, model.currency)}</strong><span>de ${formatMoneyWithPrimary(model.totalLimit, model.currency)}</span></div><div class="budget-progress"><span style="width:${clamp(percent, 0, 100)}%"></span></div><div class="budget-summary-counts"><span>${counts.healthy || 0} dentro</span><span>${counts.warning || 0} em atencao</span><span>${counts.exceeded || 0} excedido</span></div>` : `<div class="budget-empty"><i data-lucide="chart-pie" aria-hidden="true"></i><div><strong>Planeje antes de gastar</strong><p>Defina limites para acompanhar o mes.</p></div><button class="small-action" type="button" data-action="set-tab" data-tab="budgets">Criar orcamento</button></div>`}
+    `;
+  }
+
+  function renderBudgetsPage() {
+    const model = categoryBudgetModel();
+    const categories = [...new Set(model.unbudgeted.map((item) => item.category))];
+    return `
+      <div class="detail-page budgets-page">
+        ${renderPageIntro("Orcamentos", "Planejamento por categoria", "Defina os limites do mes e acompanhe separadamente o que ja foi pago e o que ainda esta comprometido.", `<button class="secondary-button" type="button" data-action="copy-previous-budgets">Copiar mes anterior</button><button class="primary-button" type="button" data-action="open-modal" data-modal="categoryBudget">Nova categoria</button>`)}
+        <section class="budget-overview-grid">
+          <article><span>Limite do mes</span><strong>${formatMoneyWithPrimary(model.totalLimit, model.currency)}</strong></article>
+          <article><span>Ja pago</span><strong>${formatMoneyWithPrimary(model.totalPaid, model.currency)}</strong></article>
+          <article><span>Comprometido</span><strong>${formatMoneyWithPrimary(model.totalCommitted, model.currency)}</strong></article>
+          <article><span>Disponivel projetado</span><strong class="${model.totalLimit - model.projected < 0 ? "expense" : "income"}">${formatMoneyWithPrimary(model.totalLimit - model.projected, model.currency)}</strong></article>
+        </section>
+        <section class="content-panel budget-table-panel">
+          <div class="panel-head"><div><h2>${escapeHtml(formatMonthLabel(model.month))}</h2><p class="row-meta">O comprometido inclui faturas e obrigacoes ainda em aberto.</p></div><span class="chip blue">${model.rows.length} categorias</span></div>
+          ${model.rows.length ? `<div class="budget-category-list">${model.rows.map((item) => {
+            const meta = budgetStatusMeta(item.status);
+            return `<article class="budget-category-row"><div class="budget-category-head"><div><strong>${escapeHtml(item.category)}</strong><span class="chip ${meta.tone}">${escapeHtml(meta.label)}</span></div><div><b>${formatMoneyWithPrimary(item.projected, item.currency)}</b><small>de ${formatMoneyWithPrimary(item.limit, item.currency)}</small></div></div><div class="budget-progress is-${item.status}"><span style="width:${clamp(item.percent, 0, 100)}%"></span></div><div class="budget-category-values"><span>Pago <b>${formatMoneyWithPrimary(item.paid, item.currency)}</b></span><span>Comprometido <b>${formatMoneyWithPrimary(item.committed, item.currency)}</b></span><span>Disponivel <b class="${item.available < 0 ? "expense" : ""}">${formatMoneyWithPrimary(item.available, item.currency)}</b></span><div><button class="small-action ghost" type="button" data-action="open-modal" data-modal="categoryBudget" data-id="${escapeAttr(item.id)}">Editar</button><button class="icon-button" type="button" data-action="delete-category-budget" data-id="${escapeAttr(item.id)}" aria-label="Excluir ${escapeAttr(item.category)}"><i data-lucide="trash-2" aria-hidden="true"></i></button></div></div></article>`;
+          }).join("")}</div>` : `<div class="budget-empty large"><i data-lucide="chart-pie" aria-hidden="true"></i><div><strong>Crie seu primeiro orcamento</strong><p>Comece por alimentacao, transporte, moradia ou uma categoria criada por voce.</p></div><button class="primary-button" type="button" data-action="open-modal" data-modal="categoryBudget">Adicionar categoria</button></div>`}
+        </section>
+        ${categories.length ? `<section class="content-panel"><div class="panel-head"><div><h2>Gastos sem orcamento</h2><p class="row-meta">Categorias encontradas nos seus lancamentos.</p></div></div><div class="budget-unbudgeted">${categories.map((category) => `<button type="button" data-action="open-modal" data-modal="categoryBudget" data-id="new:${escapeAttr(category)}"><i data-lucide="plus" aria-hidden="true"></i>${escapeHtml(category)}</button>`).join("")}</div></section>` : ""}
+      </div>`;
   }
 
   function ensureDashboardCurrentMonth() {
@@ -3707,105 +4302,211 @@
   }
 
   function renderAccounts() {
+    const accounts = activeBankAccounts();
+    const incomeSources = (state.incomeSources || []).filter((item) => item.active !== false);
     return `
-      <section class="content-panel bank-accounts-panel">
-        <div class="panel-head">
-          <div>
-            <h2>Contas bancarias</h2>
-            <p class="row-meta">Saldos por banco, pais e tipo de conta.</p>
-          </div>
-          <button class="small-action" type="button" data-action="open-modal" data-modal="bankAccount">Nova conta</button>
-        </div>
-        ${renderBankAccountsPanel()}
-      </section>
+      <div class="detail-page-shell">
+        ${renderPageIntro("Banking", "Contas e rendas", "Cadastre onde o dinheiro entra, acompanhe saldos e mantenha o vinculo entre empresa, salario e conta de recebimento.", `<button class="secondary-button" type="button" data-action="open-modal" data-modal="incomeSource">Nova empresa</button><button class="primary-button" type="button" data-action="open-modal" data-modal="bankAccount">Nova conta</button>`)}
+        <section class="detail-kpi-grid"><article><span>Contas ativas</span><strong>${accounts.length}</strong><small>Japao e Brasil</small></article><article><span>Fontes de renda</span><strong>${incomeSources.length}</strong><small>empresas e trabalhos</small></article><article><span>Saldo bancario</span><strong>${formatMoney(bankAccountsTotal(primaryCurrency(), state.ui.selectedMonth), primaryCurrency())}</strong><small>consolidado</small></article><article><span>Recebimentos</span><strong>${monthWorkIncomes(state.ui.selectedMonth).length}</strong><small>${formatMonthLabel(state.ui.selectedMonth)}</small></article></section>
+        <section class="content-panel bank-accounts-panel"><div class="panel-head"><div><h2>Contas bancarias</h2><p class="row-meta">Saldos, banco, pais e conta principal.</p></div><button class="small-action" type="button" data-action="open-modal" data-modal="bankAccount">Nova conta</button></div>${renderBankAccountsPanel()}</section>
+        <section class="detail-two-column"><article class="content-panel"><div class="panel-head"><div><h2>Empresas e rendas</h2><p class="row-meta">A conta de recebimento e obrigatoria para salarios.</p></div><button class="small-action" type="button" data-action="open-modal" data-modal="incomeSource">Cadastrar</button></div>${renderIncomeSourcesSettingsPanel()}</article><article class="content-panel"><div class="panel-head"><h2>Pagamentos do mes</h2><button class="small-action" type="button" data-action="open-modal" data-modal="workIncome">Recebimento</button></div>${renderIncomePaymentsPanel(null)}</article></section>
+        ${renderWise()}
+      </div>
+    `;
+  }
 
-      <section class="split-grid">
-        <article class="content-panel">
-          <div class="panel-head">
-            <h2>Pagamentos do mes</h2>
-            <div class="chips">
-              <button class="small-action" type="button" data-action="open-modal" data-modal="workIncome">Recebimento</button>
+  function renderPageIntro(eyebrow, title, copy, actions = "") {
+    return `
+      <header class="detail-page-intro">
+        <div><p class="mini-label">${escapeHtml(eyebrow)}</p><h2>${escapeHtml(title)}</h2><p>${escapeHtml(copy)}</p></div>
+        ${actions ? `<div class="detail-page-actions">${actions}</div>` : ""}
+      </header>
+    `;
+  }
+
+  function renderFamilyPage() {
+    const members = remoteSession.householdMembers?.length ? remoteSession.householdMembers : fallbackCurrentMember();
+    const role = currentHouseholdRole();
+    const summary = summarizeMonth(state.ui.selectedMonth, "global");
+    return `
+      <div class="detail-page-shell">
+        ${renderPageIntro("Espaco compartilhado", state.settings.familyName, "Acompanhe a familia e defina exatamente o que cada pessoa pode fazer.", `<button class="primary-button" type="button" data-action="copy-invite-code"><i data-lucide="user-plus"></i>Convidar pessoa</button>`)}
+        <section class="detail-kpi-grid">
+          <article><span>Membros</span><strong>${members.length}</strong><small>perfis conectados</small></article>
+          <article><span>Papel atual</span><strong>${escapeHtml(householdRoleLabel(role))}</strong><small>${escapeHtml(householdRoleDescription(role))}</small></article>
+          <article><span>Despesas do mes</span><strong>${formatMoneyWithPrimary(summary.expenses, summary.currency)}</strong><small>${formatMonthLabel(state.ui.selectedMonth)}</small></article>
+          <article><span>Folga familiar</span><strong>${formatMoneyWithPrimary(Math.max(0, summary.remaining), summary.currency)}</strong><small>apos compromissos</small></article>
+        </section>
+
+        <section class="detail-two-column">
+          <article class="content-panel family-access-panel">
+            <div class="panel-head"><div><h2>Pessoas e permissoes</h2><p class="row-meta">O dono controla o nivel de acesso de cada pessoa.</p></div><span class="chip ${hasHouseholdPermission("manage") ? "green" : "blue"}">${hasHouseholdPermission("manage") ? "Gerenciavel" : "Somente leitura"}</span></div>
+            <div class="permission-member-list">
+              ${members.map((member) => `
+                <div class="permission-member-row">
+                  <span class="member-avatar">${memberInitials(member)}</span>
+                  <div><strong>${escapeHtml(member.displayName || member.email || "Membro")}${member.isCurrentUser ? " (voce)" : ""}</strong><small>${escapeHtml(member.email || "Conta vinculada")}</small></div>
+                  <select data-family-role data-user-id="${escapeAttr(member.userId)}" aria-label="Permissao de ${escapeAttr(member.displayName || "membro")}" ${!hasHouseholdPermission("manage") || member.role === "owner" ? "disabled" : ""}>
+                    ${["admin", "editor", "viewer"].map((item) => `<option value="${item}" ${selectedAttr(item, member.role === "member" ? "editor" : member.role)}>${householdRoleLabel(item)}</option>`).join("")}
+                    ${member.role === "owner" ? `<option value="owner" selected>Dono</option>` : ""}
+                  </select>
+                </div>
+              `).join("")}
             </div>
-          </div>
-          ${renderIncomePaymentsPanel(null)}
-        </article>
+          </article>
 
-        <article class="content-panel vehicle-panel">
-          <div class="panel-head">
-            <h2>Veiculo Japao</h2>
-            <div class="chips">
-              <button class="small-action ghost" type="button" data-action="open-modal" data-modal="vehicle">Novo veiculo</button>
-              <button class="small-action" type="button" data-action="open-modal" data-modal="vehicleMaintenance">Manutencao</button>
+          <article class="content-panel permission-guide-panel">
+            <div class="panel-head"><div><h2>Niveis de acesso</h2><p class="row-meta">Permissoes simples e previsiveis para dados financeiros.</p></div><i data-lucide="shield-check"></i></div>
+            <div class="permission-guide-list">
+              ${[
+                ["Dono", "Controle total, convites, papeis e configuracoes da familia."],
+                ["Administrador", "Pode organizar e editar as financas compartilhadas."],
+                ["Colaborador", "Pode cadastrar e atualizar movimentacoes financeiras."],
+                ["Visualizador", "Consulta o painel sem alterar os dados da familia."]
+              ].map(([label, copy]) => `<div><strong>${label}</strong><p>${copy}</p></div>`).join("")}
             </div>
-          </div>
-          ${renderVehiclePanel(null)}
-          ${renderVehicleMaintenancePanel(null)}
-        </article>
-      </section>
+          </article>
+        </section>
 
-      <section class="split-grid">
-        <article class="content-panel">
-          <div class="panel-head">
-            <h2>Meus Cartoes</h2>
-            <div class="chips">
-              <button class="small-action ghost" type="button" data-action="open-modal" data-modal="cardPurchase">Compra</button>
-              <button class="small-action" type="button" data-action="open-modal" data-modal="creditCard">Novo cartao</button>
-            </div>
-          </div>
-          ${renderCreditCardsPanel(null)}
-        </article>
+        <section class="content-panel">
+          <div class="panel-head"><div><h2>Atividade da familia</h2><p class="row-meta">Ultimos registros com identificacao de quem adicionou.</p></div><button class="small-action ghost" type="button" data-action="set-tab" data-tab="reports">Abrir extrato</button></div>
+          ${renderTransactionList(monthLedgerEntries(state.ui.selectedMonth, "global").slice(0, 10))}
+        </section>
+      </div>
+    `;
+  }
 
-      </section>
+  function renderCardsPage() {
+    const activeCards = (state.creditCards || []).filter((item) => item.active !== false);
+    const billTotal = activeCards.reduce((total, card) => total + convert(creditCardMonthBill(card, state.ui.selectedMonth).total, card.currency, primaryCurrency(), latestRate(state.ui.selectedMonth)), 0);
+    const selected = activeCards[normalizeCardCarouselIndex(activeCards.length)] || activeCards[0];
+    const futureTotal = activeCards.reduce((total, card) => total + Array.from({ length: 6 }, (_, index) => addMonths(state.ui.selectedMonth, index + 1)).reduce((cardTotal, month) => cardTotal + convert(creditCardMonthBill(card, month).total, card.currency, primaryCurrency(), latestRate(month)), 0), 0);
+    return `
+      <div class="detail-page-shell cards-center-page">
+        ${renderPageIntro("Cartoes de credito", "Parcelas e faturas", "Acompanhe o ciclo completo da compra, do comprometimento do orcamento ate a conciliacao do pagamento.", `<button class="secondary-button" type="button" data-action="open-modal" data-modal="cardPurchase">Nova compra</button><button class="primary-button" type="button" data-action="open-modal" data-modal="creditCard">Novo cartao</button>`)}
+        <section class="detail-kpi-grid"><article><span>Cartoes ativos</span><strong>${activeCards.length}</strong><small>cadastrados</small></article><article><span>Faturas do mes</span><strong>${formatMoney(billTotal, primaryCurrency())}</strong><small>${formatMonthLabel(state.ui.selectedMonth)}</small></article><article><span>Compromissos futuros</span><strong>${formatMoney(futureTotal, primaryCurrency())}</strong><small>proximos 6 meses</small></article><article><span>Compras registradas</span><strong>${(state.cardPurchases || []).length}</strong><small>historico completo</small></article></section>
+        ${activeCards.length ? `<section class="card-center-selector">${activeCards.map((card) => `<button class="${selected?.id === card.id ? "is-active" : ""}" type="button" data-action="select-card-detail" data-id="${escapeAttr(card.id)}" ${cardStyleAttrs(card)}><span>${escapeHtml(card.nickname || card.issuer)}</span><small>•••• ${escapeHtml(card.last4 || "0000")}</small></button>`).join("")}</section>${renderCardDetailCenter(selected)}` : `<section class="content-panel"><div class="budget-empty large"><i data-lucide="credit-card" aria-hidden="true"></i><div><strong>Cadastre seu primeiro cartao</strong><p>Depois, compras, parcelas e faturas aparecerao nesta central.</p></div><button class="primary-button" type="button" data-action="open-modal" data-modal="creditCard">Cadastrar cartao</button></div></section>`}
+      </div>
+    `;
+  }
 
-      <section class="content-panel housing-panel">
-        <div class="panel-head">
-          <h2>Moradia</h2>
-          <button class="small-action" type="button" data-action="open-modal" data-modal="housingCard">Nova moradia</button>
-        </div>
-        ${renderHousingPanel(null)}
-      </section>
+  function cardInvoiceStatus(card, month = state.ui.selectedMonth) {
+    const bill = creditCardMonthBill(card, month);
+    const payment = state.paidCommitments?.[cardBillKey(card.id, month)];
+    const paidAmount = cardBillPaidAmount(card, month);
+    const remaining = Math.max(0, bill.total - paidAmount);
+    const dueDate = dateInMonth(month, card.dueDay || 1);
+    const closingDate = dateInMonth(month, card.closingDay || 1);
+    let status = "open";
+    if (bill.total > 0 && remaining <= Math.max(card.currency === "JPY" ? 1 : .01, bill.total * .005)) status = "paid";
+    else if (paidAmount > 0) status = "partial";
+    else if (parseLocalDate(dueDate) < startOfDay(new Date())) status = "overdue";
+    else if (parseLocalDate(closingDate) <= startOfDay(new Date())) status = "closed";
+    const meta = { open: ["Aberta", "blue"], closed: ["Fechada", "gold"], partial: ["Paga parcialmente", "gold"], paid: ["Paga", "green"], overdue: ["Atrasada", "red"] }[status];
+    return { status, label: meta[0], tone: meta[1], bill, payment, paidAmount, remaining, dueDate, closingDate };
+  }
 
-      <section class="content-panel">
-        <div class="panel-head">
-          <h2>Subscricoes</h2>
-          <button class="small-action" type="button" data-action="open-modal" data-modal="subscription">Nova subscricao</button>
-        </div>
-        ${renderSubscriptionsPanel(null)}
-      </section>
+  function cardBillPaidAmount(card, month) {
+    const payment = state.paidCommitments?.[cardBillKey(card.id, month)];
+    if (!payment) return 0;
+    if (typeof payment !== "object" || payment.amount === undefined) return creditCardMonthBill(card, month).total;
+    return Math.max(0, number(payment.amount));
+  }
 
-      <section class="content-panel">
-        <div class="panel-head">
-          <h2>Contas fixas</h2>
-          <button class="small-action" type="button" data-action="open-modal" data-modal="commitment">Nova conta</button>
-        </div>
-        ${renderCommitmentList(null)}
-      </section>
+  function cardBillComposition(card, month) {
+    const rows = cardPurchaseRowsForCard(card.id, month);
+    const subscriptions = rows.filter((item) => item.generated && /subscr/i.test(`${item.category} ${item.title}`)).reduce((sum, item) => sum + number(item.amount), 0);
+    const installments = rows.filter((item) => number(item.installments) > 1).reduce((sum, item) => sum + number(item.amount), 0);
+    const current = rows.filter((item) => !item.generated && number(item.installments) <= 1).reduce((sum, item) => sum + number(item.amount), 0);
+    return { subscriptions, installments, current, manual: manualCardBill(card, month) };
+  }
 
-      <section class="content-panel">
-        <div class="panel-head">
-          <h2>Compras no cartao</h2>
-          <button class="small-action" type="button" data-action="open-modal" data-modal="cardPurchase">Nova compra</button>
-        </div>
-        ${renderCardPurchasesList(null)}
+  function renderCardDetailCenter(card) {
+    const view = ["current", "future", "history"].includes(state.ui.cardDetailView) ? state.ui.cardDetailView : "current";
+    const invoice = cardInvoiceStatus(card);
+    const limit = number(card.limitAmount);
+    const available = limit ? limit - invoice.bill.total : 0;
+    const usage = limit ? invoice.bill.total / limit * 100 : 0;
+    const bestDay = card.closingDay ? (number(card.closingDay) % 31) + 1 : "--";
+    return `
+      <section class="card-center-hero" ${cardStyleAttrs(card)}>
+        <div><span class="card-center-network">${escapeHtml(cardNetworkLabel(card))}</span><h2>${escapeHtml(card.nickname || card.issuer)}</h2><p>${escapeHtml(card.issuer)} · final ${escapeHtml(card.last4 || "0000")}</p></div>
+        <div class="card-center-hero-stats"><div><span>Fatura atual</span><strong>${formatMoneyWithPrimary(invoice.bill.total, card.currency)}</strong></div><div><span>Limite disponivel</span><strong>${limit ? formatMoneyWithPrimary(available, card.currency) : "Nao informado"}</strong></div><div><span>Melhor dia de compra</span><strong>${bestDay}</strong></div><div><span>Fechamento / vencimento</span><strong>${card.closingDay || "--"} / ${card.dueDay || "--"}</strong></div></div>
+        <div class="card-center-usage"><div><span>Uso do limite</span><b>${limit ? `${formatPercent(usage)}` : "Defina o limite"}</b></div><div class="budget-progress"><span style="width:${clamp(usage, 0, 100)}%"></span></div></div>
       </section>
+      <nav class="card-detail-tabs" aria-label="Detalhes do cartao"><button class="${view === "current" ? "is-active" : ""}" type="button" data-action="set-card-detail-view" data-view="current">Fatura atual</button><button class="${view === "future" ? "is-active" : ""}" type="button" data-action="set-card-detail-view" data-view="future">Proximas faturas</button><button class="${view === "history" ? "is-active" : ""}" type="button" data-action="set-card-detail-view" data-view="history">Historico</button></nav>
+      ${view === "future" ? renderCardFutureInvoices(card) : view === "history" ? renderCardInvoiceHistory(card) : renderCurrentCardInvoice(card, invoice)}
+    `;
+  }
 
-      <section class="split-grid">
-        <article class="content-panel">
-          <div class="panel-head">
-            <h2>Financiamentos e contratos</h2>
-            <button class="small-action" type="button" data-action="open-modal" data-modal="debt">Novo</button>
-          </div>
-          ${renderDebtList()}
-        </article>
-        <article class="content-panel">
-          <div class="panel-head">
-            <h2>Investimentos</h2>
-            <button class="small-action" type="button" data-action="open-modal" data-modal="investment">Novo</button>
-          </div>
-          ${renderInvestmentList()}
-          ${hasNubankAccount() ? `<div class="nubank-boxes-inline">${renderNubankBoxesPanel()}</div>` : ""}
-        </article>
-      </section>
+  function renderCurrentCardInvoice(card, invoice) {
+    const composition = cardBillComposition(card, state.ui.selectedMonth);
+    return `<section class="card-invoice-layout"><article class="content-panel card-invoice-main"><div class="panel-head"><div><h2>Fatura de ${escapeHtml(formatMonthLabel(state.ui.selectedMonth))}</h2><p class="row-meta">Fecha ${formatShortDate(invoice.closingDate)} · vence ${formatShortDate(invoice.dueDate)}</p></div><span class="chip ${invoice.tone}">${escapeHtml(invoice.label)}</span></div><div class="invoice-composition"><div><span>Compras do mes</span><strong>${formatMoneyWithPrimary(composition.current, card.currency)}</strong></div><div><span>Parcelas anteriores</span><strong>${formatMoneyWithPrimary(composition.installments, card.currency)}</strong></div><div><span>Subscricoes e recorrencias</span><strong>${formatMoneyWithPrimary(composition.subscriptions, card.currency)}</strong></div>${composition.manual ? `<div><span>Ajuste manual</span><strong>${formatMoneyWithPrimary(composition.manual, card.currency)}</strong></div>` : ""}<div class="is-total"><span>Total da fatura</span><strong>${formatMoneyWithPrimary(invoice.bill.total, card.currency)}</strong></div>${invoice.paidAmount ? `<div><span>Ja pago</span><strong class="income">${formatMoneyWithPrimary(invoice.paidAmount, card.currency)}</strong></div><div class="is-total"><span>Saldo restante</span><strong>${formatMoneyWithPrimary(invoice.remaining, card.currency)}</strong></div>` : ""}</div><div class="invoice-actions"><button class="small-action ghost" type="button" data-action="open-modal" data-modal="cardPurchase">Nova compra</button><button class="primary-button" type="button" data-action="${invoice.status === "paid" ? "none" : "open-modal"}" data-modal="monthlyPayment" data-payment-id="card:${escapeAttr(card.id)}" ${invoice.status === "paid" ? "disabled" : ""}>${invoice.status === "partial" ? "Continuar pagamento" : invoice.status === "paid" ? "Fatura paga" : "Pagar fatura"}</button></div>${renderCardInvoiceRows(card, state.ui.selectedMonth)}</article><aside class="content-panel card-invoice-side"><div class="panel-head"><h2>Compromissos futuros</h2><span class="chip blue">6 meses</span></div>${renderCardFutureMini(card)}</aside></section>`;
+  }
+
+  function renderCardInvoiceRows(card, month) {
+    const rows = cardPurchaseRowsForCard(card.id, month);
+    if (!rows.length) return `<p class="empty-state">Nenhuma compra detalhada nesta fatura.</p>`;
+    return `<div class="invoice-row-list">${rows.map((row) => `<div><span class="row-icon blue">${row.installments > 1 ? `${row.installment}/${row.installments}` : row.icon || "C"}</span><span><strong>${escapeHtml(row.title)}</strong><small>${escapeHtml(row.category || "Cartao")} · ${formatShortDate(row.purchaseDate)}${row.familyMemberId ? ` · ${escapeHtml(familyMemberName(row.familyMemberId))}` : ""}${row.interestAmount ? ` · inclui juros` : ""}</small></span><b>${formatMoneyWithPrimary(row.amount, row.currency)}</b>${row.generated ? "" : `<button class="icon-button" type="button" data-action="open-modal" data-modal="cardPurchase" data-id="${escapeAttr(row.id)}" aria-label="Editar compra"><i data-lucide="pencil" aria-hidden="true"></i></button>`}</div>`).join("")}</div>`;
+  }
+
+  function renderCardFutureMini(card) {
+    return `<div class="card-future-mini">${Array.from({ length: 6 }, (_, index) => addMonths(state.ui.selectedMonth, index + 1)).map((month) => { const bill = creditCardMonthBill(card, month); return `<div><span>${escapeHtml(shortMonthLabel(month))}</span><div class="budget-progress"><span style="width:${clamp(number(card.limitAmount) ? bill.total / number(card.limitAmount) * 100 : 0, 0, 100)}%"></span></div><strong>${formatMoneyWithPrimary(bill.total, card.currency)}</strong></div>`; }).join("")}</div>`;
+  }
+
+  function renderCardFutureInvoices(card) {
+    const months = Array.from({ length: 12 }, (_, index) => addMonths(state.ui.selectedMonth, index + 1));
+    return `<section class="content-panel"><div class="panel-head"><div><h2>Compromissos futuros</h2><p class="row-meta">Parcelas e recorrencias ja previstas para os proximos 12 meses.</p></div></div><div class="future-invoice-grid">${months.map((month) => { const bill = creditCardMonthBill(card, month); return `<article><span>${escapeHtml(formatMonthLabel(month))}</span><strong>${formatMoneyWithPrimary(bill.total, card.currency)}</strong><small>${bill.purchaseCount} lancamento${bill.purchaseCount === 1 ? "" : "s"}</small>${renderCardInvoiceRows(card, month)}</article>`; }).join("")}</div></section>`;
+  }
+
+  function renderCardInvoiceHistory(card) {
+    const months = Array.from({ length: 12 }, (_, index) => addMonths(state.ui.selectedMonth, -index));
+    return `<section class="content-panel"><div class="panel-head"><div><h2>Historico de faturas</h2><p class="row-meta">Ultimos 12 meses com pagamento e saldo da fatura.</p></div></div><div class="invoice-history-list">${months.map((month) => { const status = cardInvoiceStatus(card, month); return `<article><span><strong>${escapeHtml(formatMonthLabel(month))}</strong><small>Vencimento ${formatShortDate(status.dueDate)}</small></span><b>${formatMoneyWithPrimary(status.bill.total, card.currency)}</b><span class="chip ${status.tone}">${escapeHtml(status.label)}</span></article>`; }).join("")}</div></section>`;
+  }
+
+  function renderWealthPage() {
+    const investmentTotal = (state.investments || []).reduce((total, item) => total + convert(item.currentAmount, item.currency, primaryCurrency(), latestRate()), 0);
+    const debtTotal = (state.debts || []).reduce((total, item) => total + convert(item.outstandingAmount, item.currency, primaryCurrency(), latestRate()), 0);
+    const goals = activeFinancialGoals();
+    return `
+      <div class="detail-page-shell">
+        ${renderPageIntro("Patrimonio", "Planos de longo prazo", "Centralize metas, investimentos, financiamentos e consorcios sem sobrecarregar o dashboard.", `<button class="secondary-button" type="button" data-action="open-modal" data-modal="investment">Novo investimento</button><button class="primary-button" type="button" data-action="open-modal" data-modal="goal">Nova meta</button>`)}
+        <section class="detail-kpi-grid"><article><span>Investido</span><strong>${formatMoney(investmentTotal, primaryCurrency())}</strong><small>valor cadastrado</small></article><article><span>Dividas abertas</span><strong>${formatMoney(debtTotal, primaryCurrency())}</strong><small>saldo devedor</small></article><article><span>Metas ativas</span><strong>${goals.length}</strong><small>objetivos em andamento</small></article><article><span>Reserva</span><strong>${formatMoney(goalProgress(emergencyGoal() || {}).saved || 0, primaryCurrency())}</strong><small>emergencia</small></article></section>
+        <section class="detail-two-column"><article class="content-panel">${renderFinancialGoalsPanel()}</article><article class="content-panel"><div class="panel-head"><h2>Investimentos</h2><button class="small-action" type="button" data-action="open-modal" data-modal="investment">Novo</button></div>${renderInvestmentList()}${hasNubankAccount() ? `<div class="nubank-boxes-inline">${renderNubankBoxesPanel()}</div>` : ""}</article></section>
+        <section class="detail-two-column"><article class="content-panel"><div class="panel-head"><h2>Financiamentos</h2><button class="small-action" type="button" data-action="open-modal" data-modal="debt">Novo contrato</button></div>${renderDebtList("financing")}</article><article class="content-panel"><div class="panel-head"><h2>Consorcios</h2><button class="small-action" type="button" data-action="open-modal" data-modal="consortium">Novo consorcio</button></div>${renderConsortiumList()}</article></section>
+      </div>
+    `;
+  }
+
+  function renderReferralPage() {
+    const code = referralCode();
+    const referrals = state.commercial.referrals || [];
+    return `
+      <div class="detail-page-shell commercial-page">
+        ${renderPageIntro("Indique e ganhe", "Cresca com a sua comunidade", "Compartilhe o Nekuma com pessoas de confianca e acompanhe cada convite em um unico lugar.")}
+        <section class="referral-hero-card">
+          <div><p class="mini-label">Seu codigo pessoal</p><strong>${escapeHtml(code)}</strong><p>O codigo identifica as indicacoes sem expor seus dados financeiros.</p></div>
+          <div class="referral-actions"><button class="secondary-button" type="button" data-action="copy-referral-code"><i data-lucide="copy"></i>Copiar codigo</button><button class="primary-button" type="button" data-action="share-referral"><i data-lucide="share-2"></i>Compartilhar</button></div>
+        </section>
+        <section class="detail-kpi-grid"><article><span>Convites enviados</span><strong>${referrals.length}</strong><small>registrados</small></article><article><span>Contas ativadas</span><strong>${referrals.filter((item) => item.status === "active").length}</strong><small>indicacoes validas</small></article><article><span>Creditos</span><strong>${number(state.commercial.referralCredits)}</strong><small>saldo promocional</small></article><article><span>Seu plano</span><strong>${commercialPlanLabel(state.commercial.plan)}</strong><small>beneficios atuais</small></article></section>
+        <section class="detail-two-column"><article class="content-panel"><div class="panel-head"><div><h2>Como funciona</h2><p class="row-meta">Um fluxo transparente para voce e para quem recebe.</p></div></div><div class="commercial-step-list"><div><b>1</b><span><strong>Compartilhe</strong><small>Envie seu codigo ou link pessoal.</small></span></div><div><b>2</b><span><strong>A pessoa cria a conta</strong><small>A indicacao fica vinculada ao cadastro.</small></span></div><div><b>3</b><span><strong>Beneficio liberado</strong><small>A recompensa aparece quando a conta se torna elegivel.</small></span></div></div></article><article class="content-panel"><div class="panel-head"><div><h2>Historico de indicacoes</h2><p class="row-meta">Convites e ativacoes aparecerao aqui.</p></div></div>${referrals.length ? `<div class="list">${referrals.map((item) => `<div class="list-row compact"><div><p class="row-title">${escapeHtml(item.name || item.email || "Indicacao")}</p><p class="row-meta">${escapeHtml(item.createdAt ? formatShortDate(item.createdAt) : "Convite enviado")}</p></div><span class="chip ${item.status === "active" ? "green" : "gold"}">${item.status === "active" ? "Ativa" : "Pendente"}</span></div>`).join("")}</div>` : `<p class="empty-state">Nenhuma indicacao registrada ainda.</p>`}</article></section>
+      </div>
+    `;
+  }
+
+  function renderPlansPage() {
+    const current = state.commercial.plan || "free";
+    const plans = [
+      { key: "free", name: "Nekuma Free", copy: "Organizacao financeira essencial para comecar.", features: ["Dashboard financeiro", "Contas e cartoes", "Registro manual", "Perfil inteligente"] },
+      { key: "plus", name: "Nekuma Plus", copy: "Mais analise e automacao para a rotina individual.", features: ["Tudo do Free", "Relatorios avancados", "Automacoes e alertas", "Leitura de recibos quando lancada"], featured: true },
+      { key: "family", name: "Nekuma Family", copy: "Um espaco protegido para organizar a familia.", features: ["Tudo do Plus", "Usuarios adicionais", "Papeis e permissoes", "Visao financeira familiar"] }
+    ];
+    return `
+      <div class="detail-page-shell commercial-page">
+        ${renderPageIntro("Planos Nekuma", "Escolha o nivel certo para sua rotina", "Os dados continuam seus em qualquer plano. Valores e cobranca serao definidos antes da liberacao comercial.")}
+        <section class="plan-grid">${plans.map((plan) => `<article class="plan-card ${plan.featured ? "is-featured" : ""} ${current === plan.key ? "is-current" : ""}"><div class="plan-card-head"><span>${plan.featured ? "Recomendado" : "Plano"}</span><h2>${plan.name}</h2><p>${plan.copy}</p></div><div class="plan-price"><strong>${plan.key === "free" ? "Gratis" : "Em breve"}</strong><small>${plan.key === "free" ? "para sempre" : "sem cobranca nesta etapa"}</small></div><ul>${plan.features.map((item) => `<li><i data-lucide="check"></i>${item}</li>`).join("")}</ul><button class="${plan.featured ? "primary-button" : "secondary-button"}" type="button" data-action="select-commercial-plan" data-plan="${plan.key}" ${current === plan.key ? "disabled" : ""}>${current === plan.key ? "Plano atual" : plan.key === "free" ? "Usar Free" : "Registrar interesse"}</button></article>`).join("")}</section>
+        <section class="content-panel commercial-resource-panel"><div class="panel-head"><div><h2>Recursos comerciais</h2><p class="row-meta">Base preparada para assinatura, limites de uso e beneficios.</p></div><span class="chip blue">Estrutura inicial</span></div><div class="commercial-resource-grid"><div><i data-lucide="badge-check"></i><strong>Controle de plano</strong><small>Nivel ativo visivel no perfil.</small></div><div><i data-lucide="users"></i><strong>Beneficios familiares</strong><small>Acesso orientado por permissoes.</small></div><div><i data-lucide="gift"></i><strong>Indicacoes</strong><small>Codigo e creditos promocionais.</small></div><div><i data-lucide="shield-check"></i><strong>Dados preservados</strong><small>Trocar de plano nao apaga historico.</small></div></div></section>
+      </div>
     `;
   }
 
@@ -3887,6 +4588,39 @@
     `;
   }
 
+  function renderReconciliationCenter(month = state.ui.selectedMonth) {
+    const entries = financialCalendarItems(month, "global").filter((item) => item.kind !== "income" && number(item.amount) > 0);
+    const pending = entries.filter((item) => ["planned", "open", "overdue"].includes(item.financialStatus) || item.financialStatus === "paid" && item.reconciliationStatus === "unreconciled");
+    const suggested = entries.filter((item) => item.reconciliationStatus === "suggested");
+    const divergent = entries.filter((item) => item.reconciliationStatus === "divergent" || item.financialStatus === "partial");
+    const reconciled = entries.filter((item) => item.reconciliationStatus === "reconciled");
+    const renderRows = (items, emptyText) => items.length ? `<div class="reconciliation-list">${items.slice(0, 8).map((item) => {
+      const financialMeta = financialStatusMeta(item.financialStatus);
+      const reconciliationMeta = reconciliationStatusMeta(item.reconciliationStatus);
+      return `<div class="reconciliation-row">
+        <span class="row-icon ${financialMeta.tone}"><i data-lucide="${item.reconciliationStatus === "reconciled" ? "badge-check" : item.reconciliationStatus === "divergent" ? "triangle-alert" : "scan-search"}" aria-hidden="true"></i></span>
+        <div class="row-main"><p class="row-title">${escapeHtml(item.title)}</p><p class="row-meta">${formatShortDate(item.date)} · ${escapeHtml(item.category || item.meta || "Obrigação")}</p><div class="chips"><span class="chip ${financialMeta.tone}">${escapeHtml(financialMeta.label)}</span><span class="chip ${reconciliationMeta.tone}">${escapeHtml(reconciliationMeta.label)}</span></div></div>
+        <div class="row-amount expense">${formatMoneyWithPrimary(item.amount, item.currency, month)}${item.matchedAmount > 0 && item.matchedAmount !== item.amount ? `<small>Encontrado: ${formatMoneyWithPrimary(item.matchedAmount, item.currency, month)}</small>` : ""}</div>
+      </div>`;
+    }).join("")}</div>` : `<p class="empty-state">${escapeHtml(emptyText)}</p>`;
+    return `
+      <section class="content-panel reconciliation-center">
+        <div class="panel-head"><div><span class="mini-label">Fonte única de status</span><h2>Central de conciliação</h2><p class="row-meta">Compara obrigações, pagamentos, contas bancárias e faturas do mês.</p></div><span class="chip green">${reconciled.length} conciliados</span></div>
+        <div class="reconciliation-summary">
+          <div><span>Pendentes</span><strong>${pending.length}</strong></div>
+          <div><span>Sugestões</span><strong>${suggested.length}</strong></div>
+          <div><span>Divergências</span><strong>${divergent.length}</strong></div>
+          <div><span>Conciliados</span><strong>${reconciled.length}</strong></div>
+        </div>
+        <div class="reconciliation-columns">
+          <details open><summary>Pendentes <span>${pending.length}</span></summary>${renderRows(pending, "Nenhuma obrigação pendente.")}</details>
+          <details ${suggested.length ? "open" : ""}><summary>Sugestões <span>${suggested.length}</span></summary>${renderRows(suggested, "Nenhuma correspondência sugerida.")}</details>
+          <details ${divergent.length ? "open" : ""}><summary>Divergências <span>${divergent.length}</span></summary>${renderRows(divergent, "Nenhuma divergência encontrada.")}</details>
+        </div>
+      </section>
+    `;
+  }
+
   function renderReports() {
     const summary = summarizeMonth(state.ui.selectedMonth, "global");
     const scope = `Global em ${primaryCurrency()}`;
@@ -3916,6 +4650,8 @@
           </div>
         </div>
       </section>
+
+      ${renderReconciliationCenter()}
 
       <section class="content-panel">
         <div class="panel-head">
@@ -3972,167 +4708,550 @@
 
   function renderSettings() {
     const fx = currentFxQuoteInfo();
+    const household = remoteSession.household || {};
+    const activeTheme = sanitizeWorkspaceTheme(state.ui.workspaceTheme);
+    const activeThemeColors = workspaceThemePreviewColors(activeTheme);
+    const inviteCode = household.invite_code || "";
+    const inviteText = inviteCode
+      ? `Use o codigo ${inviteCode} para entrar na familia ${household.name || state.settings.familyName}.`
+      : "Conecte sua familia na nuvem para gerar um codigo de convite.";
     return `
-      <section class="content-panel">
-        <div class="panel-head">
-          <h2>Ajustes</h2>
-          <span class="chip ${state.settings.dataMode === "local" ? "gold" : "green"}">${state.settings.dataMode}</span>
-        </div>
-        <div class="settings-shortcuts">
-          <button class="settings-shortcut-button" type="button" data-action="set-tab" data-tab="reports">
-            <span data-lucide="bar-chart-3" aria-hidden="true"></span>
-            <span>Relatorios</span>
-          </button>
-        </div>
-        <form class="form-grid" data-form="settings">
-          <div class="two-cols">
-            <div class="field">
-              <label for="familyName">Nome da familia</label>
-              <input id="familyName" name="familyName" value="${escapeAttr(state.settings.familyName)}" />
+      <section class="settings-smart-layout">
+        <div class="settings-smart-column settings-smart-primary">
+          <section class="content-panel">
+            <div class="panel-head">
+              <h2>Ajustes</h2>
+              <span class="chip ${state.settings.dataMode === "local" ? "gold" : "green"}">${state.settings.dataMode}</span>
             </div>
-            <div class="field">
-              <label for="baseCurrency">Moeda principal</label>
-              <select id="baseCurrency" name="baseCurrency">
-                ${currencyOptions(primaryCurrency())}
-              </select>
-              <p class="row-meta">Usada nos saldos, graficos e relatorios.</p>
+            <div class="settings-shortcuts">
+              <button class="settings-shortcut-button" type="button" data-action="set-tab" data-tab="reports"><span data-lucide="bar-chart-3" aria-hidden="true"></span><span>Relatorios</span></button>
+              <button class="settings-shortcut-button" type="button" data-action="set-tab" data-tab="family"><span data-lucide="users" aria-hidden="true"></span><span>Familia</span></button>
+              <button class="settings-shortcut-button" type="button" data-action="set-tab" data-tab="plans"><span data-lucide="badge-percent" aria-hidden="true"></span><span>Plano ${escapeHtml(commercialPlanLabel(state.commercial.plan))}</span></button>
             </div>
-          </div>
-          <div class="field">
-            <label for="secondaryCurrency">Moeda secundaria</label>
-            <select id="secondaryCurrency" name="secondaryCurrency">
-              ${currencyOptions(secondaryCurrency())}
-            </select>
-            <p class="row-meta">Aparece entre parenteses como comparativo. Nao pode ser igual a principal.</p>
-          </div>
-          <div class="settings-profile-card">
-            <div class="panel-head compact">
-              <h3>Perfil do usuario</h3>
-              <span class="chip blue">Pessoal</span>
-            </div>
-            <div class="two-cols">
-              <div class="field">
-                <label for="profileCountry">Pais</label>
-                <input id="profileCountry" name="profileCountry" value="${escapeAttr(state.profile.country)}" placeholder="Ex: Japao" />
-              </div>
-              <div class="field">
-                <label for="profileCity">Cidade</label>
-                <input id="profileCity" name="profileCity" value="${escapeAttr(state.profile.city)}" placeholder="Ex: Nagoya" />
-              </div>
-            </div>
-            <div class="three-cols">
-              <div class="field">
-                <label for="profileAge">Idade</label>
-                <input id="profileAge" name="profileAge" inputmode="numeric" value="${escapeAttr(state.profile.age)}" placeholder="--" />
-              </div>
-              <div class="field">
-                <label for="profileGender">Sexo</label>
-                <select id="profileGender" name="profileGender">
-                  <option value="" ${selectedAttr("", state.profile.gender)}>Nao informado</option>
-                  <option value="feminino" ${selectedAttr("feminino", state.profile.gender)}>Feminino</option>
-                  <option value="masculino" ${selectedAttr("masculino", state.profile.gender)}>Masculino</option>
-                  <option value="outro" ${selectedAttr("outro", state.profile.gender)}>Outro</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="profileLanguage">Idioma</label>
-                <select id="profileLanguage" name="profileLanguage">
-                  <option value="pt-BR" ${selectedAttr("pt-BR", state.profile.language)}>Portugues</option>
-                  <option value="ja-JP" ${selectedAttr("ja-JP", state.profile.language)}>Japones</option>
-                  <option value="en-US" ${selectedAttr("en-US", state.profile.language)}>Ingles</option>
-                </select>
-              </div>
-            </div>
-          </div>
-          <div class="settings-rate-card">
-            <div class="panel-head compact">
-              <h3>Cotacao automatica</h3>
-              <span class="chip ${fx.tone}">${escapeHtml(fx.status)}</span>
-            </div>
-            <div class="settings-rate-grid">
-              <div class="readonly-field">
-                <span>Real por iene</span>
-                <strong>${fx.jpyBrl ? formatRate(fx.jpyBrl) : "--"}</strong>
-              </div>
-              <div class="readonly-field">
-                <span>Iene por real</span>
-                <strong>${fx.brlJpy ? formatYenPerReal(fx.brlJpy) : "--"}</strong>
-              </div>
-              <div class="readonly-field">
-                <span>Real por dolar</span>
-                <strong>${fx.usdBrl ? formatUsdPerReal(fx.usdBrl) : "--"}</strong>
-              </div>
-              <div class="readonly-field">
-                <span>Real por euro</span>
-                <strong>${fx.eurBrl ? formatEuroPerReal(fx.eurBrl) : "--"}</strong>
-              </div>
-            </div>
-            <p class="row-meta">${escapeHtml(fx.meta)}</p>
-            <button class="small-action ghost" type="button" data-action="refresh-fx">Atualizar cotacao</button>
-          </div>
-          <div class="form-actions">
-            <button class="primary-button" type="submit">Salvar ajustes</button>
-          </div>
-        </form>
-      </section>
-
-      <section class="content-panel">
-        <div class="panel-head">
-          <h2>Empresas e Rendas</h2>
-          <button class="small-action" type="button" data-action="open-modal" data-modal="incomeSource">Empresa</button>
-        </div>
-        ${renderIncomeSourcesSettingsPanel()}
-      </section>
-
-      ${renderCloudSettings()}
-
-      ${renderProfileSupportCards()}
-
-      <section class="split-grid settings-maintenance-grid">
-        <article class="content-panel">
-          <div class="panel-head">
-            <h2>Backup</h2>
-            <span class="chip blue">JSON</span>
-          </div>
-          <div class="form-grid">
-            <button class="secondary-button" type="button" data-action="export-data">Exportar dados</button>
-            <div class="field">
-              <label for="import-file">Importar backup</label>
-              <input id="import-file" type="file" accept="application/json" />
-            </div>
-          </div>
-        </article>
-
-        <button class="settings-refresh-button" type="button" data-action="reload-app">
-          <span data-lucide="refresh-cw" aria-hidden="true"></span>
-          Atualizar App
-        </button>
-
-        <article class="content-panel">
-          <div class="panel-head">
-            <h2>Ambiente</h2>
-            <span class="chip gold">PWA</span>
-          </div>
-          <div class="list">
-            <div class="list-row compact">
+            <div class="mobile-palette-setting">
               <div>
-                <p class="row-title">Armazenamento</p>
-                <p class="row-meta">${remoteStore.enabled ? "Supabase com cache local" : "Navegador deste dispositivo"}</p>
+                <span class="workspace-palette-preview" aria-hidden="true">${activeThemeColors.map((color) => `<i style="background:${escapeAttr(color)}"></i>`).join("")}</span>
+                <span><strong>Paleta do aplicativo</strong><small>${escapeHtml(activeTheme === "personalized" ? "Personalizada" : workspaceThemeOptions().find((theme) => theme.id === activeTheme)?.name || "Natural")}</small></span>
               </div>
-              <span class="chip ${remoteStore.enabled ? "green" : "gold"}">${remoteStore.enabled ? "Online" : "Local"}</span>
+              <button class="small-action" type="button" data-action="open-modal" data-modal="workspaceTheme"><span data-lucide="palette" aria-hidden="true"></span>Escolher</button>
             </div>
-            <div class="list-row compact">
-              <div>
-                <p class="row-title">Sincronizacao</p>
-                <p class="row-meta">${remoteStore.enabled ? "Ativa para usuarios conectados" : "Pronto para conectar Supabase"}</p>
+            <form class="form-grid" data-form="settings">
+              <div class="two-cols">
+                <div class="field"><label for="familyName">Nome da familia</label><input id="familyName" name="familyName" value="${escapeAttr(state.settings.familyName)}" /></div>
+                <div class="field"><label for="baseCurrency">Moeda principal</label><select id="baseCurrency" name="baseCurrency">${currencyOptions(primaryCurrency())}</select><p class="row-meta">Usada nos saldos, graficos e relatorios.</p></div>
               </div>
-              <span class="chip blue">${remoteStore.enabled ? "Supabase" : "Proxima etapa"}</span>
+              <div class="field"><label for="secondaryCurrency">Moeda secundaria</label><select id="secondaryCurrency" name="secondaryCurrency">${currencyOptions(secondaryCurrency())}</select><p class="row-meta">Aparece entre parenteses como comparativo. Nao pode ser igual a principal.</p></div>
+              <div class="settings-profile-card">
+                <div class="panel-head compact"><h3>Perfil do usuario</h3><span class="chip blue">Pessoal</span></div>
+                <div class="two-cols">
+                  <div class="field"><label for="profileCountry">Pais</label><input id="profileCountry" name="profileCountry" value="${escapeAttr(state.profile.country)}" placeholder="Ex: Japao" /></div>
+                  <div class="field"><label for="profileCity">Cidade</label><input id="profileCity" name="profileCity" value="${escapeAttr(state.profile.city)}" placeholder="Ex: Nagoya" /></div>
+                </div>
+                <div class="three-cols">
+                  <div class="field"><label for="profileAge">Idade</label><input id="profileAge" name="profileAge" inputmode="numeric" value="${escapeAttr(state.profile.age)}" placeholder="--" /></div>
+                  <div class="field"><label for="profileGender">Sexo</label><select id="profileGender" name="profileGender"><option value="" ${selectedAttr("", state.profile.gender)}>Nao informado</option><option value="feminino" ${selectedAttr("feminino", state.profile.gender)}>Feminino</option><option value="masculino" ${selectedAttr("masculino", state.profile.gender)}>Masculino</option><option value="outro" ${selectedAttr("outro", state.profile.gender)}>Outro</option></select></div>
+                  <div class="field"><label for="profileLanguage">Idioma</label><select id="profileLanguage" name="profileLanguage"><option value="pt-BR" ${selectedAttr("pt-BR", state.profile.language)}>Portugues</option><option value="ja-JP" ${selectedAttr("ja-JP", state.profile.language)}>Japones</option><option value="en-US" ${selectedAttr("en-US", state.profile.language)}>Ingles</option></select></div>
+                </div>
+              </div>
+              <div class="settings-rate-card">
+                <div class="panel-head compact"><h3>Cotacao automatica</h3><span class="chip ${fx.tone}">${escapeHtml(fx.status)}</span></div>
+                <div class="settings-rate-grid">
+                  <div class="readonly-field"><span>Real por iene</span><strong>${fx.jpyBrl ? formatRate(fx.jpyBrl) : "--"}</strong></div>
+                  <div class="readonly-field"><span>Iene por real</span><strong>${fx.brlJpy ? formatYenPerReal(fx.brlJpy) : "--"}</strong></div>
+                  <div class="readonly-field"><span>Real por dolar</span><strong>${fx.usdBrl ? formatUsdPerReal(fx.usdBrl) : "--"}</strong></div>
+                  <div class="readonly-field"><span>Real por euro</span><strong>${fx.eurBrl ? formatEuroPerReal(fx.eurBrl) : "--"}</strong></div>
+                </div>
+                <p class="row-meta">${escapeHtml(fx.meta)}</p>
+                <button class="small-action ghost" type="button" data-action="refresh-fx">Atualizar cotacao</button>
+              </div>
+              <div class="form-actions"><button class="primary-button" type="submit">Salvar ajustes</button></div>
+            </form>
+          </section>
+
+          <article class="content-panel profile-support-card">
+            <div class="panel-head compact"><h2>Convidar amigos</h2><span data-lucide="user-plus" aria-hidden="true"></span></div>
+            <p class="row-meta">${escapeHtml(inviteText)}</p>
+            <button class="secondary-button" type="button" data-action="copy-invite-code" ${inviteCode ? "" : "disabled"}>Copiar convite</button>
+          </article>
+
+          <article class="content-panel">
+            <div class="panel-head"><h2>Backup</h2><span class="chip blue">JSON</span></div>
+            <div class="form-grid"><button class="secondary-button" type="button" data-action="export-data">Exportar dados</button><div class="field"><label for="import-file">Importar backup</label><input id="import-file" type="file" accept="application/json" /></div></div>
+          </article>
+        </div>
+
+        <div class="settings-smart-column settings-smart-system">
+          <section class="content-panel">
+            <div class="panel-head"><h2>Empresas e Rendas</h2><button class="small-action" type="button" data-action="open-modal" data-modal="incomeSource">Empresa</button></div>
+            ${renderIncomeSourcesSettingsPanel()}
+          </section>
+
+          <article class="content-panel profile-support-card">
+            <div class="panel-head compact"><h2>Privacidade</h2><span data-lucide="shield-check" aria-hidden="true"></span></div>
+            <p class="row-meta">Dados financeiros ficam vinculados apenas a sua familia. Chaves sensiveis continuam fora do navegador.</p>
+            <span class="chip green">Protegido</span>
+          </article>
+
+          ${renderCloudSettings()}
+
+          <article class="content-panel profile-support-card danger-zone">
+            <div class="panel-head compact"><h2>Cadastro</h2><span data-lucide="trash-2" aria-hidden="true"></span></div>
+            <p class="row-meta">Opcao para solicitar exclusao definitiva do cadastro e dos dados associados.</p>
+            <button class="danger-button" type="button" data-action="request-account-delete">Excluir cadastro</button>
+          </article>
+
+          <article class="content-panel">
+            <div class="panel-head"><h2>Ambiente</h2><span class="chip gold">PWA</span></div>
+            <div class="list">
+              <div class="list-row compact"><div><p class="row-title">Armazenamento</p><p class="row-meta">${remoteStore.enabled ? "Supabase com cache local" : "Navegador deste dispositivo"}</p></div><span class="chip ${remoteStore.enabled ? "green" : "gold"}">${remoteStore.enabled ? "Online" : "Local"}</span></div>
+              <div class="list-row compact"><div><p class="row-title">Sincronizacao</p><p class="row-meta">${remoteStore.enabled ? "Ativa para usuarios conectados" : "Pronto para conectar Supabase"}</p></div><span class="chip blue">${remoteStore.enabled ? "Supabase" : "Proxima etapa"}</span></div>
+              <button class="danger-button" type="button" data-action="reset-demo">Resetar dados</button>
             </div>
-            <button class="danger-button" type="button" data-action="reset-demo">Resetar dados</button>
-          </div>
-        </article>
+          </article>
+
+          <button class="settings-refresh-button" type="button" data-action="reload-app"><span data-lucide="refresh-cw" aria-hidden="true"></span>Atualizar App</button>
+        </div>
+
+        <div class="settings-smart-column settings-smart-profile">
+          ${renderSmartFinancialProfile()}
+        </div>
       </section>
     `;
+  }
+
+  function renderSmartFinancialProfile() {
+    const model = smartFinancialProfileModel();
+    const avatar = sanitizeProfileAvatar(state.profile.avatarDataUrl);
+    const scoreTone = model.score >= 75 ? "green" : model.score >= 45 ? "gold" : "blue";
+    return `
+      <article class="content-panel smart-financial-profile">
+        <div class="smart-profile-top">
+          <div class="smart-profile-avatar-wrap">
+            <div class="smart-profile-avatar">${avatar ? `<img src="${escapeAttr(avatar)}" alt="Foto do perfil" />` : `<span>${escapeHtml(model.initials)}</span>`}</div>
+            <label class="smart-profile-photo-button" for="profile-avatar-file" title="Alterar foto" aria-label="Alterar foto"><span data-lucide="camera" aria-hidden="true"></span></label>
+            <input id="profile-avatar-file" class="sr-only" type="file" accept="image/png,image/jpeg,image/webp" />
+          </div>
+          <div class="smart-profile-identity">
+            <p class="mini-label">Minha evolucao</p>
+            <h2>${escapeHtml(model.name)}</h2>
+            <p>Nivel ${model.level} · ${escapeHtml(model.title)}</p>
+          </div>
+          ${avatar ? `<button class="smart-profile-remove-photo" type="button" data-action="remove-profile-avatar" title="Remover foto" aria-label="Remover foto"><span data-lucide="trash-2" aria-hidden="true"></span></button>` : ""}
+        </div>
+
+        <div class="smart-profile-stats" aria-label="Resumo da evolucao">
+          <div><span data-lucide="sparkles" aria-hidden="true"></span><strong>${model.points}</strong><small>pontos</small></div>
+          <div><span data-lucide="medal" aria-hidden="true"></span><strong>${model.medals.length}</strong><small>medalhas</small></div>
+          <div><span data-lucide="flame" aria-hidden="true"></span><strong>${model.streak}</strong><small>meses ativos</small></div>
+        </div>
+
+        <section class="smart-health-card">
+          <div class="smart-health-head">
+            <div><p class="mini-label">Saude financeira</p><strong>${model.hasData ? model.score : "--"}<small>${model.hasData ? "/100" : ""}</small></strong></div>
+            <span class="chip ${scoreTone}">${escapeHtml(model.scoreLabel)}</span>
+          </div>
+          <div class="smart-health-meter" role="progressbar" aria-label="Saude financeira" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${model.score}"><span style="width:${model.score}%"></span></div>
+          <p>${escapeHtml(model.explanation)}</p>
+        </section>
+
+        <section class="smart-profile-section">
+          <div class="smart-section-head"><div><p class="mini-label">Atividade financeira</p><strong>Ultimos 6 meses</strong></div><span>${model.activeMonths}/6 ativos</span></div>
+          <div class="smart-activity-chart" aria-label="Atividade financeira dos ultimos seis meses">
+            ${model.activity.map((item) => `<div class="smart-activity-month"><div><span style="height:${item.height}%"></span></div><small>${escapeHtml(item.label)}</small></div>`).join("")}
+          </div>
+        </section>
+
+        <section class="smart-profile-section">
+          <div class="smart-section-head"><div><p class="mini-label">Dimensoes</p><strong>O que estamos avaliando</strong></div></div>
+          <div class="smart-dimension-list">
+            ${model.dimensions.map((item) => `<div class="smart-dimension-row"><div><span>${escapeHtml(item.label)}</span><strong>${item.value}%</strong></div><div><span style="width:${item.value}%"></span></div></div>`).join("")}
+          </div>
+        </section>
+
+        <section class="smart-next-achievement">
+          <span class="smart-achievement-icon" data-lucide="trophy" aria-hidden="true"></span>
+          <div><p class="mini-label">Proxima conquista</p><strong>${escapeHtml(model.nextMedal.label)}</strong><small>${escapeHtml(model.nextMedal.detail)}</small><div class="smart-achievement-progress"><span style="width:${model.nextMedal.progress}%"></span></div></div>
+        </section>
+
+        <div class="smart-earned-medals">
+          <p class="mini-label">Medalhas conquistadas</p>
+          <div>${model.medals.length ? model.medals.map((item) => `<span title="${escapeAttr(item.detail)}"><i data-lucide="${item.icon}" aria-hidden="true"></i>${escapeHtml(item.label)}${item.tier !== "permanent" ? ` · ${escapeHtml(achievementTierLabel(item.tier))}` : ""}</span>`).join("") : `<small>Suas conquistas aparecerao aqui.</small>`}</div>
+        </div>
+
+        <div class="smart-profile-actions">
+          <button class="secondary-button" type="button" data-action="open-achievements"><span data-lucide="medal" aria-hidden="true"></span>Ver todas</button>
+          <button class="primary-button" type="button" data-action="close-financial-month" data-month="${escapeAttr(model.month)}" ${model.canCloseMonth ? "" : "disabled"}><span data-lucide="calendar-check" aria-hidden="true"></span>${model.monthClosed ? "Mes fechado" : model.canCloseMonth ? "Fechar mes" : "Mes em andamento"}</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function smartFinancialProfileModel() {
+    const month = state.ui.selectedMonth || currentMonth();
+    const monthly = Array.from({ length: 6 }, (_, index) => addMonths(month, index - 5));
+    const activity = monthly.map((item) => smartMonthActivity(item));
+    const current = smartScoreBreakdown(month);
+    const profileFields = [state.profile.country, state.profile.city, state.profile.age, state.profile.gender].filter(Boolean).length;
+    const categorized = current.transactions.filter((item) => String(item.category || "").trim() && !/^outros?$/i.test(item.category));
+    const goalProgressRows = activeFinancialGoals().map((goal) => goalProgress(goal));
+    const completedGoals = goalProgressRows.filter((item) => item.target > 0 && item.percent >= 100).length;
+    const reserve = emergencyGoal();
+    const reserveProgress = reserve ? goalProgress(reserve) : { percent: 0 };
+    const paidObligations = current.obligations.filter((item) => item.paid).length;
+    const points = Math.round(
+      activity.filter((item) => item.active).length * 25 +
+      Math.min(200, categorized.length * 10) +
+      Math.min(240, paidObligations * 40) +
+      completedGoals * 100 +
+      Math.min(200, reserveProgress.percent * 2) +
+      profileFields * 10
+    );
+    const level = Math.max(1, Math.floor(points / 400) + 1);
+    const titles = ["Organizador", "Observador", "Planejador", "Constante", "Estrategista", "Guardiao", "Mentor"];
+    const title = titles[Math.min(titles.length - 1, Math.floor((level - 1) / 2))];
+    const activeMonths = activity.filter((item) => item.active).length;
+    const achievementRows = achievementProgressRows();
+    const earnedKeys = new Map((state.achievementLedger || []).map((item) => [item.key, item]));
+    const medals = achievementRows
+      .filter((item) => earnedKeys.has(item.key))
+      .map((item) => ({ ...item, tier: earnedKeys.get(item.key).tier }))
+      .slice(0, 4);
+    const nextMedal = achievementRows.find((item) => !earnedKeys.has(item.key) || (item.nextTier && item.progress < 100))
+      || { label: "Evolucao continua", detail: "Continue acompanhando seus habitos financeiros.", progress: 100 };
+    const maxActivity = Math.max(1, ...activity.map((item) => item.count));
+    const name = smartProfileDisplayName();
+    return {
+      name,
+      initials: name.split(/\s+/).filter(Boolean).slice(0, 2).map((item) => item[0]?.toUpperCase()).join("") || "NF",
+      title,
+      level,
+      points,
+      score: current.score,
+      hasData: current.hasData,
+      scoreLabel: !current.hasData ? "Comece agora" : current.score >= 75 ? "Boa evolucao" : current.score >= 45 ? "Em desenvolvimento" : "Primeiros passos",
+      explanation: smartScoreExplanation(current),
+      streak: activeMonths,
+      activeMonths,
+      activity: activity.map((item) => ({ ...item, height: item.active ? Math.max(16, Math.round((item.count / maxActivity) * 100)) : 5 })),
+      dimensions: current.dimensions,
+      medals,
+      nextMedal,
+      month,
+      monthClosed: Boolean(financialSnapshotForMonth(month)),
+      canCloseMonth: month < currentMonth() && !financialSnapshotForMonth(month)
+    };
+  }
+
+  function achievementDefinitions() {
+    return [
+      { key: "first_steps", label: "Primeiro Passo", detail: "Registre e categorize suas primeiras movimentacoes.", icon: "sprout", category: "Onboarding", permanent: true },
+      { key: "green_month", label: "Mes no Verde", detail: "Feche meses com receitas superiores as despesas.", icon: "circle-check-big", category: "Equilibrio", tiers: { bronze: 1, silver: 3, gold: 6, diamond: 12 } },
+      { key: "first_reserve", label: "Primeira Reserva", detail: "Crie a reserva de emergencia e faca o primeiro aporte.", icon: "shield-check", category: "Reserva", permanent: true },
+      { key: "goal_achieved", label: "Meta Alcancada", detail: "Complete sua primeira meta financeira.", icon: "flag", category: "Metas", permanent: true },
+      { key: "no_surprises", label: "Sem Surpresas", detail: "Mantenha suas obrigacoes sem atrasos por meses consecutivos.", icon: "alarm-clock-check", category: "Pontualidade", tiers: { bronze: 3, silver: 6, gold: 12, diamond: 24 } },
+      { key: "debt_freedom", label: "Liberdade Conquistada", detail: "Quite completamente uma divida ou financiamento acompanhado.", icon: "unlock", category: "Dividas", permanent: true },
+      { key: "beginner_investor", label: "Investidor Iniciante", detail: "Depois de iniciar sua reserva, registre um objetivo de longo prazo.", icon: "trending-up", category: "Investimentos", permanent: true },
+      { key: "financial_balance", label: "Equilibrio Financeiro", detail: "Feche um mes no verde, sem atrasos e com poupanca realizada.", icon: "scale", category: "Equilibrio", permanent: true }
+    ];
+  }
+
+  function achievementProgressRows() {
+    return achievementDefinitions().map((definition) => ({ ...definition, ...evaluateAchievement(definition) }));
+  }
+
+  function evaluateAchievement(definition) {
+    const snapshots = normalizeFinancialSnapshots(state.financialSnapshots);
+    const currentTransactions = (state.transactions || []).filter((item) => outflowTypes.includes(item.type) && !item.settlementOnly && String(item.category || "").trim());
+    const reserve = emergencyGoal();
+    const reserveProgress = reserve ? goalProgress(reserve) : { saved: 0, percent: 0 };
+    const nonEmergencyGoals = activeFinancialGoals().filter((goal) => goal.templateKey !== "emergency");
+    const completedGoal = activeFinancialGoals().some((goal) => {
+      const progress = goalProgress(goal);
+      return progress.target > 0 && progress.percent >= 100;
+    });
+    const debtPaid = (state.debts || []).some((debt) => {
+      const progress = debtInstallmentProgress(debt, state.ui.selectedMonth);
+      return Boolean(debt.paidOffAt || debt.status === "paid" || (progress.total > 0 && progress.paid >= progress.total));
+    });
+    let value = 0;
+    let unlocked = false;
+    if (definition.key === "first_steps") {
+      value = currentTransactions.length || (activeBankAccounts().length && userIncomeSources().length ? 1 : 0);
+      unlocked = value > 0;
+    } else if (definition.key === "green_month") {
+      value = consecutiveSnapshotCount((item) => item.income > item.expenses);
+      unlocked = value >= 1;
+    } else if (definition.key === "first_reserve") {
+      value = reserveProgress.saved > 0 ? 1 : 0;
+      unlocked = value > 0;
+    } else if (definition.key === "goal_achieved") {
+      value = completedGoal ? 1 : 0;
+      unlocked = completedGoal;
+    } else if (definition.key === "no_surprises") {
+      value = consecutiveSnapshotCount((item) => item.obligationCount > 0 && item.overdueObligations === 0);
+      unlocked = value >= 3;
+    } else if (definition.key === "debt_freedom") {
+      value = debtPaid ? 1 : 0;
+      unlocked = debtPaid;
+    } else if (definition.key === "beginner_investor") {
+      value = reserveProgress.saved > 0 && ((state.investments || []).length > 0 || nonEmergencyGoals.length > 0) ? 1 : 0;
+      unlocked = value > 0;
+    } else if (definition.key === "financial_balance") {
+      value = snapshots.filter((item) => item.income > item.expenses && item.overdueObligations === 0 && item.savingsAmount > 0).length;
+      unlocked = value > 0;
+    }
+    const tier = definition.tiers ? achievementTierForValue(value, definition.tiers) : (unlocked ? "permanent" : "locked");
+    const next = achievementNextTier(value, definition.tiers, unlocked);
+    return {
+      value,
+      unlocked,
+      tier,
+      nextTier: next.tier,
+      progress: next.target ? clamp(Math.round((value / next.target) * 100), 0, 100) : (unlocked ? 100 : 0),
+      progressLabel: definition.tiers ? `${value} ${value === 1 ? "mes" : "meses"}${next.target > value ? ` · ${achievementTierLabel(next.tier)} em ${next.target}` : ""}` : (unlocked ? "Conquistada" : "Ainda bloqueada")
+    };
+  }
+
+  function achievementTierForValue(value, tiers = {}) {
+    return ["diamond", "gold", "silver", "bronze"].find((tier) => value >= number(tiers[tier])) || "locked";
+  }
+
+  function achievementNextTier(value, tiers = null, unlocked = false) {
+    if (!tiers) return { tier: unlocked ? "permanent" : "permanent", target: 1 };
+    const next = ["bronze", "silver", "gold", "diamond"].find((tier) => value < number(tiers[tier]));
+    return next ? { tier: next, target: number(tiers[next]) } : { tier: "diamond", target: number(tiers.diamond) || 1 };
+  }
+
+  function sanitizeAchievementTier(value) {
+    const tier = String(value || "locked").toLowerCase();
+    return ["locked", "permanent", "bronze", "silver", "gold", "diamond"].includes(tier) ? tier : "locked";
+  }
+
+  function achievementTierRank(value) {
+    return { locked: 0, permanent: 1, bronze: 1, silver: 2, gold: 3, diamond: 4 }[sanitizeAchievementTier(value)] || 0;
+  }
+
+  function achievementTierLabel(value) {
+    return { locked: "Bloqueada", permanent: "Conquistada", bronze: "Bronze", silver: "Prata", gold: "Ouro", diamond: "Diamante" }[sanitizeAchievementTier(value)];
+  }
+
+  function refreshAchievementLedger() {
+    if (!state || !Array.isArray(state.achievementLedger)) return false;
+    let changed = false;
+    const now = new Date().toISOString();
+    achievementProgressRows().forEach((row) => {
+      if (!row.unlocked) return;
+      const existing = state.achievementLedger.find((item) => item.key === row.key);
+      if (!existing) {
+        state.achievementLedger.push({ id: `achievement:${row.key}`, key: row.key, tier: row.tier, unlockedAt: now, updatedAt: now });
+        changed = true;
+      } else if (achievementTierRank(row.tier) > achievementTierRank(existing.tier)) {
+        existing.tier = row.tier;
+        existing.updatedAt = now;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  function financialSnapshotForMonth(month) {
+    return (state.financialSnapshots || []).find((item) => item.month === month) || null;
+  }
+
+  function consecutiveSnapshotCount(predicate) {
+    const rows = normalizeFinancialSnapshots(state.financialSnapshots).slice().sort((a, b) => b.month.localeCompare(a.month));
+    if (!rows.length) return 0;
+    let count = 0;
+    let expected = rows[0].month;
+    for (const row of rows) {
+      if (row.month !== expected || !predicate(row)) break;
+      count += 1;
+      expected = addMonths(expected, -1);
+    }
+    return count;
+  }
+
+  function buildFinancialSnapshot(month) {
+    const summary = summarizeMonth(month, "global");
+    const obligations = financialCalendarItems(month, "global").filter((item) => item.kind === "expense" && number(item.amount) > 0);
+    const reserve = emergencyGoal();
+    const reserveStats = reserve ? goalProgress(reserve) : { savedPrimary: 0 };
+    const debtTotal = (state.debts || []).reduce((total, debt) => {
+      const currency = sanitizeCurrency(debt.currency, primaryCurrency());
+      const progress = debtInstallmentProgress(debt, month);
+      const outstanding = number(debt.outstandingAmount) || Math.max(0, number(debt.originalAmount) - progress.paid * number(debt.installmentAmount));
+      return total + convert(outstanding, currency, primaryCurrency(), latestRate(month));
+    }, 0);
+    const score = smartScoreBreakdown(month).score;
+    const income = Math.max(0, number(summary.actualInflow));
+    const expenses = Math.max(0, number(summary.actualExpenses) + number(summary.actualWiseOut) + number(summary.actualFees));
+    const investments = Math.max(0, number(summary.actualInvestments));
+    return {
+      id: `snapshot:${month}`,
+      month,
+      currency: summary.currency,
+      income: round(income, 2),
+      expenses: round(expenses, 2),
+      investments: round(investments, 2),
+      balance: round(income - expenses - investments, 2),
+      savingsAmount: round(Math.max(0, income - expenses - investments), 2),
+      obligationCount: obligations.length,
+      paidObligations: obligations.filter((item) => item.paid).length,
+      overdueObligations: obligations.filter((item) => !item.paid && item.tone === "red").length,
+      reserveSaved: round(number(reserveStats.savedPrimary), 2),
+      reserveMonths: expenses > 0 ? round(number(reserveStats.savedPrimary) / expenses, 2) : 0,
+      totalDebt: round(debtTotal, 2),
+      score,
+      closedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  function closeFinancialMonth(month = state.ui.selectedMonth) {
+    if (!/^\d{4}-\d{2}$/.test(String(month || ""))) return;
+    if (month >= currentMonth()) {
+      showToast("O mes pode ser fechado somente depois de terminar.");
+      return;
+    }
+    if (financialSnapshotForMonth(month)) {
+      showToast("Este mes ja foi fechado.");
+      return;
+    }
+    const snapshot = buildFinancialSnapshot(month);
+    state.financialSnapshots.push(snapshot);
+    refreshAchievementLedger();
+    saveState({ remoteNow: true });
+    renderKeepingScroll();
+    showToast(`${formatMonthLabel(month)} fechado e conquistas atualizadas.`);
+  }
+
+  function showAchievementsModal() {
+    const rows = achievementProgressRows();
+    const earned = new Map((state.achievementLedger || []).map((item) => [item.key, item]));
+    modalRoot.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal modal-achievements" role="dialog" aria-modal="true" aria-label="Todas as conquistas">
+          <div class="modal-head"><div><p class="mini-label">Minha evolucao</p><h2>Todas as conquistas</h2></div><button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button></div>
+          <p class="achievement-modal-intro">As conquistas comparam voce apenas com sua propria evolucao. Feche cada mes para registrar sequencias com seguranca.</p>
+          <div class="achievement-library">
+            ${rows.map((row) => {
+              const ledger = earned.get(row.key);
+              const tier = ledger?.tier || row.tier;
+              return `<article class="achievement-library-card ${ledger ? "is-earned" : "is-locked"}">
+                <div class="achievement-library-icon"><span data-lucide="${row.icon}" aria-hidden="true"></span></div>
+                <div><div class="achievement-library-title"><strong>${escapeHtml(row.label)}</strong><span class="achievement-tier is-${escapeAttr(tier)}">${escapeHtml(achievementTierLabel(tier))}</span></div><p>${escapeHtml(row.detail)}</p><small>${escapeHtml(row.progressLabel)}</small><div class="achievement-library-progress"><span style="width:${row.progress}%"></span></div></div>
+              </article>`;
+            }).join("")}
+          </div>
+        </div>
+      </div>`;
+    refreshIcons();
+  }
+
+  function smartScoreBreakdown(month) {
+    const transactions = monthTransactions(month, "global");
+    const obligations = financialCalendarItems(month, "global").filter((item) => item.kind === "expense" && number(item.amount) > 0);
+    const overdue = obligations.filter((item) => !item.paid && item.tone === "red").length;
+    const paid = obligations.filter((item) => item.paid).length;
+    const categorized = transactions.filter((item) => String(item.category || "").trim() && !/^outros?$/i.test(item.category)).length;
+    const goals = activeFinancialGoals();
+    const reserve = emergencyGoal();
+    const reserveProgress = reserve ? goalProgress(reserve).percent : 0;
+    const hasData = Boolean(transactions.length || obligations.length || goals.length || activeBankAccounts().length);
+    const planning = clamp(Math.round((goals.length ? 55 : 20) + (obligations.length ? 25 : 0) + (projectedSalaryForMonth(month) > 0 ? 20 : 0)), 0, 100);
+    const accounts = obligations.length ? clamp(Math.round((paid / obligations.length) * 100) - overdue * 20, 0, 100) : (hasData ? 65 : 0);
+    const reserveScore = reserve ? clamp(Math.round(35 + Math.min(65, reserveProgress)), 0, 100) : (hasData ? 15 : 0);
+    const organization = transactions.length ? clamp(Math.round((categorized / transactions.length) * 100), 0, 100) : (hasData ? 35 : 0);
+    const consistency = clamp(Math.round((smartActiveMonthCount(month) / 6) * 100), 0, 100);
+    const score = hasData ? Math.round(planning * 0.25 + reserveScore * 0.2 + accounts * 0.2 + consistency * 0.15 + organization * 0.2) : 0;
+    return {
+      hasData,
+      score,
+      overdue,
+      transactions,
+      obligations,
+      dimensions: [
+        { label: "Planejamento", value: planning },
+        { label: "Contas em dia", value: accounts },
+        { label: "Reserva", value: reserveScore },
+        { label: "Organizacao", value: organization },
+        { label: "Consistencia", value: consistency }
+      ]
+    };
+  }
+
+  function smartMonthActivity(month) {
+    const transactions = monthTransactions(month, "global");
+    const obligations = financialCalendarItems(month, "global").filter((item) => item.kind === "expense" && number(item.amount) > 0);
+    const contributions = (state.goalContributions || []).filter((item) => String(item.date || "").slice(0, 7) === month);
+    const count = transactions.length + obligations.filter((item) => item.paid).length + contributions.length;
+    return { month, label: shortMonthLabel(month), count, active: count > 0 };
+  }
+
+  function smartActiveMonthCount(month) {
+    return Array.from({ length: 6 }, (_, index) => smartMonthActivity(addMonths(month, index - 5))).filter((item) => item.active).length;
+  }
+
+  function smartScoreExplanation(model) {
+    if (!model.hasData) return "Cadastre contas e movimentacoes para iniciar sua evolucao.";
+    if (model.overdue > 0) return `${model.overdue} ${model.overdue === 1 ? "obrigacao precisa" : "obrigacoes precisam"} de atencao neste mes.`;
+    const strongest = model.dimensions.slice().sort((a, b) => b.value - a.value)[0];
+    return `${strongest.label} e seu destaque atual. A nota considera apenas seus proprios habitos.`;
+  }
+
+  function smartProfileDisplayName() {
+    const metadata = remoteSession.user?.user_metadata || {};
+    const candidate = metadata.display_name || metadata.name || state.settings.familyName || remoteSession.user?.email?.split("@")[0] || "Usuario Nekuma";
+    return String(candidate).trim() || "Usuario Nekuma";
+  }
+
+  function sanitizeProfileAvatar(value) {
+    const avatar = String(value || "");
+    return /^data:image\/(?:png|jpeg|webp);base64,/i.test(avatar) && avatar.length <= 900000 ? avatar : "";
+  }
+
+  async function saveProfileAvatar(file) {
+    if (!file) return;
+    if (!/^image\/(png|jpeg|webp)$/i.test(file.type) || file.size > 8 * 1024 * 1024) {
+      showToast("Use uma imagem PNG, JPG ou WebP de ate 8 MB.");
+      return;
+    }
+    try {
+      const source = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const image = await new Promise((resolve, reject) => {
+        const element = new Image();
+        element.onload = () => resolve(element);
+        element.onerror = reject;
+        element.src = source;
+      });
+      const size = Math.min(320, image.naturalWidth, image.naturalHeight);
+      const canvas = document.createElement("canvas");
+      canvas.width = 320;
+      canvas.height = 320;
+      const context = canvas.getContext("2d");
+      const cropX = Math.max(0, (image.naturalWidth - size) / 2);
+      const cropY = Math.max(0, (image.naturalHeight - size) / 2);
+      context.drawImage(image, cropX, cropY, size, size, 0, 0, 320, 320);
+      state.profile.avatarDataUrl = canvas.toDataURL("image/jpeg", 0.82);
+      saveState();
+      renderKeepingScroll();
+      showToast("Foto do perfil atualizada.");
+    } catch (error) {
+      showToast("Nao foi possivel processar esta imagem.");
+    }
+  }
+
+  function removeProfileAvatar() {
+    state.profile.avatarDataUrl = "";
+    saveState();
+    renderKeepingScroll();
+    showToast("Foto do perfil removida.");
   }
 
   function renderCloudSettings() {
@@ -5066,11 +6185,12 @@
 
   function renderCryptoTransactionDetails() {
     const assets = [...(state.cryptoAssets || [])].sort((a, b) => String(b.purchaseDate || "").localeCompare(String(a.purchaseDate || "")));
+    const ledgerEntries = new Map(cryptoManualLedger(primaryCurrency()).entries.map((entry) => [entry.id, entry]));
     return `
       <section class="content-panel crypto-transactions-card">
         <div class="panel-head">
           <div><span class="mini-label">Histórico de compras e custódia</span><h2>Detalhamento Cripto</h2><p class="row-meta">Registros informados pelo usuário. Conexões de carteira não fornecem automaticamente o preço original de compra.</p></div>
-          <span class="chip blue">${assets.length} ${assets.length === 1 ? "compra" : "compras"}</span>
+          <span class="chip blue">${assets.length} ${assets.length === 1 ? "operação" : "operações"}</span>
         </div>
         ${assets.length ? `
           <div class="crypto-transaction-list">
@@ -5081,19 +6201,26 @@
               const cost = number(item.costAmount);
               const currency = sanitizeCurrency(item.costCurrency, primaryCurrency());
               const unitPrice = quantity > 0 ? cost / quantity : 0;
+              const operationType = normalizeCryptoOperationType(item.operationType);
+              const operationLabel = operationType === "sell" ? "Venda" : operationType === "receive" ? "Recebimento" : "Compra";
+              const ledgerEntry = ledgerEntries.get(item.id);
+              const fee = number(item.feeAmount);
               const transfers = normalizeCryptoCustodyTransfers(item.custodyTransfers);
               const purchaseProvider = String(item.provider || item.note || "Não informado").trim();
               const currentProvider = cryptoCurrentProvider(item);
               return `
                 <article class="crypto-transaction-item">
                   <div class="crypto-transaction-heading">
-                    <div class="crypto-transaction-asset">${renderCryptoTokenIcon({ symbol, color: meta.color })}<div><strong>${escapeHtml(item.customName || meta.name || symbol)}</strong><small>${escapeHtml(symbol)} · compra em ${escapeHtml(formatShortDate(item.purchaseDate))}</small></div></div>
+                    <div class="crypto-transaction-asset">${renderCryptoTokenIcon({ symbol, color: meta.color })}<div><strong>${escapeHtml(item.customName || meta.name || symbol)}</strong><small>${escapeHtml(symbol)} · ${escapeHtml(operationLabel.toLowerCase())} em ${escapeHtml(formatShortDate(item.purchaseDate))}</small></div></div>
                     <button class="small-action ghost" type="button" data-action="open-modal" data-modal="crypto" data-id="${escapeAttr(item.id)}"><i data-lucide="pencil" aria-hidden="true"></i>Editar</button>
                   </div>
                   <div class="crypto-transaction-metrics">
-                    <div><span>Valor pago</span><strong>${formatMoney(cost, currency)}</strong></div>
-                    <div><span>Quantidade comprada</span><strong>${escapeHtml(formatCryptoAmount(quantity))} ${escapeHtml(symbol)}</strong></div>
-                    <div><span>Preço na compra</span><strong>${formatDetailedCryptoPrice(unitPrice, currency)}</strong></div>
+                    <div><span>${operationType === "sell" ? "Valor recebido" : "Valor informado"}</span><strong>${formatMoney(cost, currency)}</strong></div>
+                    <div><span>Quantidade</span><strong>${escapeHtml(formatCryptoAmount(quantity))} ${escapeHtml(symbol)}</strong></div>
+                    <div><span>Preço da operação</span><strong>${formatDetailedCryptoPrice(unitPrice, currency)}</strong></div>
+                    <div><span>Taxa</span><strong>${fee > 0 ? formatMoney(fee, item.feeCurrency || currency) : "Sem taxa"}</strong></div>
+                    <div><span>Preço médio após operação</span><strong>${ledgerEntry?.averageAfter > 0 ? formatDetailedCryptoPrice(ledgerEntry.averageAfter, primaryCurrency()) : "—"}</strong></div>
+                    ${operationType === "sell" ? `<div><span>Resultado realizado</span><strong class="${number(ledgerEntry?.realizedPnl) >= 0 ? "income" : "expense"}">${formatSignedMoney(number(ledgerEntry?.realizedPnl), primaryCurrency())}</strong></div>` : ""}
                     <div><span>Corretora da compra</span><strong>${escapeHtml(purchaseProvider)}</strong></div>
                     <div><span>Custódia atual</span><strong>${escapeHtml(currentProvider)}</strong></div>
                   </div>
@@ -5185,7 +6312,7 @@
     return `
       <div class="crypto-table-scroll" role="region" aria-label="Detalhamento da carteira cripto" tabindex="0">
         <table class="crypto-portfolio-table">
-          <thead><tr><th>Ativo / investido</th><th>Preço atual</th><th>24h</th><th>7d</th><th>Rendimento</th><th>Gráfico 7 dias</th><th>Carteira</th></tr></thead>
+          <thead><tr><th>Ativo / investido</th><th>Preço médio</th><th>Preço atual</th><th>24h</th><th>7d</th><th>Rendimento</th><th>Gráfico 7 dias</th><th>Carteira</th></tr></thead>
           <tbody>
             ${rows.map((item) => {
               const hidden = Boolean(state.ui.hideCryptoDetails);
@@ -5195,10 +6322,11 @@
               return `
                 <tr>
                   <td data-label="Ativo / investido"><div class="crypto-table-asset">${renderCryptoTokenIcon(item)}<div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.symbol)} · ${hidden ? "••••" : `${formatCryptoAmount(item.quantity)} ${escapeHtml(item.symbol)}`}</small><span class="crypto-table-invested">Investido: ${hidden ? "••••" : item.hasCost ? formatMoney(item.cost, item.currency) : "não informado"}</span></div></div></td>
+                  <td data-label="Preço médio"><strong>${hidden ? "••••" : item.hasCost && item.averagePrice > 0 ? formatDetailedCryptoPrice(item.averagePrice, item.currency) : "—"}</strong><small>${item.hasCost ? `${item.purchaseCount || 0} compras` : "Custo necessário"}</small></td>
                   <td data-label="Preço atual"><strong>${formatDetailedCryptoPrice(item.price, item.currency)}</strong><small>${escapeHtml(item.currency)}</small></td>
                   <td data-label="24h">${renderCryptoChange(change24h)}</td>
                   <td data-label="7d">${renderCryptoChange(change7d)}</td>
-                  <td data-label="Rendimento">${hidden ? `<strong>••••</strong>` : hasReturn ? `<strong class="${item.pnl >= 0 ? "income" : "expense"}">${formatPercent(item.pnlPct)}</strong><small class="${item.pnl >= 0 ? "income" : "expense"}">${formatSignedMoney(item.pnl, item.currency)}</small>` : `<strong>—</strong><small>Custo necessário</small>`}</td>
+                  <td data-label="Rendimento">${hidden ? `<strong>••••</strong>` : hasReturn ? `<strong class="${item.pnl >= 0 ? "income" : "expense"}">${formatPercent(item.pnlPct)}</strong><small class="${item.pnl >= 0 ? "income" : "expense"}">Não realizado: ${formatSignedMoney(item.pnl, item.currency)}</small>${number(item.realizedPnl) !== 0 ? `<small class="${number(item.realizedPnl) >= 0 ? "income" : "expense"}">Realizado: ${formatSignedMoney(number(item.realizedPnl), item.currency)}</small>` : ""}` : `<strong>—</strong><small>Custo necessário</small>`}</td>
                   <td data-label="Gráfico 7 dias">${renderCryptoSparkline(item.symbol)}</td>
                   <td data-label="Carteira"><span class="crypto-wallet-source is-${escapeAttr(item.sourceType)}">${escapeHtml(item.provider)}</span><small>${escapeHtml(item.sourceDetail || "Custódia informada")}</small></td>
                 </tr>
@@ -5213,22 +6341,12 @@
 
   function cryptoPortfolioRows(currency = primaryCurrency()) {
     const rows = [];
-    const manualGroups = new Map();
-    cryptoAssetRows(currency).forEach((item) => {
-      const provider = item.provider || "Não informado";
-      const key = `${item.symbol}|${normalizeLookupText(provider)}`;
-      const current = manualGroups.get(key) || { ...item, quantity: 0, cost: 0, value: 0, pnl: 0, hasCost: true, provider, sourceType: "manual", sourceDetail: "Cadastro manual" };
-      current.quantity += item.quantity;
-      current.cost += item.cost;
-      current.value += item.value;
-      current.pnl += item.pnl;
-      manualGroups.set(key, current);
-    });
-    manualGroups.forEach((item) => {
-      item.pnlPct = item.cost > 0 ? round((item.pnl / item.cost) * 100, 2) : null;
-      item.price = cryptoPrice(item.symbol, currency) || (item.quantity ? item.value / item.quantity : 0);
-      rows.push(item);
-    });
+    cryptoAssetRows(currency).forEach((item) => rows.push({
+      ...item,
+      hasCost: item.cost > 0,
+      sourceType: "manual",
+      sourceDetail: `${item.purchaseCount || 0} compras · ${item.saleCount || 0} vendas`
+    }));
 
     const normalizedWallet = normalizeWeb3Wallet(state.web3Wallet);
     const wallets = normalizedWallet.wallets.length ? normalizedWallet.wallets : normalizedWallet.address ? [normalizedWallet] : [];
@@ -5371,6 +6489,112 @@
 
   function sanitizeCryptoRiskProfile(value) {
     return ["conservative", "moderate", "aggressive"].includes(value) ? value : "moderate";
+  }
+
+  function sanitizeWorkspaceTheme(value) {
+    const aliases = { fuji: "exclusive", ocean: "cool", forest: "natural", ember: "traditional" };
+    const normalized = aliases[value] || value;
+    const themes = ["warm", "cool", "soft", "powerful", "modern", "futuristic", "natural", "exclusive", "popular", "romantic", "vintage", "traditional", "dark", "personalized", "custom"];
+    return themes.includes(normalized) ? normalized : "natural";
+  }
+
+  function workspaceThemeOptions() {
+    return [
+      { id: "warm", name: "Warm", colors: ["#FFE194", "#FFB085", "#90AACB", "#F77575"] },
+      { id: "cool", name: "Cool", colors: ["#CFE9F7", "#3282B8", "#00909E", "#010038"] },
+      { id: "soft", name: "Soft", colors: ["#EEC089", "#D7D0B6", "#8A9DA4", "#4B4D63"] },
+      { id: "powerful", name: "Powerful", colors: ["#FFCA03", "#F3950D", "#CD1818", "#0F2C67"] },
+      { id: "modern", name: "Modern", colors: ["#F5E8C7", "#9E7777", "#E5B299", "#7D5A50"] },
+      { id: "futuristic", name: "Futuristic", colors: ["#FFE459", "#F43B86", "#3D087B", "#11052C"] },
+      { id: "natural", name: "Natural", colors: ["#F4E5C2", "#0B8457", "#096C47", "#323232"] },
+      { id: "exclusive", name: "Exclusive", colors: ["#E0C097", "#B85C38", "#5C3D2E", "#2D2424"] },
+      { id: "popular", name: "Popular", colors: ["#9D9D9D", "#F8F0DF", "#FEFBF3", "#79B4B7"] },
+      { id: "romantic", name: "Romantic", colors: ["#F2AAAA", "#E36387", "#A6DCEF", "#251F44"] },
+      { id: "vintage", name: "Vintage", colors: ["#CAE4DB", "#CDC7BE", "#87A7B3", "#766161"] },
+      { id: "traditional", name: "Traditional", colors: ["#393232", "#E48257", "#F2EDD7", "#3A6351"] },
+      { id: "dark", name: "Dark", colors: ["#525252", "#414141", "#CA3E47", "#311D3F"] }
+    ];
+  }
+
+  function workspaceThemePreviewColors(theme) {
+    if (theme === "personalized") return sanitizeWorkspacePaletteColors(state.ui.workspacePaletteColors);
+    return workspaceThemeOptions().find((option) => option.id === theme)?.colors || workspaceThemeOptions().find((option) => option.id === "natural").colors;
+  }
+
+  function sanitizeWorkspacePaletteColors(colors) {
+    const defaults = ["#F4E5C2", "#0B8457", "#096C47", "#323232"];
+    return defaults.map((fallback, index) => sanitizeColor(Array.isArray(colors) ? colors[index] : "", fallback).toUpperCase());
+  }
+
+  function workspacePaletteTextColor(color) {
+    const rgb = hexToRgbValues(color).split(",").map(Number);
+    return rgb[0] * .299 + rgb[1] * .587 + rgb[2] * .114 > 158 ? "#202622" : "#FFFFFF";
+  }
+
+  function applyWorkspacePalette() {
+    const theme = sanitizeWorkspaceTheme(state.ui.workspaceTheme);
+    document.body.dataset.workspaceTheme = theme;
+    const properties = ["--theme-bg", "--theme-surface", "--theme-secondary", "--theme-ink", "--theme-text", "--theme-button-text"];
+    properties.forEach((property) => document.body.style.removeProperty(property));
+    if (theme !== "personalized") return;
+    const colors = sanitizeWorkspacePaletteColors(state.ui.workspacePaletteColors);
+    document.body.style.setProperty("--theme-bg", colors[0]);
+    document.body.style.setProperty("--theme-surface", colors[1]);
+    document.body.style.setProperty("--theme-secondary", colors[2]);
+    document.body.style.setProperty("--theme-ink", colors[3]);
+    document.body.style.setProperty("--theme-text", workspacePaletteTextColor(colors[0]));
+    document.body.style.setProperty("--theme-button-text", workspacePaletteTextColor(colors[1]));
+  }
+
+  function workspaceBackgroundStorageKey() {
+    return `nekuma-workspace-background:${currentUserAuthor().id || "local"}`;
+  }
+
+  function workspaceCustomBackground() {
+    try {
+      return localStorage.getItem(workspaceBackgroundStorageKey()) || "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function applyWorkspaceBackgroundFile(file) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Escolha uma imagem valida.");
+      return;
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      showToast("A imagem deve ter no maximo 12 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1800;
+        canvas.height = 620;
+        const context = canvas.getContext("2d");
+        const scale = Math.max(canvas.width / image.width, canvas.height / image.height);
+        const width = image.width * scale;
+        const height = image.height * scale;
+        context.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+        try {
+          localStorage.setItem(workspaceBackgroundStorageKey(), canvas.toDataURL("image/webp", 0.8));
+          state.ui.workspaceTheme = "custom";
+          saveState();
+          closeModal();
+          renderKeepingScroll();
+          showToast("Imagem aplicada ao dashboard neste dispositivo.");
+        } catch (error) {
+          showToast("Nao foi possivel salvar essa imagem. Tente um arquivo menor.");
+        }
+      };
+      image.onerror = () => showToast("Nao foi possivel ler essa imagem.");
+      image.src = String(reader.result || "");
+    };
+    reader.readAsDataURL(file);
   }
 
   function cryptoRadarSnapshot() {
@@ -5865,7 +7089,7 @@
       add({ ...item, type: 'investment', amount: Math.max(0, number(item.monthlyContribution) - recorded), bankName: item.provider });
     });
     const matchedCrypto = new Set();
-    (state.cryptoAssets || []).filter(item => item.purchaseDate?.slice(0, 7) === month).forEach(item => {
+    (state.cryptoAssets || []).filter(item => normalizeCryptoOperationType(item.operationType) !== "sell" && item.purchaseDate?.slice(0, 7) === month).forEach(item => {
       const country = bankAccountById(item.bankAccountId)?.country || item.country || ({ BRL: 'brasil', JPY: 'japao' }[item.costCurrency]);
       const recorded = transactions.find(tx => !matchedCrypto.has(tx.id) && expenseCategory(tx)[0] === 'crypto' &&
         (tx.cryptoAssetId === item.id || (tx.date === item.purchaseDate && tx.currency === item.costCurrency && number(tx.amount) === number(item.costAmount))));
@@ -6179,6 +7403,7 @@
               <div class="calendar-amount ${item.kind === "income" ? "income" : "expense"}">
                 <span class="calendar-value">${item.kind === "income" ? "+" : "-"} ${formatMoneyWithPrimary(item.amount, item.currency, item.date?.slice(0, 7) || state.ui.selectedMonth)}</span>
                 <span class="chip ${item.tone}">${escapeHtml(item.status)}</span>
+                ${item.kind !== "income" ? `<span class="chip ${reconciliationStatusMeta(item.reconciliationStatus).tone} reconciliation-chip">${escapeHtml(reconciliationStatusMeta(item.reconciliationStatus).label)}</span>` : ""}
                 ${canPay ? `<button class="small-action ghost calendar-pay-button" type="button" data-action="open-modal" data-modal="monthlyPayment" data-payment-id="${escapeAttr(item.paymentRef)}">Pagar</button>` : ""}
               </div>
             </div>
@@ -6192,6 +7417,25 @@
     if (!item || item.kind === "income" || item.paid || !item.paymentRef || !number(item.amount)) return false;
     if (item.paymentMethod === "card" || item.paymentMethod === "bank") return false;
     return ["commitment", "debt", "card", "subscription", "vehicle"].includes(String(item.paymentRef).split(":")[0]);
+  }
+
+  function renderCryptoDashboardSummary() {
+    const hidden = Boolean(state.ui.hideCryptoDetails);
+    const currency = primaryCurrency();
+    const rows = cryptoGroupedRows(cryptoPortfolioRows(currency)).filter((item) => number(item.quantity) > 0);
+    const total = rows.reduce((sum, item) => sum + number(item.value), 0);
+    if (!rows.length) {
+      return `<div class="crypto-dashboard-empty"><i data-lucide="coins" aria-hidden="true"></i><div><strong>Nenhuma cripto em carteira</strong><p>Os ativos cadastrados ou conectados aparecerão aqui.</p></div><button class="small-action ghost" type="button" data-action="set-tab" data-tab="crypto">Abrir Cripto</button></div>`;
+    }
+    return `
+      <div class="crypto-dashboard-summary">
+        <div class="crypto-dashboard-total"><span>Valor estimado</span><strong>${hidden ? "••••" : formatMoney(total, currency)}</strong><small>${rows.length} ${rows.length === 1 ? "ativo" : "ativos"}</small></div>
+        <div class="crypto-dashboard-assets">
+          ${rows.slice(0, 6).map((item) => `<div class="crypto-dashboard-asset">${renderCryptoTokenIcon(item)}<span><strong>${escapeHtml(item.symbol)}</strong><small>${hidden ? "••••" : `${escapeHtml(formatCryptoAmount(item.quantity))} ${escapeHtml(item.symbol)}`}</small></span><b>${hidden ? "••••" : formatMoney(item.value, currency)}</b></div>`).join("")}
+        </div>
+        <button class="small-action ghost crypto-dashboard-open" type="button" data-action="set-tab" data-tab="crypto">Ver carteira completa</button>
+      </div>
+    `;
   }
 
   function renderCryptoPanel(compact = false, controlsOnly = false) {
@@ -6905,10 +8149,13 @@
           const iconStyle = item.color ? `style="background:${escapeAttr(item.color)}"` : "";
           const author = authorLabel(item);
           const noteText = normalizeLookupText(item.note || "");
-          const explicitStatus = String(item.status || "").trim();
-          const paidNote = item.statusTone === "green" || (!explicitStatus && (noteText.startsWith("pago") || noteText.includes("pago no app")));
+          const reconciliationEntry = item.id && item.date
+            ? financialCalendarItems(String(item.date).slice(0, 7), "global").find((entry) => entry.matchedTransactionId === item.id)
+            : null;
+          const explicitStatus = String(item.status || reconciliationEntry?.status || "").trim();
+          const paidNote = item.statusTone === "green" || reconciliationEntry?.financialStatus === "paid" || (!explicitStatus && (noteText.startsWith("pago") || noteText.includes("pago no app")));
           const statusLabel = explicitStatus || (paidNote ? "Pago" : "");
-          const statusTone = item.statusTone || (paidNote ? "green" : "blue");
+          const statusTone = item.statusTone || reconciliationEntry?.tone || (paidNote ? "green" : "blue");
           const account = bankAccountById(item.bankAccountId);
           const methodLabel = transactionMethodLabel(item);
           const accountMeta = [
@@ -6924,6 +8171,7 @@
               <div class="row-main">
                 <p class="row-title">${escapeHtml(item.title)}</p>
                 ${statusLabel ? `<p class="transaction-status-line"><span class="chip ${escapeAttr(statusTone)} inline-chip">${escapeHtml(statusLabel)}</span></p>` : ""}
+                ${reconciliationEntry ? `<p class="transaction-status-line"><span class="chip ${reconciliationStatusMeta(reconciliationEntry.reconciliationStatus).tone} inline-chip">${escapeHtml(reconciliationStatusMeta(reconciliationEntry.reconciliationStatus).label)}</span></p>` : ""}
                 ${author ? `<p class="row-meta author-meta">Adicionado por ${escapeHtml(author)}</p>` : ""}
                 ${item.note ? `<p class="row-meta ${paidNote ? "paid-note" : ""}">${escapeHtml(item.note)}</p>` : ""}
                 <p class="row-meta">${escapeHtml(accountMeta)}</p>
@@ -7003,9 +8251,13 @@
       workIncome: renderWorkIncomeModal,
       salaryReceipt: renderSalaryReceiptModal,
       monthlyPayment: renderMonthlyPaymentModal,
-      subscription: renderSubscriptionModal
+      subscription: renderSubscriptionModal,
+      categoryBudget: renderCategoryBudgetModal,
+      workspaceTheme: renderWorkspaceThemeModal
     };
-    const modalData = type === "businessRecord"
+    const modalData = type === "categoryBudget" && String(id).startsWith("new:")
+      ? { category: String(id).slice(4) }
+      : type === "businessRecord"
       ? businessRecordTarget(id)
       : type === "monthlyPayment" || type === "goalContribution" || type === "salaryReceipt" || type === "nubankBoxContribution"
         ? id
@@ -7034,6 +8286,61 @@
     updateCreditCardPaymentFields();
     updateDebtTypeFields();
     updateMonthlyPaymentFields();
+  }
+
+  function renderWorkspaceThemeModal() {
+    const active = sanitizeWorkspaceTheme(state.ui.workspaceTheme);
+    const customColors = sanitizeWorkspacePaletteColors(state.ui.workspacePaletteColors);
+    const themes = workspaceThemeOptions();
+    return `
+      <div class="modal-head">
+        <div><h2>Paleta do aplicativo</h2><p class="row-meta">Escolha quatro cores para organizar todo o visual do Nekuma.</p></div>
+        <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
+      </div>
+      <div class="workspace-theme-grid">
+        ${themes.map((theme) => `
+          <button class="workspace-theme-option theme-${theme.id} ${active === theme.id ? "is-active" : ""}" type="button" data-action="set-workspace-theme" data-theme="${theme.id}">
+            <span class="workspace-palette-preview" aria-hidden="true">${theme.colors.map((color) => `<i style="background:${escapeAttr(color)}"></i>`).join("")}</span>
+            <strong>${theme.name}</strong>
+            <small>${theme.colors.join(" · ")}</small>
+            ${active === theme.id ? `<i data-lucide="check" aria-hidden="true"></i>` : ""}
+          </button>
+        `).join("")}
+        <label class="workspace-theme-upload ${active === "custom" ? "is-active" : ""}">
+          <i data-lucide="image-plus" aria-hidden="true"></i>
+          <strong>Imagem propria</strong>
+          <small>JPG, PNG ou WebP · ate 12 MB</small>
+          <input id="workspace-theme-image" type="file" accept="image/png,image/jpeg,image/webp" />
+        </label>
+      </div>
+      <section class="workspace-custom-palette ${active === "personalized" ? "is-active" : ""}">
+        <div><strong>Minha paleta</strong><small>Escolha quatro cores para criar um visual único.</small></div>
+        <div class="workspace-custom-colors">
+          ${[
+            ["Fundo", customColors[0]],
+            ["Superficie", customColors[1]],
+            ["Destaque", customColors[2]],
+            ["Contraste", customColors[3]]
+          ].map(([label, color], index) => `<label><span>${label}</span><input type="color" value="${escapeAttr(color)}" data-workspace-palette-color="${index}" /><small>${escapeHtml(color)}</small></label>`).join("")}
+        </div>
+        <button class="small-action" type="button" data-action="set-custom-workspace-palette">Aplicar minha paleta</button>
+      </section>
+      <p class="workspace-theme-note"><i data-lucide="shield-check" aria-hidden="true"></i>A imagem personalizada fica somente neste dispositivo durante o prototipo.</p>
+    `;
+  }
+
+  function renderCategoryBudgetModal(item = null) {
+    const commonCategories = ["Alimentacao", "Supermercado", "Restaurante", "Moradia", "Transporte", "Saude", "Educacao", "Lazer", "Subscricao", "Compras pessoais", "Filhos", "Outros"];
+    const known = [...new Set([...commonCategories, ...categoryTotals(state.ui.selectedMonth, "global").map((row) => row.category), ...(state.categoryBudgets || []).map((row) => row.category)])];
+    return `
+      <div class="modal-head"><div><h2>${item?.id ? "Editar orcamento" : "Nova categoria"}</h2><p class="row-meta">O limite vale apenas para o mes escolhido.</p></div><button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button></div>
+      <form class="form-grid" data-form="category-budget">
+        ${editHidden(item)}
+        <div class="two-cols"><div class="field"><label for="budgetMonth">Mes</label><input id="budgetMonth" name="month" type="month" required value="${escapeAttr(item?.month || state.ui.selectedMonth)}" /></div><div class="field"><label for="budgetCategory">Categoria</label><input id="budgetCategory" name="category" list="budgetCategoryOptions" required value="${escapeAttr(item?.category || "")}" placeholder="Ex: Alimentacao" /><datalist id="budgetCategoryOptions">${known.map((category) => `<option value="${escapeAttr(category)}"></option>`).join("")}</datalist></div></div>
+        <div class="three-cols"><div class="field"><label for="budgetLimit">Limite</label><input id="budgetLimit" name="limit" type="number" min="0.01" step="0.01" required value="${item?.limit || ""}" /></div><div class="field"><label for="budgetCurrency">Moeda</label><select id="budgetCurrency" name="currency">${currencyOptions(item?.currency || primaryCurrency())}</select></div><div class="field"><label for="budgetWarning">Avisar em</label><select id="budgetWarning" name="warningThreshold">${[50, 70, 80, 90, 100].map((value) => `<option value="${value}" ${selectedAttr(value, item?.warningThreshold || 80)}>${value}%</option>`).join("")}</select></div></div>
+        <p class="form-hint">Compras em fatura aberta aparecem como comprometidas; pagamentos confirmados aparecem como realizados.</p>
+        <div class="form-actions"><button class="secondary-button" type="button" data-action="close-modal">Cancelar</button><button class="primary-button" type="submit">Salvar orcamento</button></div>
+      </form>`;
   }
 
   function closeModal() {
@@ -8192,6 +9499,16 @@
             <input id="firstBillMonth" name="firstBillMonth" type="month" required value="${escapeAttr(item?.firstBillMonth || state.ui.selectedMonth)}" />
           </div>
           <div class="field">
+            <label for="purchaseFamilyMember">Responsavel</label>
+            <select id="purchaseFamilyMember" name="familyMemberId">${familyMemberOptions(item?.familyMemberId)}</select>
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="purchaseInterest">Juros incluidos no total</label>
+            <input id="purchaseInterest" name="interestAmount" type="number" min="0" step="0.01" value="${item ? number(item.interestAmount) : 0}" />
+          </div>
+          <div class="field">
             <label for="purchaseNote">Observacao</label>
             <input id="purchaseNote" name="note" placeholder="Opcional" value="${escapeAttr(item?.note || "")}" />
           </div>
@@ -8589,6 +9906,14 @@
         <button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button>
       </div>
       <form class="form-grid" data-form="crypto">
+        <div class="field">
+          <label for="cryptoOperationType">Tipo de operação</label>
+          <select id="cryptoOperationType" name="operationType">
+            <option value="buy" ${selectedAttr(normalizeCryptoOperationType(item?.operationType), "buy")}>Compra</option>
+            <option value="sell" ${selectedAttr(normalizeCryptoOperationType(item?.operationType), "sell")}>Venda</option>
+            <option value="receive" ${selectedAttr(normalizeCryptoOperationType(item?.operationType), "receive")}>Recebimento / recompensa</option>
+          </select>
+        </div>
         <div class="two-cols">
           <div class="field"><label for="cryptoCountry">País</label><select id="cryptoCountry" name="country" required><option value="">Selecione</option><option value="brasil" ${selectedAttr(item?.country || (item?.costCurrency === 'BRL' ? 'brasil' : ''), 'brasil')}>Brasil</option><option value="japao" ${selectedAttr(item?.country || (item?.costCurrency === 'JPY' ? 'japao' : ''), 'japao')}>Japão</option></select></div>
           <div class="field"><label for="cryptoBank">Conta de origem</label><select id="cryptoBank" name="bankAccountId"><option value="">Não informada</option>${activeBankAccounts().map(account => `<option value="${escapeAttr(account.id)}" ${selectedAttr(item?.bankAccountId, account.id)}>${escapeHtml(bankAccountName(account))}</option>`).join('')}</select></div>
@@ -8613,7 +9938,7 @@
         </div>
         <div class="three-cols">
           <div class="field">
-            <label for="cryptoCost">Valor comprado</label>
+            <label for="cryptoCost">Valor da operação</label>
             <input id="cryptoCost" name="costAmount" required type="text" inputmode="decimal" value="${item ? formatPlainNumber(item.costAmount) : ""}" />
           </div>
           <div class="field">
@@ -8625,6 +9950,16 @@
           <div class="field">
             <label for="cryptoDate">Data</label>
             <input id="cryptoDate" name="purchaseDate" type="date" value="${escapeAttr(item?.purchaseDate || dateInMonth(state.ui.selectedMonth, new Date().getDate()))}" />
+          </div>
+        </div>
+        <div class="two-cols">
+          <div class="field">
+            <label for="cryptoFeeAmount">Taxa da operação</label>
+            <input id="cryptoFeeAmount" name="feeAmount" type="text" inputmode="decimal" value="${item ? formatPlainNumber(item.feeAmount) : ""}" placeholder="0,00" />
+          </div>
+          <div class="field">
+            <label for="cryptoFeeCurrency">Moeda da taxa</label>
+            <select id="cryptoFeeCurrency" name="feeCurrency">${currencyOptions(item?.feeCurrency || item?.costCurrency || primaryCurrency())}</select>
           </div>
         </div>
         <div class="field">
@@ -9411,6 +10746,9 @@
     }
     const sourceOptions = monthlyPaymentSourceOptions();
     const creditCards = (state.creditCards || []).filter((card) => card.country === target.country);
+    const previousPayment = state.paidCommitments?.[target.paymentKey];
+    const previouslyPaid = target.kind === "card" && previousPayment && typeof previousPayment === "object" ? number(previousPayment.amount) : 0;
+    const remainingAmount = Math.max(0, number(target.amount) - previouslyPaid);
     return `
       <div class="modal-head">
         <h2>Registrar pagamento</h2>
@@ -9423,6 +10761,7 @@
           <strong>${escapeHtml(target.title)}</strong>
           <span>${formatMoneyWithPrimary(target.amount, target.currency, target.month)} - vence ${formatShortDate(target.date)}</span>
         </div>
+        ${target.kind === "card" ? `<div class="two-cols"><div class="field"><label for="monthlyPaymentAmount">Valor deste pagamento</label><input id="monthlyPaymentAmount" name="amount" type="number" min="0.01" max="${remainingAmount}" step="${target.currency === "JPY" ? "1" : ".01"}" required value="${remainingAmount}" /></div><div class="field"><label>Saldo restante antes do pagamento</label><div class="field-readonly">${formatMoneyWithPrimary(remainingAmount, target.currency)}</div></div></div>` : ""}
         <div class="two-cols">
           <div class="field">
             <label for="monthlyPaymentMethod">Forma de pagamento</label>
@@ -9431,7 +10770,7 @@
               <option value="extra" ${selectedAttr("extra", target.paymentMethod)}>Ganho extra</option>
               <option value="pix" ${selectedAttr("pix", target.paymentMethod)}>Pix</option>
               <option value="bank" ${selectedAttr("bank", target.paymentMethod)}>Debito em conta</option>
-              <option value="card" ${selectedAttr("card", target.paymentMethod)}>Cartão de crédito</option>
+              ${target.kind === "card" ? "" : `<option value="card" ${selectedAttr("card", target.paymentMethod)}>Cartão de crédito</option>`}
               <option value="kombini" ${selectedAttr("kombini", target.paymentMethod)}>Kombini</option>
               <option value="cash" ${selectedAttr("cash", target.paymentMethod)}>Dinheiro</option>
               <option value="other" ${selectedAttr("other", target.paymentMethod)}>Outro</option>
@@ -9581,6 +10920,50 @@
     closeModal();
     render();
     showToast(updated ? "Lancamento atualizado." : "Lancamento salvo.");
+  }
+
+  function saveCategoryBudget(form) {
+    const data = formData(form);
+    const category = String(data.category || "").trim();
+    const duplicate = (state.categoryBudgets || []).find((item) => item.id !== data.id && item.month === data.month && budgetCategoryKey(item.category) === budgetCategoryKey(category));
+    if (duplicate) {
+      showToast("Esta categoria ja possui um limite neste mes.");
+      return;
+    }
+    const updated = upsertItem("categoryBudgets", data.id, {
+      month: data.month,
+      category,
+      limit: number(data.limit),
+      currency: sanitizeCurrency(data.currency, primaryCurrency()),
+      warningThreshold: clamp(number(data.warningThreshold) || 80, 1, 100)
+    }, true);
+    state.ui.selectedMonth = data.month;
+    saveState();
+    closeModal();
+    render();
+    showToast(updated ? "Orcamento atualizado." : "Orcamento criado.");
+  }
+
+  function copyPreviousCategoryBudgets() {
+    const month = state.ui.selectedMonth;
+    const previous = addMonths(month, -1);
+    const source = (state.categoryBudgets || []).filter((item) => item.month === previous);
+    if (!source.length) {
+      showToast("O mes anterior nao possui orcamentos para copiar.");
+      return;
+    }
+    const existing = new Set((state.categoryBudgets || []).filter((item) => item.month === month).map((item) => budgetCategoryKey(item.category)));
+    const author = currentUserAuthor();
+    const now = new Date().toISOString();
+    const copies = source.filter((item) => !existing.has(budgetCategoryKey(item.category))).map((item) => ({ ...item, id: uid("cb"), month, createdAt: now, createdBy: author.id, createdByName: author.name, updatedAt: now }));
+    if (!copies.length) {
+      showToast("Todas as categorias do mes anterior ja existem aqui.");
+      return;
+    }
+    state.categoryBudgets.unshift(...copies);
+    saveState();
+    render();
+    showToast(`${copies.length} orcamento${copies.length === 1 ? " copiado" : "s copiados"}.`);
   }
 
   function saveQuickExpense(form) {
@@ -10060,6 +11443,8 @@
       installments: clamp(Math.round(number(data.installments)), 1, 60),
       firstBillMonth: data.firstBillMonth || state.ui.selectedMonth,
       purchaseDate: data.purchaseDate,
+      familyMemberId: data.familyMemberId || "",
+      interestAmount: Math.max(0, number(data.interestAmount)),
       note: data.note.trim()
     }, true);
     state.ui.selectedMonth = data.firstBillMonth || state.ui.selectedMonth;
@@ -10259,6 +11644,25 @@
   function saveCryptoAsset(form) {
     const data = formData(form);
     const symbol = normalizeCryptoSymbol(data.symbol || "BTC");
+    const operationType = normalizeCryptoOperationType(data.operationType);
+    const quantity = cryptoQuantityNumber(data.quantity);
+    if (quantity <= 0) {
+      showToast("Informe uma quantidade válida para a operação.");
+      return;
+    }
+    if (operationType === "sell") {
+      const previous = findItem("cryptoAssets", data.id);
+      const available = cryptoManualLedger(data.costCurrency || primaryCurrency()).positions.find((item) => item.symbol === symbol)?.quantity || 0;
+      const previousMatches = previous && normalizeCryptoSymbol(previous.symbol) === symbol;
+      const previousQuantity = previousMatches ? cryptoQuantityNumber(previous.quantity) : 0;
+      const availableWithoutPrevious = previousMatches
+        ? available + (normalizeCryptoOperationType(previous.operationType) === "sell" ? previousQuantity : -previousQuantity)
+        : available;
+      if (quantity > availableWithoutPrevious + 1e-12) {
+        showToast(`Saldo insuficiente. Disponível: ${formatCryptoAmount(Math.max(0, availableWithoutPrevious))} ${symbol}.`);
+        return;
+      }
+    }
     const updated = upsertItem("cryptoAssets", data.id, {
       country: bankAccountById(data.bankAccountId)?.country || data.country,
       bankAccountId: data.bankAccountId || '',
@@ -10267,6 +11671,9 @@
       quantity: cryptoQuantityText(data.quantity),
       costAmount: number(data.costAmount),
       costCurrency: data.costCurrency,
+      operationType,
+      feeAmount: number(data.feeAmount),
+      feeCurrency: data.feeCurrency || data.costCurrency,
       purchaseDate: data.purchaseDate || dateInMonth(state.ui.selectedMonth, new Date().getDate()),
       provider: data.provider.trim(),
       custodyTransfers: collectCryptoCustodyTransfers(form),
@@ -10718,7 +12125,7 @@
     }
 
     const key = target.paymentKey;
-    if (state.paidCommitments[key]) {
+    if (state.paidCommitments[key] && target.kind !== "card") {
       showToast("Este item ja esta pago no mes.");
       closeModal();
       render();
@@ -10736,13 +12143,25 @@
       showToast("Selecione o cartão usado no pagamento.");
       return;
     }
+    const previousPayment = target.kind === "card" && state.paidCommitments[key] && typeof state.paidCommitments[key] === "object" ? state.paidCommitments[key] : null;
+    const previousAmount = previousPayment ? number(previousPayment.amount) : 0;
+    const paymentAmount = target.kind === "card" ? clamp(number(data.amount) || number(target.amount), 0, Math.max(0, number(target.amount) - previousAmount)) : number(target.amount);
+    if (!paymentAmount) {
+      showToast("Informe um valor de pagamento valido.");
+      return;
+    }
+    const accumulatedAmount = previousAmount + paymentAmount;
     state.paidCommitments[key] = {
+      ...(previousPayment || {}),
       paidAt: new Date().toISOString(),
       method: paymentMethod,
       sourceId: data.sourceId || "",
       bankAccountId: paymentMethod === "card" ? "" : bankAccountId,
       cardId: creditCard?.id || "",
-      note: String(data.note || "").trim()
+      note: String(data.note || "").trim(),
+      amount: accumulatedAmount,
+      expectedAmount: number(target.amount),
+      status: accumulatedAmount >= number(target.amount) - Math.max(target.currency === "JPY" ? 1 : .01, number(target.amount) * .005) ? "paid" : "partial"
     };
 
     const author = currentUserAuthor();
@@ -10780,7 +12199,7 @@
       type: target.type,
       title: target.transactionTitle || target.title,
       category: target.category,
-      amount: number(target.amount),
+      amount: paymentAmount,
       currency: target.currency,
       bankAccountId,
       paymentMethod,
@@ -10797,7 +12216,7 @@
     saveState();
     closeModal();
     render();
-    showToast(`${target.category} marcado como pago.`);
+    showToast(target.kind === "card" && accumulatedAmount < number(target.amount) ? "Pagamento parcial registrado." : `${target.category} marcado como pago.`);
   }
 
   function saveSettings(form) {
@@ -10811,7 +12230,8 @@
       city: String(data.profileCity || "").trim(),
       age: String(data.profileAge || "").replace(/\D/g, "").slice(0, 3),
       gender: String(data.profileGender || "").trim(),
-      language: String(data.profileLanguage || "pt-BR").trim()
+      language: String(data.profileLanguage || "pt-BR").trim(),
+      avatarDataUrl: sanitizeProfileAvatar(state.profile.avatarDataUrl)
     };
     saveState();
     updateRemoteHouseholdName(state.settings.familyName).catch((error) => {
@@ -12569,40 +13989,102 @@
     };
   }
 
-  function cryptoAssetRows(currency = primaryCurrency()) {
-    const rate = latestRate(state.ui.selectedMonth);
-    return (state.cryptoAssets || []).map((item) => {
+  function cryptoManualLedger(currency = primaryCurrency()) {
+    const positions = new Map();
+    const entries = [];
+    const operations = [...(state.cryptoAssets || [])].sort((a, b) => {
+      const dateOrder = String(a.purchaseDate || "").localeCompare(String(b.purchaseDate || ""));
+      return dateOrder || String(a.updatedAt || a.id || "").localeCompare(String(b.updatedAt || b.id || ""));
+    });
+
+    operations.forEach((item) => {
       const symbol = normalizeCryptoSymbol(item.symbol || "BTC");
       const meta = cryptoCatalog[symbol] || { name: symbol, color: "#f5c84c" };
-      const quantity = cryptoQuantityNumber(item.quantity);
-      const rawCost = number(item.costAmount);
-      const costCurrency = item.costCurrency || currency;
-      const cost = convert(rawCost, costCurrency, currency, rate);
-      const average = quantity ? cost / quantity : 0;
-      const price = cryptoPrice(symbol, currency) || average;
-      const value = price * quantity;
-      const pnl = value - cost;
-      const pnlPct = cost ? round((pnl / cost) * 100, 2) : 0;
-      return {
-        id: item.id,
+      const operationType = normalizeCryptoOperationType(item.operationType);
+      const quantity = Math.max(0, cryptoQuantityNumber(item.quantity));
+      const month = String(item.purchaseDate || state.ui.selectedMonth || currentMonth()).slice(0, 7);
+      const rate = latestRate(month);
+      const gross = convert(number(item.costAmount), item.costCurrency || currency, currency, rate);
+      const fee = convert(number(item.feeAmount), item.feeCurrency || item.costCurrency || currency, currency, rate);
+      const current = positions.get(symbol) || {
+        id: `manual:${symbol}`,
         symbol,
         name: item.customName || meta.name,
         color: meta.color,
-        quantity,
-        rawCost,
-        costCurrency,
-        cost,
-        price,
-        value,
-        pnl,
-        pnlPct,
-        provider: cryptoCurrentProvider(item),
-        purchaseProvider: item.provider || item.note || "Banco/corretora nao informado",
-        custodyTransfers: normalizeCryptoCustodyTransfers(item.custodyTransfers),
-        purchaseDate: item.purchaseDate || dateInMonth(state.ui.selectedMonth, 1),
-        currency
+        quantity: 0,
+        cost: 0,
+        realizedPnl: 0,
+        purchaseCount: 0,
+        saleCount: 0,
+        providers: new Set(),
+        lastOperationDate: ""
       };
-    }).sort((a, b) => b.value - a.value);
+      const averageBefore = current.quantity > 0 ? current.cost / current.quantity : 0;
+      let realizedPnl = 0;
+
+      if (operationType === "sell") {
+        const soldQuantity = Math.min(quantity, current.quantity);
+        const removedCost = averageBefore * soldQuantity;
+        realizedPnl = gross - fee - removedCost;
+        current.quantity = Math.max(0, current.quantity - soldQuantity);
+        current.cost = Math.max(0, current.cost - removedCost);
+        current.realizedPnl += realizedPnl;
+        current.saleCount += 1;
+      } else {
+        current.quantity += quantity;
+        current.cost += gross + fee;
+        current.purchaseCount += 1;
+      }
+
+      current.quantity = Math.max(0, round(current.quantity, 12));
+      current.cost = Math.max(0, round(current.cost, 8));
+      current.realizedPnl = round(current.realizedPnl, 8);
+
+      const provider = cryptoCurrentProvider(item);
+      if (provider) current.providers.add(provider);
+      current.lastOperationDate = item.purchaseDate || current.lastOperationDate;
+      current.name = item.customName || current.name;
+      positions.set(symbol, current);
+      entries.push({
+        id: item.id,
+        symbol,
+        operationType,
+        averageBefore,
+        averageAfter: current.quantity > 0 ? current.cost / current.quantity : 0,
+        realizedPnl,
+        fee,
+        gross,
+        currency
+      });
+    });
+
+    return {
+      entries,
+      positions: [...positions.values()].filter((item) => item.quantity > 0).map((item) => {
+        const averagePrice = item.quantity > 0 ? item.cost / item.quantity : 0;
+        const price = cryptoPrice(item.symbol, currency) || averagePrice;
+        const value = price * item.quantity;
+        const pnl = value - item.cost;
+        const providerList = [...item.providers];
+        return {
+          ...item,
+          providers: providerList,
+          provider: providerList.length > 1 ? "Múltiplas custódias" : providerList[0] || "Não informado",
+          averagePrice,
+          rawCost: item.cost,
+          costCurrency: currency,
+          price,
+          value,
+          pnl,
+          pnlPct: item.cost > 0 ? round((pnl / item.cost) * 100, 2) : null,
+          currency
+        };
+      }).sort((a, b) => b.value - a.value)
+    };
+  }
+
+  function cryptoAssetRows(currency = primaryCurrency()) {
+    return cryptoManualLedger(currency).positions;
   }
 
   function cryptoPrice(symbol, currency) {
@@ -12863,6 +14345,84 @@
     const summary = summarizeMonth(month, "global");
     const recordedIncome = convert(summary.projectedInflow, summary.currency, currency, rate);
     return Math.max(0, cardsTotal, recordedIncome);
+  }
+
+  const projectionScenarioTypes = {
+    purchase: { label: "Compra parcelada", direction: -1 },
+    expense: { label: "Nova despesa mensal", direction: -1 },
+    reduction: { label: "Reducao de gastos", direction: 1 },
+    incomeLoss: { label: "Reducao de renda", direction: -1 },
+    extraIncome: { label: "Renda adicional", direction: 1 },
+    goal: { label: "Aporte em meta", direction: -1 }
+  };
+
+  function activeProjectionScenario() {
+    const scenarios = state.projectionScenarios || [];
+    return scenarios.find((item) => item.id === state.ui.activeProjectionScenarioId) || scenarios[0] || null;
+  }
+
+  function projectionScenarioEffect(scenario, month) {
+    if (!scenario || month < scenario.startMonth) return 0;
+    const offset = monthDifference(scenario.startMonth, month);
+    const duration = Math.max(1, number(scenario.duration) || 1);
+    if (offset < 0 || offset >= duration) return 0;
+    const meta = projectionScenarioTypes[scenario.type] || projectionScenarioTypes.expense;
+    const amount = number(scenario.amount);
+    const monthly = scenario.type === "purchase" ? amount / duration : amount;
+    return monthly * meta.direction;
+  }
+
+  function projectionComparisonModel(scenario = activeProjectionScenario(), count = 12) {
+    const baseline = balanceProjectionModel(state.ui.selectedMonth, count);
+    let simulatedBalance = baseline.openingBalance;
+    const months = baseline.months.map((item) => {
+      const effect = projectionScenarioEffect(scenario, item.month);
+      simulatedBalance += item.net + effect;
+      return { ...item, effect, simulatedBalance, difference: simulatedBalance - item.balance };
+    });
+    return {
+      ...baseline,
+      scenario,
+      months,
+      simulatedEndingBalance: months.at(-1)?.simulatedBalance ?? baseline.openingBalance,
+      simulatedMinimumBalance: months.length ? Math.min(baseline.openingBalance, ...months.map((item) => item.simulatedBalance)) : baseline.openingBalance,
+      totalImpact: months.reduce((total, item) => total + item.effect, 0)
+    };
+  }
+
+  function renderProjectionsPage() {
+    const model = projectionComparisonModel();
+    const scenario = model.scenario;
+    const scenarios = state.projectionScenarios || [];
+    const runway = model.months.findIndex((item) => item.simulatedBalance < 0);
+    return `
+      <div class="detail-page-shell projections-page">
+        ${renderPageIntro("Projecoes e simulacoes", "Seu futuro financeiro, antes das decisoes", "Compare o caminho atual com compras, mudancas de renda, reducoes de gastos e novos objetivos sem alterar os lancamentos reais.", `<button class="primary-button" type="button" data-action="open-modal" data-modal="projectionScenario">Nova simulacao</button>`)}
+        <section class="projection-kpi-grid">
+          <article><span>Saldo em 12 meses</span><strong>${formatMoneyWithPrimary(model.endingBalance, model.currency)}</strong><small>cenario atual</small></article>
+          <article><span>Saldo simulado</span><strong class="${model.simulatedEndingBalance < 0 ? "expense" : "income"}">${formatMoneyWithPrimary(model.simulatedEndingBalance, model.currency)}</strong><small>${scenario ? escapeHtml(scenario.name) : "sem simulacao"}</small></article>
+          <article><span>Impacto acumulado</span><strong class="${model.totalImpact < 0 ? "expense" : "income"}">${model.totalImpact > 0 ? "+" : ""}${formatMoneyWithPrimary(model.totalImpact, model.currency)}</strong><small>em 12 meses</small></article>
+          <article><span>Risco de saldo negativo</span><strong>${runway < 0 ? "Nao previsto" : formatMonthLabel(model.months[runway].month)}</strong><small>menor saldo ${formatMoneyWithPrimary(model.simulatedMinimumBalance, model.currency)}</small></article>
+        </section>
+        <section class="projection-workspace">
+          <article class="projection-chart-card">
+            <div class="panel-head"><div><h2>Linha do tempo financeira</h2><p class="row-meta">Saldo acumulado atual versus simulado.</p></div><span class="chip blue">12 meses</span></div>
+            <div class="projection-legend"><span><i class="is-base"></i>Cenario atual</span><span><i class="is-simulated"></i>Simulacao</span></div>
+            <canvas id="projection-comparison-chart" aria-label="Comparacao da projecao financeira"></canvas>
+          </article>
+          <aside class="projection-scenario-panel">
+            <div class="panel-head"><div><h2>Cenarios</h2><p class="row-meta">Rascunhos separados da contabilidade.</p></div><button class="icon-button" type="button" data-action="open-modal" data-modal="projectionScenario" aria-label="Nova simulacao"><i data-lucide="plus"></i></button></div>
+            ${scenarios.length ? `<div class="projection-scenario-list">${scenarios.map((item) => `<button class="projection-scenario-item ${item.id === scenario?.id ? "is-active" : ""}" type="button" data-action="select-projection-scenario" data-id="${escapeAttr(item.id)}"><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(projectionScenarioTypes[item.type]?.label || "Simulacao")} · ${formatMoneyWithPrimary(item.amount, item.currency || model.currency)}</small></span><i data-lucide="chevron-right"></i></button>`).join("")}</div>` : `<div class="empty-state compact"><i data-lucide="flask-conical"></i><strong>Teste uma decisao</strong><p>Crie uma simulacao para comparar com seu caminho atual.</p></div>`}
+            ${scenario ? `<div class="projection-scenario-detail"><span>Inicio</span><strong>${formatMonthLabel(scenario.startMonth)}</strong><span>Duracao</span><strong>${number(scenario.duration)} meses</strong><button class="small-action ghost" type="button" data-action="delete-projection-scenario" data-id="${escapeAttr(scenario.id)}">Excluir simulacao</button></div>` : ""}
+          </aside>
+        </section>
+        <section class="projection-timeline-table">
+          <div class="panel-head"><div><h2>Detalhamento mensal</h2><p class="row-meta">A simulacao nunca altera seus saldos ou lancamentos.</p></div></div>
+          <div class="projection-table-head"><span>Mes</span><span>Entradas</span><span>Saidas</span><span>Impacto</span><span>Saldo simulado</span></div>
+          ${model.months.map((item) => `<div class="projection-table-row"><strong>${escapeHtml(formatMonthLabel(item.month))}</strong><span class="income">${formatMoney(item.salary, model.currency)}</span><span class="expense">${formatMoney(item.outflow, model.currency)}</span><span class="${item.effect < 0 ? "expense" : item.effect > 0 ? "income" : ""}">${item.effect > 0 ? "+" : ""}${formatMoney(item.effect, model.currency)}</span><strong class="${item.simulatedBalance < 0 ? "expense" : ""}">${formatMoney(item.simulatedBalance, model.currency)}</strong></div>`).join("")}
+        </section>
+      </div>
+    `;
   }
 
   function balanceProjectionModel(startMonth = state.ui.selectedMonth, count = 6) {
@@ -13249,7 +14809,7 @@
       });
   }
 
-  function financialCalendarItems(month, country) {
+  function rawFinancialCalendarItems(month, country) {
     const items = [
       ...commitmentCalendarEntries(month, country),
       ...housingCalendarEntries(month, country),
@@ -13261,6 +14821,104 @@
       ...wiseCalendarEntries(month, country)
     ];
     return items.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
+  }
+
+  function financialCalendarItems(month, country) {
+    return applyUnifiedFinancialStatuses(rawFinancialCalendarItems(month, country), month);
+  }
+
+  function financialStatusMeta(status) {
+    return {
+      planned: { label: "Previsto", tone: "blue" },
+      open: { label: "Em aberto", tone: "blue" },
+      partial: { label: "Parcial", tone: "gold" },
+      paid: { label: "Pago", tone: "green" },
+      overdue: { label: "Atrasado", tone: "red" },
+      cancelled: { label: "Cancelado", tone: "blue" },
+      reversed: { label: "Estornado", tone: "red" }
+    }[status] || { label: "Em aberto", tone: "blue" };
+  }
+
+  function reconciliationStatusMeta(status) {
+    return {
+      unreconciled: { label: "Não conciliado", tone: "blue" },
+      suggested: { label: "Correspondência sugerida", tone: "gold" },
+      reconciled: { label: "Conciliado", tone: "green" },
+      divergent: { label: "Divergente", tone: "red" },
+      ignored: { label: "Ignorado", tone: "blue" }
+    }[status] || { label: "Não conciliado", tone: "blue" };
+  }
+
+  function financialItemPaymentKey(item, month) {
+    if (item.paymentKey) return item.paymentKey;
+    if (item.type === "card" && item.cardId) return cardBillKey(item.cardId, month);
+    if ((item.type === "debt" || item.type === "consortium") && item.debtId) return debtPaymentKey(item.debtId, month);
+    if (item.type === "vehicle") return vehiclePaymentKey(item.id, month);
+    if (item.category === "Subscricao") return subscriptionPaymentKey(item.id, month);
+    if (item.paymentRef?.startsWith("commitment:") || item.type === "expense" && findItem("commitments", item.id)) return commitmentKey(item.id, month);
+    return "";
+  }
+
+  function financialMatchScore(item, transaction) {
+    if (!transaction || transaction.type === "income" !== (item.kind === "income")) return 0;
+    const itemKey = financialItemPaymentKey(item, String(item.date || "").slice(0, 7));
+    if (itemKey && transaction.paymentKey === itemKey) return 100;
+    if (item.paymentRef && transaction.paymentRef === item.paymentRef) return 95;
+    if (item.cardId && transaction.paymentRef === `card:${item.cardId}`) return 95;
+    if (sanitizeCurrency(transaction.currency, item.currency) !== sanitizeCurrency(item.currency, transaction.currency)) return 0;
+    const expected = number(item.amount);
+    const actual = number(transaction.amount);
+    const amountTolerance = Math.max(item.currency === "JPY" ? 1 : 0.01, expected * 0.005);
+    const amountMatch = Math.abs(expected - actual) <= amountTolerance;
+    const titleMatch = normalizeLookupText(transaction.title).includes(normalizeLookupText(item.title))
+      || normalizeLookupText(item.title).includes(normalizeLookupText(transaction.title));
+    const dateDistance = Math.abs(parseLocalDate(transaction.date) - parseLocalDate(item.date)) / 86400000;
+    if (amountMatch && titleMatch && dateDistance <= 7) return 80;
+    if (amountMatch && dateDistance <= 3) return 65;
+    return 0;
+  }
+
+  function applyUnifiedFinancialStatuses(items, month) {
+    const transactions = (state.transactions || []).filter((item) => String(item.date || "").slice(0, 7) === month);
+    return items.map((item) => {
+      const matches = transactions
+        .map((transaction) => ({ transaction, score: financialMatchScore(item, transaction) }))
+        .filter((match) => match.score > 0)
+        .sort((a, b) => b.score - a.score);
+      const exactMatches = matches.filter((match) => match.score >= 90);
+      const bestMatch = matches[0];
+      const matchedAmount = exactMatches.reduce((total, match) => total + number(match.transaction.amount), 0);
+      const expectedAmount = number(item.amount);
+      const tolerance = Math.max(item.currency === "JPY" ? 1 : 0.01, expectedAmount * 0.005);
+      const declaredPaid = Boolean(item.paid);
+      const partiallyPaid = matchedAmount > tolerance && matchedAmount < expectedAmount - tolerance;
+      const fullyMatched = matchedAmount >= expectedAmount - tolerance && expectedAmount > 0;
+      const due = parseLocalDate(item.date);
+      const today = startOfDay(new Date());
+      let financialStatus = "open";
+      if (declaredPaid || fullyMatched) financialStatus = "paid";
+      else if (partiallyPaid) financialStatus = "partial";
+      else if (due < today) financialStatus = "overdue";
+      else if ((due - today) / 86400000 > 3) financialStatus = "planned";
+
+      let reconciliationStatus = "unreconciled";
+      if (financialStatus === "paid" && fullyMatched) reconciliationStatus = Math.abs(matchedAmount - expectedAmount) <= tolerance ? "reconciled" : "divergent";
+      else if (financialStatus === "paid" && !exactMatches.length) reconciliationStatus = bestMatch ? "suggested" : "unreconciled";
+      else if (partiallyPaid) reconciliationStatus = "divergent";
+      else if (bestMatch?.score >= 65) reconciliationStatus = "suggested";
+
+      const financialMeta = financialStatusMeta(financialStatus);
+      return {
+        ...item,
+        paid: financialStatus === "paid",
+        financialStatus,
+        reconciliationStatus,
+        matchedAmount,
+        matchedTransactionId: bestMatch?.transaction?.id || "",
+        status: financialMeta.label,
+        tone: financialMeta.tone
+      };
+    });
   }
 
   function vehicleCalendarEntries(month, country) {
@@ -13415,7 +15073,10 @@
       rawAmount,
       rawCurrency: purchase.currency || card.currency,
       amount: convert(rawAmount, purchase.currency || card.currency, card.currency, latestRate(month)),
-      currency: card.currency
+      currency: card.currency,
+      familyMemberId: purchase.familyMemberId || "",
+      interestAmount: number(purchase.interestAmount),
+      note: String(purchase.note || "")
     };
   }
 
@@ -15517,7 +17178,14 @@
   }
 
   function isCardBillPaid(id, month) {
-    return Boolean(state.paidCommitments[cardBillKey(id, month)]);
+    const card = creditCardById(id);
+    if (!card) return false;
+    const payment = state.paidCommitments[cardBillKey(id, month)];
+    if (!payment) return false;
+    if (typeof payment !== "object" || payment.amount === undefined) return true;
+    const expected = creditCardMonthBill(card, month).total;
+    const tolerance = Math.max(card.currency === "JPY" ? 1 : .01, expected * .005);
+    return expected > 0 && number(payment.amount) >= expected - tolerance;
   }
 
   function cardBillKey(id, month) {
@@ -15800,6 +17468,101 @@
     }).format(Number(value || 0));
   }
 
+  function currentHouseholdRole() {
+    if (!remoteStore.enabled || remoteSession.status !== "ready") return "owner";
+    return (remoteSession.householdMembers || []).find((member) => member.isCurrentUser || member.userId === remoteSession.user?.id)?.role || "viewer";
+  }
+
+  function householdRoleLabel(role) {
+    return ({ owner: "Dono", admin: "Administrador", editor: "Colaborador", member: "Colaborador", viewer: "Visualizador" })[role] || "Visualizador";
+  }
+
+  function householdRoleDescription(role) {
+    return ({ owner: "controle total", admin: "organiza a familia", editor: "edita as financas", member: "edita as financas", viewer: "consulta sem alterar" })[role] || "consulta sem alterar";
+  }
+
+  function hasHouseholdPermission(capability = "read") {
+    if (capability === "read") return true;
+    const role = currentHouseholdRole();
+    if (capability === "manage") return role === "owner";
+    return ["owner", "admin", "editor", "member"].includes(role);
+  }
+
+  function isProtectedMutationAction(action, button) {
+    if (!remoteStore.enabled || remoteSession.status !== "ready") return false;
+    if (action === "update-family-role") return !hasHouseholdPermission("manage");
+      if (action === "open-modal") return !["workspaceTheme"].includes(button.dataset.modal || "");
+    if (/^(delete-|pay-|mark-|add-|remove-|reset-|set-primary|select-commercial-plan)/.test(action)) return true;
+    return ["refresh-paypal", "connect-web3", "restart-web3", "disconnect-web3", "close-financial-month"].includes(action);
+  }
+
+  async function updateFamilyMemberRole(userId, role) {
+    const allowed = ["admin", "editor", "viewer"];
+    if (!hasHouseholdPermission("manage") || !userId || !allowed.includes(role)) {
+      showToast("Apenas o dono pode alterar permissoes familiares.");
+      renderKeepingScroll();
+      return;
+    }
+    if (!remoteStore.enabled || !remoteSession.householdId) {
+      showToast("Conecte a familia a nuvem para gerenciar permissoes.");
+      return;
+    }
+    try {
+      const { error } = await remoteStore.client.rpc("update_household_member_role", {
+        target_household_id: remoteSession.householdId,
+        target_user_id: userId,
+        new_role: role
+      });
+      if (error) throw error;
+      await loadRemoteHouseholdMembers();
+      renderKeepingScroll();
+      showToast("Permissao familiar atualizada.");
+    } catch (error) {
+      remoteSession.error = error.message || "Nao foi possivel atualizar a permissao.";
+      renderKeepingScroll();
+      showToast("Aplique a migracao de permissoes no Supabase.");
+    }
+  }
+
+  function referralCode() {
+    if (state.commercial.referralCode) return state.commercial.referralCode;
+    const seed = String(remoteSession.user?.id || remoteSession.household?.invite_code || state.settings.familyName || "NEKUMA").replace(/[^a-z0-9]/gi, "").toUpperCase();
+    return `NEK${seed.slice(0, 7).padEnd(7, "0")}`;
+  }
+
+  function commercialPlanLabel(plan) {
+    return ({ free: "Free", plus: "Plus", family: "Family" })[plan] || "Free";
+  }
+
+  async function copyReferralCode() {
+    const code = referralCode();
+    try {
+      await navigator.clipboard.writeText(code);
+      showToast("Codigo de indicacao copiado.");
+    } catch {
+      showToast(`Seu codigo: ${code}`);
+    }
+  }
+
+  async function shareReferral() {
+    const code = referralCode();
+    const text = `Conheca o Nekuma Finance. Use meu codigo de indicacao: ${code}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: "Nekuma Finance", text, url: window.location.origin }); } catch {}
+      return;
+    }
+    try { await navigator.clipboard.writeText(`${text} ${window.location.origin}`); showToast("Convite copiado para compartilhar."); } catch { showToast(`Codigo: ${code}`); }
+  }
+
+  function selectCommercialPlan(plan) {
+    if (!["free", "plus", "family"].includes(plan)) return;
+    state.commercial.plan = plan;
+    if (!state.commercial.referralCode) state.commercial.referralCode = referralCode();
+    saveState();
+    renderKeepingScroll();
+    showToast(plan === "free" ? "Plano Free selecionado." : "Interesse registrado. Nenhuma cobranca foi realizada.");
+  }
+
   function memberInitials(member) {
     const source = member.displayName || member.email || "Membro";
     const parts = String(source).replace(/@.*/, "").split(/\s+/).filter(Boolean);
@@ -15944,6 +17707,7 @@
       bankAccount: "bankAccounts",
       goal: "financialGoals",
       subscription: "subscriptions",
+      categoryBudget: "categoryBudgets",
       crypto: "cryptoAssets",
       housingCard: "housingCards",
       vehicle: "vehicles",
