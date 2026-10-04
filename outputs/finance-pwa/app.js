@@ -318,6 +318,11 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "salary-bank-reconciliation-v241",
+    date: "2026-10-04",
+    title: "Salario integrado a conta bancaria",
+    body: "A confirmacao agora registra o liquido recebido na conta obrigatoria e compara previsto e realizado para indicar conciliacao ou divergencia."
+  }, {
     id: "projection-salary-v240",
     date: "2026-10-04",
     title: "Salario correto nas projecoes",
@@ -4092,7 +4097,8 @@
           estimate.total += paidBonusTotal;
         }
         const needsConfig = !estimate.configured;
-        const paid = isFactorySalaryPaid(source.id, workMonth);
+        const payment = state.paidCommitments?.[salaryPaymentKey(source.id, workMonth)];
+        const paid = Boolean(payment);
         const deductions = estimateSalaryDeductions(source, estimate.total, paymentMonth);
         const date = factorySalaryDueDate(source, paymentMonth);
         return {
@@ -4115,8 +4121,11 @@
           bankAccountId: source.bankAccountId || "",
           needsConfig,
           paid,
+          paymentStatus: payment?.status || (paid ? "reconciled" : "pending"),
+          receivedAmount: number(payment?.amount),
+          variance: number(payment?.difference),
           canConfirm: !needsConfig && !paid && isDateReached(date),
-          status: needsConfig ? "Configure o salário" : (paid ? "Pago" : `Previsto ${formatShortDate(date)}`)
+          status: needsConfig ? "Configure o salário" : (paid ? salaryPaymentStatusLabel(payment) : `Previsto ${formatShortDate(date)}`)
         };
       })
       .filter(Boolean);
@@ -10818,10 +10827,11 @@
           <span>Bruto ${formatMoney(target.grossAmount, target.currency)}${target.deductionEstimate?.configured ? ` - descontos ${formatMoney(target.deductions, target.currency)} - liquido ${formatMoney(target.netAmount, target.currency)}` : ""}</span>
           <small>Previsto para ${formatShortDate(target.date)}</small>
         </div>
+        <div class="receipt-match"><i data-lucide="landmark" aria-hidden="true"></i><div><strong>Conciliação bancária</strong><p>Informe o valor líquido que realmente entrou. O app comparará com o líquido previsto e registrará a diferença.</p></div></div>
         <div class="two-cols">
           <div class="field">
-            <label for="salaryReceiptAmount">Salario bruto confirmado</label>
-            <input id="salaryReceiptAmount" name="amount" type="number" min="0" step="0.01" required value="${escapeAttr(target.amount)}" />
+            <label for="salaryReceiptAmount">Liquido recebido</label>
+            <input id="salaryReceiptAmount" name="amount" type="number" min="0" step="0.01" required value="${escapeAttr(target.netAmount ?? target.amount)}" />
           </div>
           <div class="field">
             <label for="salaryReceiptCurrency">Moeda</label>
@@ -10837,8 +10847,8 @@
           </div>
           <div class="field">
             <label for="salaryReceiptBankAccountId">Conta de destino</label>
-            <select id="salaryReceiptBankAccountId" name="bankAccountId">
-              ${bankAccountSelectOptions(preferredAccount?.country || "global", preferredAccountId, "Sem conta vinculada")}
+            <select id="salaryReceiptBankAccountId" name="bankAccountId" required>
+              ${bankAccountSelectOptions(preferredAccount?.country || "global", preferredAccountId, "Selecione a conta que recebeu")}
             </select>
           </div>
         </div>
@@ -12141,6 +12151,10 @@
     const currency = sanitizeCurrency(data.currency, target.currency);
     const date = data.date || target.date;
     const bankAccountId = data.bankAccountId || "";
+    if (!bankAccountId || !bankAccountById(bankAccountId)?.id) {
+      showToast("Selecione a conta bancaria que recebeu o salario.");
+      return;
+    }
     const author = currentUserAuthor();
     const now = new Date().toISOString();
 
@@ -12153,16 +12167,27 @@
         return;
       }
       const source = incomeSourceById(target.sourceId);
-      const deductions = estimateSalaryDeductions(source, amount, target.paymentMonth || date.slice(0, 7));
+      const deductions = target.deductionEstimate || estimateSalaryDeductions(source, target.grossAmount, target.paymentMonth || date.slice(0, 7));
+      const expectedNetAmount = round(number(target.netAmount), currency === "JPY" ? 0 : 2);
+      const receivedAmount = round(amount, currency === "JPY" ? 0 : 2);
+      const difference = round(receivedAmount - expectedNetAmount, currency === "JPY" ? 0 : 2);
+      const tolerance = Math.max(currency === "JPY" ? 1 : 0.01, Math.abs(expectedNetAmount) * 0.005);
+      const status = Math.abs(difference) <= tolerance ? "reconciled" : "divergent";
+      const accountedGross = round(receivedAmount + number(deductions.total), currency === "JPY" ? 0 : 2);
       state.paidCommitments[key] = {
         receivedAt: now,
         bankAccountId,
-        amount: deductions.configured ? deductions.net : amount,
-        grossAmount: amount,
+        amount: receivedAmount,
+        expectedAmount: expectedNetAmount,
+        difference,
+        status,
+        grossAmount: accountedGross,
+        expectedGrossAmount: number(target.grossAmount),
         deductions: deductions.total,
         currency,
         paymentMonth: target.paymentMonth || date.slice(0, 7)
       };
+      state.incomeSources = (state.incomeSources || []).map((item) => item.id === target.sourceId ? { ...item, bankAccountId, updatedAt: now, updatedBy: author.id, updatedByName: author.name } : item);
       state.transactions.unshift({
         id: uid("tx"),
         date,
@@ -12170,11 +12195,16 @@
         type: "income",
         title: `Salario ${target.title}`,
         category: "Salario",
-        amount,
+        amount: accountedGross,
+        bankAmount: receivedAmount,
         currency,
         bankAccountId,
         receiptMethod: "salary",
-        note: "Salario confirmado no app",
+        salaryPaymentKey: key,
+        expectedNetAmount,
+        receivedNetAmount: receivedAmount,
+        reconciliationStatus: status,
+        note: status === "reconciled" ? "Salario conciliado com a conta bancaria" : `Salario recebido com divergencia de ${formatMoney(difference, currency)}`,
         createdAt: now,
         createdBy: author.id,
         createdByName: author.name,
@@ -12207,7 +12237,17 @@
     saveState();
     closeModal();
     render();
-    showToast("Recebimento confirmado.");
+    const payment = target.kind === "factory" ? state.paidCommitments[salaryPaymentKey(target.sourceId, target.month)] : null;
+    showToast(payment?.status === "divergent" ? "Recebimento salvo com divergencia." : "Recebimento conciliado.");
+  }
+
+  function salaryPaymentStatusLabel(payment) {
+    if (!payment) return "Aguardando recebimento";
+    if (payment.status === "divergent") {
+      const difference = number(payment.difference);
+      return `Divergente ${difference > 0 ? "+" : ""}${formatMoney(difference, payment.currency || primaryCurrency())}`;
+    }
+    return "Conciliado";
   }
 
   function recordSalaryDeductionTransactions({ target, source, deductions, date, bankAccountId, currency, author, now }) {
@@ -12234,6 +12274,7 @@
         amount: round(entry.amount, currency === "JPY" ? 0 : 2),
         currency,
         bankAccountId,
+        affectsBankBalance: false,
         paymentMethod: "company",
         paymentRef: `salary:${target.sourceId}`,
         payrollKey,
@@ -17217,8 +17258,8 @@
     (state.transactions || [])
       .filter((item) => item.bankAccountId === account.id)
       .forEach((item) => {
-        if (item.type === "income") applyMovement(item.amount, item.currency, item.date, 1);
-        if (allOutflowTypes.includes(item.type)) applyMovement(item.amount, item.currency, item.date, -1);
+        if (item.type === "income") applyMovement(item.bankAmount ?? item.amount, item.currency, item.date, 1);
+        if (allOutflowTypes.includes(item.type) && item.affectsBankBalance !== false) applyMovement(item.amount, item.currency, item.date, -1);
       });
 
     (state.workIncomes || [])
@@ -17236,9 +17277,9 @@
     const sameMonth = (date) => String(date || "").slice(0, 7) === month;
     const receivedFromTransactions = (state.transactions || [])
       .filter((item) => item.bankAccountId === account.id && item.type === "income" && sameMonth(item.date))
-      .reduce((total, item) => total + convert(item.amount, item.currency, currency, rate), 0);
+      .reduce((total, item) => total + convert(item.bankAmount ?? item.amount, item.currency, currency, rate), 0);
     const paidFromTransactions = (state.transactions || [])
-      .filter((item) => item.bankAccountId === account.id && allOutflowTypes.includes(item.type) && sameMonth(item.date))
+      .filter((item) => item.bankAccountId === account.id && allOutflowTypes.includes(item.type) && item.affectsBankBalance !== false && sameMonth(item.date))
       .reduce((total, item) => total + convert(item.amount, item.currency, currency, rate), 0);
     const workReceived = (state.workIncomes || [])
       .filter((item) => item.bankAccountId === account.id && sameMonth(item.date))
