@@ -318,6 +318,11 @@
   };
   // v217 is the notification baseline. Only later product updates belong here.
   const appNews = [{
+    id: "automatic-financial-insights-v242",
+    date: "2026-10-04",
+    title: "Sugestoes e divergencias automaticas",
+    body: "A Central de conciliacao agora explica e prioriza salarios divergentes, possiveis duplicidades, recibos sem vinculo e correspondencias de pagamento."
+  }, {
     id: "salary-bank-reconciliation-v241",
     date: "2026-10-04",
     title: "Salario integrado a conta bancaria",
@@ -579,6 +584,15 @@
       saveState();
       renderKeepingScroll();
       showToast("Simulacao removida.");
+    }
+
+    if (action === "dismiss-financial-insight" || action === "resolve-financial-insight") {
+      const insightId = String(button.dataset.id || "");
+      if (!insightId) return;
+      state.reconciliationDecisions = { ...(state.reconciliationDecisions || {}), [insightId]: { status: action === "resolve-financial-insight" ? "resolved" : "ignored", decidedAt: new Date().toISOString(), userId: currentUserAuthor().id } };
+      saveState();
+      renderKeepingScroll();
+      showToast(action === "resolve-financial-insight" ? "Item marcado como revisado." : "Sugestao ignorada.");
     }
 
     if (action === "scan-receipt-image") scanReceiptImage();
@@ -1583,6 +1597,7 @@
       financialSnapshots: normalizeFinancialSnapshots(raw.financialSnapshots),
       categoryBudgets: normalizeCategoryBudgets(raw.categoryBudgets),
       projectionScenarios: Array.isArray(raw.projectionScenarios) ? raw.projectionScenarios : [],
+      reconciliationDecisions: raw.reconciliationDecisions && typeof raw.reconciliationDecisions === "object" ? raw.reconciliationDecisions : {},
       achievementLedger: normalizeAchievementLedger(raw.achievementLedger),
       paidCommitments: raw.paidCommitments || {},
       deletedItems: normalizeDeletedItems(raw.deletedItems || base.deletedItems)
@@ -2484,6 +2499,7 @@
       achievementLedger: [],
       categoryBudgets: [],
       projectionScenarios: [],
+      reconciliationDecisions: {},
       paidCommitments: {},
       deletedItems: {}
     };
@@ -4638,6 +4654,101 @@
     `;
   }
 
+  function automaticFinancialInsights(month = state.ui.selectedMonth) {
+    const insights = [];
+    const decisionStatus = id => state.reconciliationDecisions?.[id]?.status || "";
+    const push = insight => {
+      if (!insight?.id || decisionStatus(insight.id)) return;
+      insights.push(insight);
+    };
+
+    Object.entries(state.paidCommitments || {}).forEach(([key, payment]) => {
+      const match = key.match(/^(\d{4}-\d{2}):salary:(.+)$/);
+      if (!match || !payment || payment.status !== "divergent" || payment.paymentMonth !== month) return;
+      const source = incomeSourceById(match[2]);
+      push({
+        id: `salary:${key}:${round(number(payment.difference), 2)}`,
+        priority: "critical",
+        icon: "badge-dollar-sign",
+        title: `Salario divergente - ${source.name || "Empresa"}`,
+        reason: `Previsto ${formatMoney(number(payment.expectedAmount), payment.currency)}; recebido ${formatMoney(number(payment.amount), payment.currency)}. Diferenca de ${formatMoney(number(payment.difference), payment.currency)}.`,
+        actionLabel: "Marcar revisado"
+      });
+    });
+
+    const transactions = monthTransactions(month, "global").filter(item => !item.settlementOnly && !item.payrollKey && number(item.amount) > 0);
+    for (let index = 0; index < transactions.length; index += 1) {
+      const first = transactions[index];
+      const duplicate = transactions.slice(index + 1).find(second => {
+        if (first.type !== second.type || first.date !== second.date || first.currency !== second.currency) return false;
+        const tolerance = Math.max(first.currency === "JPY" ? 1 : 0.01, number(first.amount) * 0.002);
+        return Math.abs(number(first.amount) - number(second.amount)) <= tolerance
+          && normalizeLookupText(first.title || first.category) === normalizeLookupText(second.title || second.category);
+      });
+      if (!duplicate) continue;
+      const ids = [first.id, duplicate.id].sort();
+      push({
+        id: `duplicate:${ids.join(":")}`,
+        priority: "review",
+        icon: "copy-check",
+        title: "Possivel lancamento duplicado",
+        reason: `${first.title || first.category} aparece duas vezes em ${formatShortDate(first.date)} por ${formatMoney(first.amount, first.currency)}.`,
+        modal: "transaction",
+        itemId: first.id,
+        actionLabel: "Revisar lancamento"
+      });
+    }
+
+    (state.receipts || [])
+      .filter(receipt => String(receipt.date || "").slice(0, 7) === month && !receipt.linkedTransactionId && !receipt.linkedCardPurchaseId)
+      .forEach(receipt => {
+        const match = transactions.find(transaction => {
+          if (transaction.date !== receipt.date || transaction.currency !== receipt.currency) return false;
+          const tolerance = Math.max(receipt.currency === "JPY" ? 1 : 0.01, number(receipt.amount) * 0.005);
+          return Math.abs(number(transaction.amount) - number(receipt.amount)) <= tolerance;
+        });
+        if (!match) return;
+        push({
+          id: `receipt:${receipt.id}:${match.id}`,
+          priority: "suggestion",
+          icon: "scan-search",
+          title: `Vincular recibo de ${receipt.merchant || "compra"}`,
+          reason: `Encontramos um lancamento de ${formatMoney(match.amount, match.currency)} na mesma data. Revise antes de criar uma nova despesa.`,
+          modal: "receipt",
+          itemId: receipt.id,
+          actionLabel: "Revisar recibo"
+        });
+      });
+
+    financialCalendarItems(month, "global")
+      .filter(item => item.reconciliationStatus === "suggested" || item.reconciliationStatus === "divergent" || item.financialStatus === "partial")
+      .forEach(item => push({
+        id: `obligation:${item.paymentRef || item.id}:${item.reconciliationStatus}:${round(number(item.matchedAmount), 2)}`,
+        priority: item.reconciliationStatus === "divergent" || item.financialStatus === "partial" ? "critical" : "suggestion",
+        icon: item.reconciliationStatus === "divergent" ? "triangle-alert" : "link-2",
+        title: item.title,
+        reason: item.financialStatus === "partial"
+          ? `Pagamento parcial: ${formatMoneyWithPrimary(item.matchedAmount, item.currency, month)} de ${formatMoneyWithPrimary(item.amount, item.currency, month)}.`
+          : item.reconciliationStatus === "divergent"
+            ? `O valor encontrado nao coincide com os ${formatMoneyWithPrimary(item.amount, item.currency, month)} esperados.`
+            : `Encontramos um lancamento semelhante de ${formatMoneyWithPrimary(item.matchedAmount, item.currency, month)}.`,
+        actionLabel: "Marcar revisado"
+      }));
+
+    const rank = { critical: 0, review: 1, suggestion: 2 };
+    return insights.sort((a, b) => rank[a.priority] - rank[b.priority] || a.title.localeCompare(b.title));
+  }
+
+  function renderAutomaticFinancialInsights(month = state.ui.selectedMonth) {
+    const insights = automaticFinancialInsights(month);
+    if (!insights.length) return `<div class="automatic-insights-empty"><i data-lucide="badge-check" aria-hidden="true"></i><div><strong>Nenhuma divergencia relevante</strong><p>As verificacoes automaticas deste mes estao em ordem.</p></div></div>`;
+    const labels = { critical: ["Prioridade", "red"], review: ["Revisar", "gold"], suggestion: ["Sugestao", "blue"] };
+    return `<div class="automatic-insights-list">${insights.slice(0, 12).map(insight => {
+      const [label, tone] = labels[insight.priority] || labels.suggestion;
+      return `<article class="automatic-insight is-${insight.priority}"><span class="row-icon ${tone}"><i data-lucide="${insight.icon}" aria-hidden="true"></i></span><div><div class="automatic-insight-title"><strong>${escapeHtml(insight.title)}</strong><span class="chip ${tone}">${label}</span></div><p>${escapeHtml(insight.reason)}</p><div class="automatic-insight-actions">${insight.modal ? `<button class="small-action" type="button" data-action="open-modal" data-modal="${escapeAttr(insight.modal)}" data-id="${escapeAttr(insight.itemId)}">${escapeHtml(insight.actionLabel)}</button>` : `<button class="small-action" type="button" data-action="resolve-financial-insight" data-id="${escapeAttr(insight.id)}">${escapeHtml(insight.actionLabel)}</button>`}<button class="small-action ghost" type="button" data-action="dismiss-financial-insight" data-id="${escapeAttr(insight.id)}">Ignorar</button></div></div></article>`;
+    }).join("")}</div>`;
+  }
+
   function renderReconciliationCenter(month = state.ui.selectedMonth) {
     const entries = financialCalendarItems(month, "global").filter((item) => item.kind !== "income" && number(item.amount) > 0);
     const pending = entries.filter((item) => ["planned", "open", "overdue"].includes(item.financialStatus) || item.financialStatus === "paid" && item.reconciliationStatus === "unreconciled");
@@ -4655,7 +4766,8 @@
     }).join("")}</div>` : `<p class="empty-state">${escapeHtml(emptyText)}</p>`;
     return `
       <section class="content-panel reconciliation-center">
-        <div class="panel-head"><div><span class="mini-label">Fonte única de status</span><h2>Central de conciliação</h2><p class="row-meta">Compara obrigações, pagamentos, contas bancárias e faturas do mês.</p></div><span class="chip green">${reconciled.length} conciliados</span></div>
+        <div class="panel-head"><div><span class="mini-label">Fonte única de status</span><h2>Central de conciliação</h2><p class="row-meta">Compara obrigações, pagamentos, contas bancárias, recibos e faturas do mês.</p></div><span class="chip green">${reconciled.length} conciliados</span></div>
+        ${renderAutomaticFinancialInsights(month)}
         <div class="reconciliation-summary">
           <div><span>Pendentes</span><strong>${pending.length}</strong></div>
           <div><span>Sugestões</span><strong>${suggested.length}</strong></div>

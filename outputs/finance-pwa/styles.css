@@ -10744,6 +10744,21 @@ h1 {
 .reconciliation-row .chip { font-size: 0.56rem; }
 .reconciliation-row .row-amount { font-size: 0.72rem; white-space: nowrap; }
 .reconciliation-row .row-amount small { display: block; margin-top: 4px; color: #9b5b3e; font-size: 0.58rem; }
+.automatic-insights-list { display: grid; gap: 8px; }
+.automatic-insight { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 11px; align-items: start; padding: 12px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 7px; background: color-mix(in srgb, var(--surface), white 35%); }
+.automatic-insight.is-critical { border-left-color: #d95d4e; }
+.automatic-insight.is-review { border-left-color: #c9952e; }
+.automatic-insight.is-suggestion { border-left-color: #567c9b; }
+.automatic-insight > .row-icon { width: 36px; height: 36px; }
+.automatic-insight > .row-icon svg { width: 17px; height: 17px; }
+.automatic-insight-title { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.automatic-insight-title strong { color: var(--ink); font-size: .82rem; }
+.automatic-insight p { margin: 5px 0 9px; color: var(--muted); font-size: .72rem; line-height: 1.45; }
+.automatic-insight-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.automatic-insights-empty { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 11px; align-items: center; padding: 13px; border: 1px solid color-mix(in srgb, var(--accent), transparent 72%); border-radius: 7px; background: color-mix(in srgb, var(--accent), white 93%); }
+.automatic-insights-empty svg { width: 22px; height: 22px; color: var(--accent); }
+.automatic-insights-empty strong { color: var(--ink); font-size: .8rem; }
+.automatic-insights-empty p { margin: 3px 0 0; color: var(--muted); font-size: .7rem; }
 
 @media (max-width: 1100px) {
   .reconciliation-columns { grid-template-columns: 1fr; }
@@ -10755,6 +10770,7 @@ h1 {
   .reconciliation-summary > div:nth-child(-n + 2) { border-bottom: 1px solid #e4ebe7; }
   .reconciliation-row { grid-template-columns: 32px minmax(0, 1fr); }
   .reconciliation-row .row-amount { grid-column: 2; white-space: normal; }
+  .automatic-insight-title { align-items: flex-start; flex-direction: column; gap: 5px; }
 }
 
 .crypto-table-asset {
