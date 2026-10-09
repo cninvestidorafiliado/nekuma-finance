@@ -9,6 +9,8 @@ const version = process.env.DEPLOY_VERSION || buildVersion();
 const publicFiles = [
   "index.html",
   "app.html",
+  "privacy.html",
+  "terms.html",
   "clean.html",
   "app.js",
   "dashboard.js",
