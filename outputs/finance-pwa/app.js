@@ -165,6 +165,7 @@
     financialSnapshots: "fs",
     achievementLedger: "al",
     categoryBudgets: "cb"
+    ,categorizationRules: "ar"
   };
   const familyRoleMeta = {
     husband: "Marido",
@@ -203,6 +204,15 @@
     "Casa",
     "Filhos",
     "Outros"
+  ];
+  const builtInCategorizationRules = [
+    { id: "builtin-aeon", pattern: "AEON", category: "Supermercado", type: "expense" },
+    { id: "builtin-valor-drug", pattern: "VALOR DRUG", category: "Farmacia", type: "expense" },
+    { id: "builtin-seven", pattern: "SEVEN", category: "Kombini", type: "expense" },
+    { id: "builtin-7-eleven", pattern: "7-ELEVEN", category: "Kombini", type: "expense" },
+    { id: "builtin-eneos", pattern: "ENEOS", category: "Combustivel", type: "expense" },
+    { id: "builtin-ntt", pattern: "NTT", category: "Internet e telefone", type: "expense" },
+    { id: "builtin-softbank", pattern: "SOFTBANK", category: "Internet e telefone", type: "expense" }
   ];
   const housingItemTemplates = [
     { key: "rent", label: "Aluguel", icon: "A" },
@@ -428,7 +438,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js?v=254")
+      navigator.serviceWorker.register("./service-worker.js?v=257")
         .then((registration) => registration.update().catch(() => {}))
         .catch(() => {});
     });
@@ -616,6 +626,12 @@
       }
       openModal(button.dataset.modal, button.dataset.id || button.dataset.paymentId);
     }
+    if (action === "delete-categorization-rule") deleteItem("categorizationRules", button.dataset.id, "Regra removida.");
+    if (action === "export-financial-calendar") exportFinancialCalendar();
+    if (action === "enable-notifications") enableSmartNotifications();
+    if (action === "start-tutorial") startGuidedTutorial();
+    if (action === "tutorial-next") advanceGuidedTutorial();
+    if (action === "tutorial-skip") finishGuidedTutorial();
     if (action === "close-modal") closeModal();
     if (action === "pay-commitment") payCommitment(button.dataset.id);
     if (action === "pay-housing-item") payHousingItem(button.dataset.id, button.dataset.itemKey);
@@ -729,6 +745,7 @@
     if (formType === "work-override") saveWorkOverride(form);
     if (formType === "category-budget") saveCategoryBudget(form);
     if (formType === "projection-scenario") saveProjectionScenario(form);
+    if (formType === "categorization-rule") saveCategorizationRule(form);
     if (formType === "auth-login") signInRemote(form);
     if (formType === "auth-signup") signUpRemote(form);
     if (formType === "auth-recovery-request") requestPasswordReset(form);
@@ -739,6 +756,7 @@
   });
 
   document.addEventListener("input", (event) => {
+    if (event.target.id === "globalSearchInput") renderGlobalSearchResults(event.target.value);
     if (event.target.matches("#recoveryCode")) {
       event.target.value = String(event.target.value || "").replace(/\D/g, "").slice(0, 6);
       const form = event.target.form;
@@ -749,6 +767,10 @@
   });
 
   document.addEventListener("change", (event) => {
+    if (event.target.matches("[data-notification-preference]")) {
+      state.notificationPreferences[event.target.dataset.notificationPreference] = event.target.checked;
+      saveState();
+    }
     if (event.target.matches("[data-family-role]")) {
       updateFamilyMemberRole(event.target.dataset.userId, event.target.value);
       return;
@@ -1635,7 +1657,9 @@
         workspaceTheme: sanitizeWorkspaceTheme(raw.ui?.workspaceTheme),
         workspacePaletteColors: sanitizeWorkspacePaletteColors(raw.ui?.workspacePaletteColors),
         cryptoRiskProfile: sanitizeCryptoRiskProfile(raw.ui?.cryptoRiskProfile),
-        hideRecentTransactions: raw.ui?.hideRecentTransactions === undefined ? true : Boolean(raw.ui.hideRecentTransactions)
+        hideRecentTransactions: raw.ui?.hideRecentTransactions === undefined ? true : Boolean(raw.ui.hideRecentTransactions),
+        tutorialCompleted: raw.ui?.tutorialCompleted === undefined ? Boolean((raw.transactions || []).length || (raw.bankAccounts || []).length) : Boolean(raw.ui.tutorialCompleted),
+        tutorialStep: Math.max(0, Math.round(number(raw.ui?.tutorialStep)))
       },
       transactions: Array.isArray(raw.transactions) ? raw.transactions : base.transactions,
       transfers: Array.isArray(raw.transfers) ? raw.transfers : base.transfers,
@@ -1669,6 +1693,9 @@
       workScheduleOverrides: normalizeWorkItems(raw.workScheduleOverrides, base.workScheduleOverrides),
       financialSnapshots: normalizeFinancialSnapshots(raw.financialSnapshots),
       categoryBudgets: normalizeCategoryBudgets(raw.categoryBudgets),
+      categorizationRules: normalizeCategorizationRules(raw.categorizationRules),
+      notificationPreferences: normalizeNotificationPreferences(raw.notificationPreferences || base.notificationPreferences),
+      calendarPreferences: { ...base.calendarPreferences, ...(raw.calendarPreferences || {}) },
       projectionScenarios: Array.isArray(raw.projectionScenarios) ? raw.projectionScenarios : [],
       reconciliationDecisions: raw.reconciliationDecisions && typeof raw.reconciliationDecisions === "object" ? raw.reconciliationDecisions : {},
       achievementLedger: normalizeAchievementLedger(raw.achievementLedger),
@@ -1718,6 +1745,43 @@
         closedAt: item.closedAt || item.createdAt || new Date().toISOString()
       }))
       .sort((a, b) => a.month.localeCompare(b.month));
+  }
+
+  function normalizeCategorizationRules(items) {
+    if (!Array.isArray(items)) return [];
+    return items.filter((item) => String(item?.pattern || "").trim()).map((item) => ({
+      ...item,
+      id: item.id || uid("ar"),
+      pattern: String(item.pattern).trim(),
+      category: String(item.category || "Outros").trim(),
+      type: item.type === "income" ? "income" : "expense",
+      active: item.active !== false
+    }));
+  }
+
+  function normalizeNotificationPreferences(value = {}) {
+    const defaults = createInitialState().notificationPreferences;
+    return Object.fromEntries(Object.keys(defaults).map((key) => [key, Boolean(value[key] ?? defaults[key])]));
+  }
+
+  function activeCategorizationRules() {
+    return [...(state.categorizationRules || []).filter((item) => item.active !== false), ...builtInCategorizationRules];
+  }
+
+  function automaticClassification(title, fallbackCategory = "Outros", fallbackType = "expense") {
+    const lookup = normalizeLookupText(title);
+    const rule = activeCategorizationRules().find((item) => lookup.includes(normalizeLookupText(item.pattern)));
+    return { category: rule?.category || fallbackCategory || "Outros", type: rule?.type || fallbackType || "expense", rule };
+  }
+
+  function applyAutomaticClassification(entry) {
+    const currentCategory = String(entry.category || "").trim();
+    const shouldReplace = !currentCategory || /^(outros?|recibo|gasto rapido)$/i.test(currentCategory);
+    const result = automaticClassification(entry.title || entry.merchant || "", currentCategory, entry.type);
+    if (shouldReplace && result.rule) entry.category = result.category;
+    if (result.rule?.type === "income") entry.type = "income";
+    if (result.rule) entry.categorizationRuleId = result.rule.id;
+    return entry;
   }
 
   function normalizeCommercialState(raw = {}) {
@@ -2493,7 +2557,9 @@
         workspaceTheme: "natural",
         workspacePaletteColors: ["#F4E5C2", "#0B8457", "#096C47", "#323232"],
         cryptoRiskProfile: "moderate",
-        hideRecentTransactions: true
+        hideRecentTransactions: true,
+        tutorialCompleted: false,
+        tutorialStep: 0
       },
       transactions: [],
       transfers: [],
@@ -2579,6 +2645,17 @@
       financialSnapshots: [],
       achievementLedger: [],
       categoryBudgets: [],
+      categorizationRules: [],
+      notificationPreferences: {
+        enabled: false,
+        dueTomorrow: true,
+        budget80: true,
+        invoiceClosed: true,
+        salaryDivergence: true,
+        reserveContribution: true,
+        importedReview: true
+      },
+      calendarPreferences: { reminderDays: 1 },
       projectionScenarios: [],
       reconciliationDecisions: {},
       paidCommitments: {},
@@ -2699,6 +2776,8 @@
     scheduleCryptoRefresh(false);
     scheduleCdiRefresh(false);
     setTimeout(showDueAlertIfNeeded, 250);
+    setTimeout(runSmartNotifications, 700);
+    requestAnimationFrame(refreshGuidedTutorial);
   }
 
   function renderDesktopPrototypeNav() {
@@ -2719,6 +2798,7 @@
       <nav class="desktop-prototype-nav" aria-label="Navegacao principal do desktop">
         <div class="desktop-prototype-brand"><img src="./assets/nekuma-logo-192.png" alt="" /><span>N</span></div>
         <div class="desktop-prototype-links">
+          <button type="button" data-action="open-modal" data-modal="globalSearch" title="Pesquisa global"><i data-lucide="search" aria-hidden="true"></i><span>Pesquisar</span></button>
           ${items.map((item) => `<button class="${item.tab === tab ? "is-active" : ""}" type="button" data-action="${item.tab ? "set-tab" : "prototype-feature"}" ${item.tab ? `data-tab="${item.tab}"` : `data-feature="${item.feature}"`} title="${item.label}"><i data-lucide="${item.icon}" aria-hidden="true"></i><span>${item.label}</span></button>`).join("")}
         </div>
         <button class="desktop-prototype-profile" type="button" data-action="set-tab" data-tab="settings" aria-label="Abrir perfil"><img src="./assets/nekuma-logo-192.png" alt="" /></button>
@@ -5076,6 +5156,14 @@
             <button class="secondary-button" type="button" data-action="copy-invite-code" ${inviteCode ? "" : "disabled"}>Copiar convite</button>
           </article>
 
+          ${renderAutomationSettingsPanel()}
+
+          <article class="content-panel">
+            <div class="panel-head"><div><h2>Calendario e lembretes</h2><p class="row-meta">Vencimentos, faturas, metas, shaken, seguros e pagamentos importantes.</p></div><span class="chip green">ICS</span></div>
+            <div class="settings-action-stack"><button class="secondary-button" type="button" data-action="export-financial-calendar"><span data-lucide="calendar-plus"></span>Exportar para Google, Apple ou calendario do aparelho</button><button class="secondary-button" type="button" data-action="enable-notifications"><span data-lucide="bell-ring"></span>${state.notificationPreferences.enabled ? "Notificacoes ativadas" : "Ativar notificacoes"}</button><button class="secondary-button" type="button" data-action="start-tutorial"><span data-lucide="route"></span>Repetir tutorial</button></div>
+            ${renderNotificationPreferenceControls()}
+          </article>
+
           <article class="content-panel">
             <div class="panel-head"><h2>Backup</h2><span class="chip blue">JSON</span></div>
             <div class="form-grid"><button class="secondary-button" type="button" data-action="export-data">Exportar dados</button><div class="field"><label for="import-file">Importar backup</label><input id="import-file" type="file" accept="application/json" /></div></div>
@@ -5119,6 +5207,30 @@
         </div>
       </section>
     `;
+  }
+
+  function renderAutomationSettingsPanel() {
+    const rules = state.categorizationRules || [];
+    const insights = recurringTransactionInsights().slice(0, 6);
+    return `
+      <article class="content-panel automation-settings-panel">
+        <div class="panel-head"><div><h2>Automacao financeira</h2><p class="row-meta">Categorias e recorrencias aprendidas com seus lancamentos.</p></div><button class="small-action" type="button" data-action="open-modal" data-modal="categorizationRule"><i data-lucide="plus"></i>Regra</button></div>
+        <div class="automation-rule-list">
+          ${rules.length ? rules.map((item) => `<div class="automation-rule-row"><span>Contem <strong>${escapeHtml(item.pattern)}</strong></span><span>${escapeHtml(item.type === "income" ? "Entrada" : item.category)}</span><button class="icon-button" type="button" data-action="delete-categorization-rule" data-id="${escapeAttr(item.id)}" aria-label="Excluir regra"><i data-lucide="trash-2"></i></button></div>`).join("") : `<p class="row-meta">As regras nativas ja reconhecem AEON, Valor Drug, Seven, ENEOS, NTT e SoftBank.</p>`}
+        </div>
+        <div class="recurrence-insight-list">
+          <p class="mini-label">Radar de recorrencias</p>
+          ${insights.length ? insights.map((item) => `<div class="recurrence-insight-row"><i data-lucide="${item.icon}"></i><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.detail)}</small></span><em class="chip ${item.tone}">${escapeHtml(item.label)}</em></div>`).join("") : `<p class="row-meta">Ainda nao ha historico mensal suficiente para detectar assinaturas, aumentos ou duplicidades.</p>`}
+        </div>
+      </article>`;
+  }
+
+  function renderNotificationPreferenceControls() {
+    const rows = [
+      ["dueTomorrow", "Conta vence amanha"], ["budget80", "Orcamento atingiu 80%"], ["invoiceClosed", "Fatura fechou"],
+      ["salaryDivergence", "Salario previsto divergiu"], ["reserveContribution", "Reserva recebeu aporte"], ["importedReview", "Importacao precisa de revisao"]
+    ];
+    return `<div class="notification-preference-grid">${rows.map(([key, label]) => `<label><input type="checkbox" data-notification-preference="${key}" ${state.notificationPreferences[key] ? "checked" : ""} /><span>${label}</span></label>`).join("")}</div>`;
   }
 
   function renderReceiptHistory() {
@@ -8575,7 +8687,9 @@
       subscription: renderSubscriptionModal,
       categoryBudget: renderCategoryBudgetModal,
       projectionScenario: renderProjectionScenarioModal,
-      workspaceTheme: renderWorkspaceThemeModal
+      workspaceTheme: renderWorkspaceThemeModal,
+      categorizationRule: renderCategorizationRuleModal,
+      globalSearch: renderGlobalSearchModal
     };
     const modalData = type === "categoryBudget" && String(id).startsWith("new:")
       ? { category: String(id).slice(4) }
@@ -8626,6 +8740,23 @@
         }).join("")}
       </div>
     `;
+  }
+
+  function renderCategorizationRuleModal() {
+    return `
+      <div class="modal-head"><div><h2>Nova regra automatica</h2><p class="row-meta">A regra vale para lancamentos, gastos rapidos e recibos.</p></div><button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button></div>
+      <form class="form-grid" data-form="categorization-rule">
+        <div class="field"><label for="rulePattern">Descricao contem</label><input id="rulePattern" name="pattern" required placeholder="Ex: MURATA" /></div>
+        <div class="two-cols"><div class="field"><label for="ruleCategory">Categoria</label><input id="ruleCategory" name="category" required placeholder="Ex: Salario" /></div><div class="field"><label for="ruleType">Tipo</label><select id="ruleType" name="type"><option value="expense">Despesa</option><option value="income">Entrada</option></select></div></div>
+        <div class="form-actions"><button class="secondary-button" type="button" data-action="close-modal">Cancelar</button><button class="primary-button" type="submit">Criar regra</button></div>
+      </form>`;
+  }
+
+  function renderGlobalSearchModal() {
+    return `
+      <div class="modal-head"><div><h2>Pesquisa global</h2><p class="row-meta">Encontre transacoes, recibos, contas, faturas e metas.</p></div><button class="close-button" type="button" data-action="close-modal" aria-label="Fechar">x</button></div>
+      <div class="global-search-box"><i data-lucide="search"></i><input id="globalSearchInput" type="search" autocomplete="off" placeholder="Internet, Valor Drug, ¥8.000 ou setembro" /></div>
+      <div id="globalSearchResults" class="global-search-results"><p class="empty-state">Digite pelo menos dois caracteres.</p></div>`;
   }
 
   function renderWorkspaceThemeModal() {
@@ -11409,7 +11540,7 @@
 
   function saveTransaction(form) {
     const data = formData(form);
-    const updated = upsertItem("transactions", data.id, {
+    const entry = applyAutomaticClassification({
       date: data.date,
       country: data.country,
       type: data.type,
@@ -11421,7 +11552,8 @@
       receiptMethod: data.receiptMethod || "",
       familyMemberId: data.familyMemberId || "",
       note: data.note.trim()
-    }, true);
+    });
+    const updated = upsertItem("transactions", data.id, entry, true);
     state.ui.selectedMonth = data.date.slice(0, 7);
     saveState();
     closeModal();
@@ -11497,7 +11629,7 @@
   function saveQuickExpense(form) {
     const data = formData(form);
     const author = currentUserAuthor();
-    state.transactions.unshift({
+    state.transactions.unshift(applyAutomaticClassification({
       id: uid("tx"),
       date: data.date,
       country: data.country,
@@ -11516,7 +11648,7 @@
       createdAt: new Date().toISOString(),
       createdBy: author.id,
       createdByName: author.name
-    });
+    }));
     state.ui.selectedMonth = data.date.slice(0, 7);
     saveState();
     closeModal();
@@ -11720,8 +11852,10 @@
     const previouslyLinkedTransactions = (state.transactions || []).filter((entry) => entry.receiptId === receiptId && !entry.createdFromReceipt);
     const linkedCardPurchase = (state.cardPurchases || []).find((entry) => entry.receiptId === receiptId);
     const existingTransaction = data.existingTransactionId ? findItem("transactions", data.existingTransactionId) : null;
-    const receipt = {
+    const receipt = applyAutomaticClassification({
       merchant: String(data.merchant || "").trim(),
+      title: String(data.merchant || "").trim(),
+      type: "expense",
       category: String(data.category || "Recibo").trim(),
       amount: number(data.amount),
       currency: sanitizeCurrency(data.currency, primaryCurrency()),
@@ -11735,7 +11869,7 @@
       paymentMethod,
       linkedTransactionId: "",
       linkedCardPurchaseId: ""
-    };
+    });
     const updated = upsertItem("receipts", receiptId, receipt, true);
     const storedReceipt = findItem("receipts", receiptId);
     const removeGeneratedTransaction = () => {
@@ -15136,6 +15270,7 @@
           <article><span>Saldo simulado</span><strong class="${model.simulatedEndingBalance < 0 ? "expense" : "income"}">${formatMoneyWithPrimary(model.simulatedEndingBalance, model.currency)}</strong><small>${scenario ? escapeHtml(scenario.name) : "sem simulacao"}</small></article>
           <article><span>Impacto acumulado</span><strong class="${model.totalImpact < 0 ? "expense" : "income"}">${model.totalImpact > 0 ? "+" : ""}${formatMoneyWithPrimary(model.totalImpact, model.currency)}</strong><small>em 12 meses</small></article>
           <article><span>Risco de saldo negativo</span><strong>${runway < 0 ? "Nao previsto" : formatMonthLabel(model.months[runway].month)}</strong><small>menor saldo ${formatMoneyWithPrimary(model.simulatedMinimumBalance, model.currency)}</small></article>
+          <article class="projection-confidence-card"><span>Confianca da previsao</span><strong>${model.confidence.label}</strong><small>${model.confidence.confirmed}% confirmado · ${model.confidence.estimated}% estimado</small></article>
         </section>
         <section class="projection-workspace">
           <article class="projection-chart-card">
@@ -15151,8 +15286,8 @@
         </section>
         <section class="projection-timeline-table">
           <div class="panel-head"><div><h2>Detalhamento mensal</h2><p class="row-meta">A simulacao nunca altera seus saldos ou lancamentos.</p></div></div>
-          <div class="projection-table-head"><span>Mes</span><span>Salario previsto</span><span>Saidas</span><span>Impacto</span><span>Saldo simulado</span></div>
-          ${model.months.map((item) => `<div class="projection-table-row"><strong>${escapeHtml(formatMonthLabel(item.month))}</strong><span class="income">${formatMoney(item.salary, model.currency)}</span><span class="expense">${formatMoney(item.outflow, model.currency)}</span><span class="${item.effect < 0 ? "expense" : item.effect > 0 ? "income" : ""}">${item.effect > 0 ? "+" : ""}${formatMoney(item.effect, model.currency)}</span><strong class="${item.simulatedBalance < 0 ? "expense" : ""}">${formatMoney(item.simulatedBalance, model.currency)}</strong></div>`).join("")}
+          <div class="projection-table-head"><span>Mes</span><span>Salario previsto</span><span>Saidas</span><span>Confianca</span><span>Saldo simulado</span></div>
+          ${model.months.map((item) => `<div class="projection-table-row"><strong>${escapeHtml(formatMonthLabel(item.month))}</strong><span class="income">${formatMoney(item.salary, model.currency)}</span><span class="expense">${formatMoney(item.outflow, model.currency)}</span><span>${item.confidence.confirmed}% confirmado</span><strong class="${item.simulatedBalance < 0 ? "expense" : ""}">${formatMoney(item.simulatedBalance, model.currency)}</strong></div>`).join("")}
         </section>
       </div>
     `;
@@ -15166,6 +15301,7 @@
       const summary = summarizeMonth(month, "global");
       const salary = projectedSalaryForMonth(month, currency);
       const outflow = convert(summary.projectedOutflow, summary.currency, currency, latestRate(month));
+      const confidence = projectionConfidenceForMonth(month, salary, outflow);
       runningBalance += salary - outflow;
       return {
         month,
@@ -15173,12 +15309,14 @@
         salary,
         outflow,
         net: salary - outflow,
-        balance: runningBalance
+        balance: runningBalance,
+        confidence
       };
     });
     const salaryAverage = months.length ? months.reduce((total, item) => total + item.salary, 0) / months.length : 0;
     const outflowAverage = months.length ? months.reduce((total, item) => total + item.outflow, 0) / months.length : 0;
     const minimumBalance = months.length ? Math.min(openingBalance, ...months.map((item) => item.balance)) : openingBalance;
+    const confirmed = months.length ? Math.round(months.reduce((total, item) => total + item.confidence.confirmed, 0) / months.length) : 0;
     return {
       currency,
       openingBalance,
@@ -15186,8 +15324,20 @@
       salaryAverage,
       outflowAverage,
       minimumBalance,
-      endingBalance: months.at(-1)?.balance ?? openingBalance
+      endingBalance: months.at(-1)?.balance ?? openingBalance,
+      confidence: { confirmed, estimated: 100 - confirmed, label: confirmed >= 75 ? "Alta" : confirmed >= 45 ? "Media" : "Baixa" }
     };
+  }
+
+  function projectionConfidenceForMonth(month, salary, outflow) {
+    const actual = monthLedgerEntries(month, "global").filter((item) => !item.generated);
+    const calendar = financialCalendarItems(month, "global");
+    const confirmedSalary = actual.filter((item) => item.type === "income").reduce((total, item) => total + convert(item.amount, item.currency, primaryCurrency(), latestRate(month)), 0);
+    const confirmedOutflow = calendar.filter((item) => item.paid).reduce((total, item) => total + convert(item.amount, item.currency, primaryCurrency(), latestRate(month)), 0);
+    const total = Math.max(0, salary) + Math.max(0, outflow);
+    const confirmedAmount = Math.min(Math.max(0, salary), confirmedSalary) + Math.min(Math.max(0, outflow), confirmedOutflow);
+    const confirmed = total > 0 ? clamp(Math.round((confirmedAmount / total) * 100), 0, 100) : 0;
+    return { confirmed, estimated: 100 - confirmed };
   }
 
   function renderBalanceProjectionPanel() {
@@ -18784,6 +18934,138 @@
   function cryptoScaleScore(value, expected) {
     if (value <= 0 || expected <= 0) return Number.POSITIVE_INFINITY;
     return Math.abs(Math.log(value / expected));
+  }
+
+  function saveCategorizationRule(form) {
+    const data = formData(form);
+    const duplicate = activeCategorizationRules().some((item) => normalizeLookupText(item.pattern) === normalizeLookupText(data.pattern));
+    if (duplicate) { showToast("Ja existe uma regra para esse texto."); return; }
+    upsertItem("categorizationRules", "", { pattern: String(data.pattern || "").trim(), category: String(data.category || "Outros").trim(), type: data.type === "income" ? "income" : "expense", active: true }, true);
+    saveState(); closeModal(); render(); showToast("Regra automatica criada.");
+  }
+
+  function searchableFinancialItems() {
+    const rows = [];
+    const add = (collection, tab, label, items, title, detail) => (items || []).forEach((item) => rows.push({ collection, tab, label, item, title: title(item), detail: detail(item) }));
+    add("transactions", "reports", "Lancamento", state.transactions, (i) => i.title || "Lancamento", (i) => `${i.date || ""} ${i.category || ""} ${formatMoney(i.amount, i.currency)}`);
+    add("receipts", "reports", "Recibo", state.receipts, (i) => i.merchant || "Recibo", (i) => `${i.date || ""} ${i.category || ""} ${formatMoney(i.amount, i.currency)}`);
+    add("commitments", "accounts", "Conta", state.commitments, (i) => i.title || i.provider || "Conta", (i) => `${i.category || ""} dia ${i.dueDay || ""}`);
+    add("creditCards", "cards", "Fatura", state.creditCards, (i) => i.nickname || i.issuer || "Cartao", (i) => `Fatura dia ${i.dueDay || ""}`);
+    add("financialGoals", "wealth", "Meta", state.financialGoals, (i) => i.title || "Meta", (i) => `${i.targetDate || ""} ${formatMoney(i.targetAmount, i.currency)}`);
+    add("subscriptions", "budgets", "Assinatura", state.subscriptions, (i) => i.name || i.title || "Assinatura", (i) => `${formatMoney(i.amount, i.currency)} ${i.billingCycle || ""}`);
+    return rows;
+  }
+
+  function renderGlobalSearchResults(query) {
+    const root = document.querySelector("#globalSearchResults");
+    if (!root) return;
+    const needle = normalizeLookupText(query);
+    if (needle.length < 2) { root.innerHTML = `<p class="empty-state">Digite pelo menos dois caracteres.</p>`; return; }
+    const monthNames = ["janeiro","fevereiro","marco","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+    const monthIndex = monthNames.findIndex((name) => needle.includes(name));
+    const results = searchableFinancialItems().filter((row) => {
+      const haystack = normalizeLookupText(`${row.title} ${row.detail}`);
+      if (haystack.includes(needle)) return true;
+      if (monthIndex >= 0 && String(row.item.date || row.item.targetDate || "").slice(5, 7) === String(monthIndex + 1).padStart(2, "0")) return true;
+      const queryText = String(query || "").replace(/[^\d,.-]/g, "");
+      const numeric = /^-?\d{1,3}([.,]\d{3})+$/.test(queryText) ? number(queryText.replace(/[.,]/g, "")) : number(queryText);
+      return numeric > 0 && Math.abs(number(row.item.amount || row.item.targetAmount) - numeric) < 0.01;
+    }).slice(0, 40);
+    root.innerHTML = results.length ? results.map((row) => `<button type="button" data-action="set-tab" data-tab="${row.tab}" class="global-search-result"><span class="chip blue">${row.label}</span><strong>${escapeHtml(row.title)}</strong><small>${escapeHtml(row.detail)}</small><i data-lucide="arrow-right"></i></button>`).join("") : `<p class="empty-state">Nenhum resultado encontrado.</p>`;
+    refreshIcons();
+  }
+
+  function recurringTransactionInsights() {
+    const expenses = (state.transactions || []).filter((item) => allOutflowTypes.includes(item.type) && !item.settlementOnly);
+    const grouped = new Map();
+    expenses.forEach((item) => {
+      const key = normalizeLookupText(item.title || "");
+      if (!key) return;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(item);
+    });
+    const insights = [];
+    grouped.forEach((items, key) => {
+      const sorted = items.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const sameDayDuplicates = sorted.some((item, index) => sorted.slice(index + 1).some((other) => other.date === item.date && other.currency === item.currency && number(other.amount) === number(item.amount)));
+      if (sameDayDuplicates) insights.push({ title: sorted[0].title, detail: "Mesmo valor registrado mais de uma vez no mesmo dia.", label: "Possivel duplicada", tone: "red", icon: "copy-check" });
+      const months = new Set(sorted.map((item) => String(item.date || "").slice(0, 7)));
+      if (months.size >= 2) {
+        const last = sorted.at(-1); const previous = sorted.at(-2); const increase = number(previous.amount) > 0 ? (number(last.amount) / number(previous.amount) - 1) * 100 : 0;
+        if (increase >= 5) insights.push({ title: last.title, detail: `Subiu ${Math.round(increase)}% desde a cobranca anterior.`, label: "Aumento", tone: "gold", icon: "trending-up" });
+        else insights.push({ title: last.title, detail: `${months.size} meses encontrados; valor medio ${formatMoney(sorted.reduce((t, i) => t + number(i.amount), 0) / sorted.length, last.currency)}.`, label: (state.subscriptions || []).some((s) => normalizeLookupText(s.name || s.title).includes(key)) ? "Assinatura" : "Possivel recorrencia", tone: "blue", icon: "repeat-2" });
+      }
+    });
+    return insights;
+  }
+
+  function exportFinancialCalendar() {
+    const items = Array.from({ length: 12 }, (_, index) => financialCalendarItems(addMonths(currentMonth(), index), "global")).flat();
+    const goals = (state.financialGoals || []).filter((item) => item.targetDate).map((item) => ({ title: `Meta: ${item.title}`, date: item.targetDate, amount: item.targetAmount, currency: item.currency }));
+    const rows = [...items, ...goals].filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(String(item.date || "")));
+    const escapeIcs = (value) => String(value || "").replace(/\\/g, "\\\\").replace(/[,;]/g, "\\$&").replace(/\n/g, "\\n");
+    const body = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Nekuma Finance//Calendario financeiro//PT-BR", ...rows.flatMap((item) => ["BEGIN:VEVENT", `UID:${escapeIcs(item.id || uid("event"))}@nekuma.finance`, `DTSTART;VALUE=DATE:${String(item.date).replaceAll("-", "")}`, `SUMMARY:${escapeIcs(item.title || "Compromisso financeiro")}`, `DESCRIPTION:${escapeIcs(item.amount ? formatMoney(item.amount, item.currency) : item.meta || "Nekuma Finance")}`, "BEGIN:VALARM", `TRIGGER:-P${Math.max(0, number(state.calendarPreferences.reminderDays) || 1)}D`, "ACTION:DISPLAY", `DESCRIPTION:${escapeIcs(item.title || "Lembrete financeiro")}`, "END:VALARM", "END:VEVENT"]), "END:VCALENDAR"].join("\r\n");
+    const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([body], { type: "text/calendar;charset=utf-8" })); link.download = `nekuma-calendario-${localDateKey()}.ics`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); showToast("Calendario financeiro exportado.");
+  }
+
+  async function enableSmartNotifications() {
+    if (!("Notification" in window)) { showToast("Este navegador nao oferece notificacoes."); return; }
+    const permission = await Notification.requestPermission();
+    state.notificationPreferences.enabled = permission === "granted"; saveState(); renderKeepingScroll();
+    if (permission === "granted") new Notification("Nekuma Finance", { body: "Alertas financeiros ativados. Voce controla cada tipo em Ajustes." });
+    else showToast("Permissao de notificacao nao concedida.");
+  }
+
+  function runSmartNotifications() {
+    if (!state.notificationPreferences?.enabled || !("Notification" in window) || Notification.permission !== "granted") return;
+    const today = localDateKey();
+    const tomorrowDate = new Date(parseLocalDate(today).getTime() + 86400000);
+    const tomorrow = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth() + 1).padStart(2, "0")}-${String(tomorrowDate.getDate()).padStart(2, "0")}`;
+    const alerts = [];
+    if (state.notificationPreferences.dueTomorrow) {
+      financialCalendarItems(tomorrow.slice(0, 7), "global").filter((item) => item.date === tomorrow && !item.paid).forEach((item) => alerts.push({ key: `due:${item.id}:${tomorrow}`, title: "Conta vence amanha", body: `${item.title}${item.amount ? ` · ${formatMoney(item.amount, item.currency)}` : ""}` }));
+    }
+    if (state.notificationPreferences.budget80) {
+      const totals = new Map(categoryTotals(currentMonth(), "global").map((item) => [budgetCategoryKey(item.category), item]));
+      (state.categoryBudgets || []).filter((item) => item.month === currentMonth()).forEach((budget) => {
+        const spent = number(totals.get(budgetCategoryKey(budget.category))?.value); const percent = number(budget.limit) > 0 ? Math.round(spent / number(budget.limit) * 100) : 0;
+        if (percent >= number(budget.warningThreshold || 80)) alerts.push({ key: `budget:${budget.id}:${currentMonth()}`, title: `Orcamento de ${budget.category}`, body: `${percent}% do limite mensal utilizado.` });
+      });
+    }
+    if (state.notificationPreferences.invoiceClosed) (state.creditCards || []).filter((card) => number(card.closingDay) === Number(today.slice(8, 10))).forEach((card) => alerts.push({ key: `invoice:${card.id}:${today}`, title: "Fatura fechou", body: `${card.nickname || card.issuer}: confira as compras antes do vencimento.` }));
+    if (state.notificationPreferences.salaryDivergence) {
+      const expected = projectedSalaryForMonth(currentMonth(), primaryCurrency());
+      const received = monthTransactions(currentMonth(), "global").filter((item) => item.type === "income").reduce((total, item) => total + convert(item.amount, item.currency, primaryCurrency(), latestRate(currentMonth())), 0);
+      if (expected > 0 && received > 0 && Math.abs(received - expected) / expected >= .05) alerts.push({ key: `salary:${currentMonth()}`, title: "Salario previsto divergiu", body: `Previsto ${formatMoney(expected, primaryCurrency())}; registrado ${formatMoney(received, primaryCurrency())}.` });
+    }
+    if (state.notificationPreferences.reserveContribution && (state.goalContributions || []).some((item) => item.date === today && findItem("financialGoals", item.goalId)?.templateKey === "emergency")) alerts.push({ key: `reserve:${today}`, title: "Reserva recebeu aporte", body: "Seu progresso da reserva de emergencia foi atualizado." });
+    if (state.notificationPreferences.importedReview && (state.transactions || []).some((item) => item.source === "import" && !["reconciled", "ignored"].includes(item.reconciliationStatus))) alerts.push({ key: `import:${today}`, title: "Transacao importada precisa de revisao", body: "Abra o Extrato para categorizar ou conciliar." });
+    const sent = JSON.parse(localStorage.getItem("nekuma-smart-notifications") || "{}");
+    alerts.forEach((alert) => { if (sent[alert.key]) return; new Notification(alert.title, { body: alert.body, icon: "./assets/nekuma-logo-192.png" }); sent[alert.key] = Date.now(); });
+    const cutoff = Date.now() - 45 * 86400000; Object.keys(sent).forEach((key) => { if (sent[key] < cutoff) delete sent[key]; }); localStorage.setItem("nekuma-smart-notifications", JSON.stringify(sent));
+  }
+
+  const tutorialSteps = [
+    { tab: "dashboard", title: "Dashboard", text: "Resumo do mes, saldos e evolucao financeira." },
+    { tab: "dashboard", title: "Botao +", text: "Central para registrar movimentacoes e usar o scan." },
+    { tab: "accounts", title: "Contas", text: "Saldos, entradas, saidas e contas bancarias." },
+    { tab: "family", title: "Familia", text: "Membros, responsabilidades e gastos por pessoa." },
+    { tab: "family", title: "Moradia", text: "Divisao de aluguel, luz, agua, internet e demais contas." },
+    { tab: "budgets", title: "Orcamentos", text: "Limites por categoria e alertas de consumo." },
+    { tab: "reports", title: "Extrato", text: "Detalhamento completo de todos os lancamentos." },
+    { tab: "dashboard", title: "Scan", text: "Fotografe recibos e revise antes de confirmar o gasto." }
+  ];
+
+  function startGuidedTutorial() { closeModal(); state.ui.tutorialCompleted = false; state.ui.tutorialStep = 0; state.ui.activeTab = tutorialSteps[0].tab; persistLocalState(); render(); }
+  function advanceGuidedTutorial() { state.ui.tutorialStep += 1; if (state.ui.tutorialStep >= tutorialSteps.length) { finishGuidedTutorial(); return; } state.ui.activeTab = tutorialSteps[state.ui.tutorialStep].tab; persistLocalState(); render(); }
+  function finishGuidedTutorial() { document.querySelector("#guidedTutorial")?.remove(); state.ui.tutorialCompleted = true; state.ui.tutorialStep = 0; saveState(); renderKeepingScroll(); showToast("Tutorial concluido. Voce pode repeti-lo em Ajustes."); }
+  function refreshGuidedTutorial() {
+    document.querySelector("#guidedTutorial")?.remove();
+    if (state.ui.tutorialCompleted || remoteStore.enabled && remoteSession.status !== "ready") return;
+    const stepIndex = clamp(number(state.ui.tutorialStep), 0, tutorialSteps.length - 1); const step = tutorialSteps[stepIndex];
+    const overlay = document.createElement("div"); overlay.id = "guidedTutorial"; overlay.className = "guided-tutorial";
+    overlay.innerHTML = `<div class="guided-tutorial-card"><span>${stepIndex + 1} de ${tutorialSteps.length}</span><h2>${escapeHtml(step.title)}</h2><p>${escapeHtml(step.text)}</p><div><button type="button" class="secondary-button" data-action="tutorial-skip">Pular</button><button type="button" class="primary-button" data-action="tutorial-next">${stepIndex === tutorialSteps.length - 1 ? "Concluir" : "Proximo"}</button></div></div>`;
+    document.body.appendChild(overlay);
   }
 
   function number(value) {
