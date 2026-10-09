@@ -389,6 +389,7 @@
   let passwordRecoveryStep = isPasswordRecoveryLink ? "password" : "request";
   let passwordRecoveryEmail = "";
   let passwordRecoveryBusy = false;
+  const SOCIAL_AUTH_PENDING_KEY = "nekuma-social-auth-pending";
   let receiptScanImageData = "";
   let receiptScanResult = null;
   let receiptScanBusy = false;
@@ -464,6 +465,7 @@
       return;
     }
     if (action === "install-login") { installLoginApp(); return; }
+    if (action === "auth-google") { signInWithGoogle(button.dataset.context || "login"); return; }
     if (action === "none") return;
     if (action === "set-auth-view") {
       authView = button.dataset.view || "welcome";
@@ -872,6 +874,11 @@
     render();
     restoreSavedScrollPosition();
     try {
+      const oauthError = urlParams.get("error_description") || urlParams.get("error");
+      if (oauthError) {
+        clearPendingSocialAuth();
+        throw new Error(oauthError === "access_denied" ? "Entrada com Google cancelada." : oauthError);
+      }
       const authCode = urlParams.get("code");
       if (authView === "reset" && authCode && remoteStore.client.auth.exchangeCodeForSession) {
         const { error } = await remoteStore.client.auth.exchangeCodeForSession(authCode);
@@ -895,7 +902,20 @@
       }
 
       remoteSession.user = session.user;
-      await loadRemoteState();
+      const pendingSocialAuth = readPendingSocialAuth();
+      const inviteCode = normalizeInviteCode(pendingSocialAuth?.inviteCode);
+      const familyName = String(pendingSocialAuth?.familyName || session.user?.user_metadata?.family_name || "").trim();
+      if (familyName && !session.user?.user_metadata?.family_name) {
+        const { data: updatedUser, error: updateError } = await remoteStore.client.auth.updateUser({
+          data: { family_name: familyName }
+        });
+        if (updateError) throw updateError;
+        remoteSession.user = updatedUser?.user || session.user;
+      }
+      if (inviteCode) await joinRemoteHouseholdByCode(inviteCode);
+      else await loadRemoteState(familyName);
+      clearPendingSocialAuth();
+      clearAuthCallbackParams();
       remoteSession.status = "ready";
       startRemoteAutoSync();
       renderKeepingScroll();
@@ -989,6 +1009,64 @@
     stopRemoteAutoSync();
     render();
     showToast("Voce saiu da conta.");
+  }
+
+  function socialAuthRedirectUrl() {
+    const redirect = new URL(window.location.pathname, window.location.origin);
+    redirect.searchParams.set("auth_provider", "google");
+    return redirect.toString();
+  }
+
+  function readPendingSocialAuth() {
+    try {
+      return JSON.parse(sessionStorage.getItem(SOCIAL_AUTH_PENDING_KEY) || "null");
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function clearPendingSocialAuth() {
+    sessionStorage.removeItem(SOCIAL_AUTH_PENDING_KEY);
+  }
+
+  function clearAuthCallbackParams() {
+    const cleanUrl = new URL(window.location.href);
+    ["code", "error", "error_code", "error_description", "auth_provider"].forEach((key) => cleanUrl.searchParams.delete(key));
+    cleanUrl.hash = "";
+    window.history.replaceState({}, "", `${cleanUrl.pathname}${cleanUrl.search}`);
+  }
+
+  async function signInWithGoogle(context = "login") {
+    if (!remoteStore.enabled) {
+      remoteSession.error = "Entrada com Google disponivel apenas no modo online.";
+      render();
+      return;
+    }
+
+    const pending = context === "signup" ? {
+      familyName: String(document.querySelector("#signupFamily")?.value || "").trim(),
+      inviteCode: normalizeInviteCode(document.querySelector("#signupInviteCode")?.value)
+    } : {};
+    sessionStorage.setItem(SOCIAL_AUTH_PENDING_KEY, JSON.stringify(pending));
+    remoteSession.status = "loading";
+    remoteSession.error = "";
+    render();
+
+    try {
+      const { error } = await remoteStore.client.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: socialAuthRedirectUrl(),
+          queryParams: { access_type: "offline", prompt: "select_account" }
+        }
+      });
+      if (error) throw error;
+    } catch (error) {
+      clearPendingSocialAuth();
+      remoteSession.status = "signedOut";
+      remoteSession.error = error.message || "Nao foi possivel entrar com Google.";
+      render();
+    }
   }
 
   async function requestPasswordReset(form) {
@@ -2968,6 +3046,8 @@
           <h2>Bem-vindo ao Nekuma</h2>
         </div>
       </div>
+      ${renderGoogleAuthButton("login")}
+      <div class="auth-divider"><span>ou entre com email</span></div>
       <form class="form-grid" data-form="auth-login">
         <div class="field">
           <label for="loginEmail">Email</label>
@@ -2982,6 +3062,15 @@
       </form>
       <p class="auth-footer-link">Ainda não tem conta? <a href="./app.html?auth=signup">Cadastre-se</a></p>
       ${renderLoginInstall()}
+    `;
+  }
+
+  function renderGoogleAuthButton(context) {
+    return `
+      <button class="google-auth-button" type="button" data-action="auth-google" data-context="${escapeAttr(context)}">
+        <span class="google-auth-mark" aria-hidden="true">G</span>
+        Continuar com Google
+      </button>
     `;
   }
 
@@ -3030,6 +3119,8 @@
           <label for="signupInviteCode">Código da família <small>opcional</small></label>
           <input id="signupInviteCode" name="inviteCode" inputmode="text" autocomplete="off" placeholder="Use se recebeu um convite" />
         </div>
+        ${renderGoogleAuthButton("signup")}
+        <div class="auth-divider"><span>ou crie com email</span></div>
         <button class="primary-button" type="submit">Criar login</button>
       </form>
       <p class="auth-footer-link">Já tem cadastro? <a href="./app.html?auth=login">Entrar</a></p>

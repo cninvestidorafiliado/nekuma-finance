@@ -673,6 +673,43 @@ h3 {
   margin: 0 auto;
 }
 
+.landing-footer nav,
+.legal-footer nav { display: flex; flex-wrap: wrap; gap: 18px; }
+.landing-footer a,
+.legal-footer a { color: inherit; font-weight: 750; text-decoration: none; }
+.landing-footer a:hover,
+.legal-footer a:hover { text-decoration: underline; }
+
+.legal-page { min-height: 100vh; margin: 0; color: #173d32; background: #f3f7f4; font-family: "Manrope", sans-serif; }
+.legal-nav { position: sticky; top: 0; z-index: 5; display: flex; min-height: 72px; padding: 0 max(24px, calc((100vw - 1080px) / 2)); align-items: center; justify-content: space-between; border-bottom: 1px solid #cbdcd2; background: rgba(243, 247, 244, .94); backdrop-filter: blur(14px); }
+.legal-nav .landing-brand { color: #173d32; text-decoration: none; }
+.legal-login { padding: 10px 16px; border: 1px solid #aac6b7; border-radius: 7px; color: #173d32; font-weight: 800; text-decoration: none; background: #fff; }
+.legal-shell { width: min(100% - 40px, 920px); margin: 0 auto; padding: 64px 0 80px; }
+.legal-hero { padding: 0 0 38px; border-bottom: 1px solid #bfd3c8; }
+.legal-hero p { margin: 0 0 10px; color: #278365; font-size: 13px; font-weight: 850; text-transform: uppercase; }
+.legal-hero h1 { margin: 0 0 14px; color: #12382e; font-size: clamp(34px, 5vw, 58px); line-height: 1.05; letter-spacing: 0; }
+.legal-hero span { color: #5d786c; font-size: 13px; }
+.legal-content { padding-top: 20px; }
+.legal-content section { padding: 26px 0; border-bottom: 1px solid #d5e2db; }
+.legal-content h2 { margin: 0 0 12px; color: #173d32; font-size: 19px; line-height: 1.35; }
+.legal-content p,
+.legal-content li { color: #48675a; font-size: 15px; line-height: 1.75; }
+.legal-content p { margin: 0; }
+.legal-content p + p { margin-top: 12px; }
+.legal-content ul { display: grid; gap: 8px; margin: 0; padding-left: 22px; }
+.legal-content a { color: #176b50; font-weight: 750; }
+.legal-footer { display: flex; width: min(100% - 40px, 920px); margin: 0 auto; padding: 28px 0 42px; align-items: center; justify-content: space-between; gap: 20px; border-top: 1px solid #bfd3c8; color: #587267; font-size: 13px; }
+
+@media (max-width: 620px) {
+  .legal-nav { min-height: 64px; padding: 0 18px; }
+  .legal-nav .landing-brand span { font-size: 14px; }
+  .legal-login { padding: 8px 12px; font-size: 13px; }
+  .legal-shell { width: min(100% - 32px, 920px); padding: 42px 0 56px; }
+  .legal-hero h1 { font-size: 36px; }
+  .legal-content section { padding: 22px 0; }
+  .legal-footer { width: min(100% - 32px, 920px); align-items: flex-start; flex-direction: column; }
+}
+
 .landing-rayx {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(330px, 0.72fr);
@@ -1762,6 +1799,28 @@ h3 {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.google-auth-button {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px solid #b7cec2;
+  border-radius: 8px;
+  color: #173d32;
+  background: rgba(255, 255, 255, .92);
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.google-auth-button:hover { background: #fff; border-color: #7da693; }
+.google-auth-button:focus-visible { outline: 2px solid #278365; outline-offset: 2px; }
+.google-auth-mark { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; color: #fff; background: #4285f4; font-size: 14px; font-weight: 850; }
+.auth-mode .auth-divider { margin: 18px 0; color: #647d71; }
+.auth-mode .auth-divider span { flex: 0 0 auto; }
 
 .auth-lead {
   margin: 0 0 16px;
